@@ -1,0 +1,61 @@
+# Environment and secrets
+.env
+.env.*
+!.env.example
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# Packaging and builds
+build/
+dist/
+*.egg-info/
+*.spec
+
+# Runtime data
+data/
+user-data/
+recordings/
+exports/
+logs/
+*.db
+*.sqlite
+*.sqlite3
+*.log
+
+# Media and subtitle working files
+media/
+samples/private/
+*.mp3
+*.wav
+*.m4a
+*.aac
+*.flac
+*.ogg
+*.mp4
+*.mkv
+*.mov
+*.avi
+*.webm
+
+# IDE and operating-system files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+~$*
