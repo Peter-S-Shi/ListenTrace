@@ -67,7 +67,7 @@ Run the automated tests:
 
 ## Development Status
 
-Milestone 1 (Application Foundation) and Milestone 2 (Material Library and Import Validation) are implemented and verified. Users can import a local media file plus an SRT/WebVTT subtitle into a library, view details, rename, archive/restore, and remove records — with atomic import, duplicate-path rejection, duplicate-fingerprint confirmation, and no modification of source files.
+Milestones 1–3 are implemented and verified. Users can import a local media file plus an SRT/WebVTT subtitle into a library, view details, rename, archive/restore, and remove records, then open a synchronized player: play/pause/seek, active-cue tracking, previous/next-cue navigation, replay-once, single-cue and continuous-range looping, transcript show/hide, volume/mute, and keyboard shortcuts — with atomic import, duplicate handling, and no modification of source files.
 
 See:
 
@@ -82,11 +82,14 @@ See:
 ```text
 src/listentrace/
   application/
-    dto/              # ImportSuccess/ImportNeedsConfirmation, MaterialSummary/MaterialDetail
-    services/         # material_import_service, material_library_service
+    dto/              # ImportSuccess/ImportNeedsConfirmation, MaterialSummary/MaterialDetail,
+                       # PlayerLoadResult, LoopMode/PlayerTick
+    services/         # material_import_service, material_library_service,
+                       # player_loading_service, player_session (pure, no Qt)
   domain/
     enums/            # MaterialStatus
     models/           # Material, SubtitleTrack, SubtitleCue
+    services/         # CueIndex (active-cue/navigation rules, pure, no Qt)
   infrastructure/
     db/               # SQLite connection, migrations, repository functions
     subtitles/        # SRT/WebVTT parsers, timecode and text normalization
@@ -95,20 +98,21 @@ src/listentrace/
     logging_setup.py   # rotating file + console logging
   ui/
     app.py            # application entry point
-    windows/          # MainWindow (material library), ImportDialog
+    windows/          # MainWindow (material library), ImportDialog, PlayerWindow
 tests/
-  unit/               # subtitle parsing
-  integration/        # database, migrations, media playback, import, library, UI smoke tests
+  unit/               # subtitle parsing, CueIndex, PlayerSession
+  integration/        # database, migrations, media playback, import, library, player, UI smoke tests
   fixtures/
 docs/
 ```
 
 ## Current Limitations
 
-- No synchronized player, transcript workspace, quizzes, shadowing, or recording yet (planned for later milestones).
+- No transcript-annotation workspace, quizzes, shadowing, or recording yet (planned for later milestones).
 - Only one primary subtitle track per material is managed through the UI, though the schema supports more.
 - Plain-text (non-timed) transcript import is not supported.
-- The media playback spike ran without an audio device dependency (volume muted, synthetic silent WAV); real-file, multi-format playback and audio-device behavior still need manual verification in later milestones.
+- Player loop/replay timing uses a small internal tolerance (50ms) appropriate for QtMultimedia's position-update cadence; it is not frame-exact.
+- Real-file, multi-codec playback and audio/video-device behavior are only verified with synthesized WAV test fixtures and on Windows so far.
 - Text-only transcripts cannot provide reliable sentence seeking unless timing data is added.
 - Speech recognition, pronunciation scoring, automatic translation, subtitle generation, and cloud synchronization are outside the first release.
 - Users are responsible for using media and transcript material they are legally permitted to use.

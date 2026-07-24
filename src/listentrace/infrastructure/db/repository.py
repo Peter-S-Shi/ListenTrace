@@ -4,7 +4,7 @@ import sqlite3
 
 from listentrace.domain.enums.material_status import MaterialStatus
 from listentrace.domain.models.material import Material
-from listentrace.domain.models.subtitle import SubtitleTrack
+from listentrace.domain.models.subtitle import SubtitleCue, SubtitleTrack
 
 
 def _row_to_material(row: sqlite3.Row) -> Material:
@@ -92,6 +92,23 @@ def get_cue_count(conn: sqlite3.Connection, subtitle_track_id: int) -> int:
         (subtitle_track_id,),
     ).fetchone()
     return int(row[0])
+
+
+def get_cues_for_track(conn: sqlite3.Connection, subtitle_track_id: int) -> list[SubtitleCue]:
+    rows = conn.execute(
+        "SELECT * FROM subtitle_cue WHERE subtitle_track_id = ? ORDER BY cue_index",
+        (subtitle_track_id,),
+    ).fetchall()
+    return [
+        SubtitleCue(
+            cue_index=row["cue_index"],
+            start_ms=row["start_ms"],
+            end_ms=row["end_ms"],
+            text=row["text"],
+            normalized_text=row["normalized_text"],
+        )
+        for row in rows
+    ]
 
 
 def create_material_package(

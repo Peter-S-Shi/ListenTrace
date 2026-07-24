@@ -119,6 +119,14 @@ High-frequency controls should include:
 
 Timing failures must not silently attach notes to the wrong cue.
 
+### Confirmed Player Behavior
+
+- Opening the player (double-click or "Open Player") never autoplays; playback stays paused at 00:00 until the user presses play. Archived materials cannot be opened; missing media or subtitle files block entry with a clear message instead of a crash.
+- The active cue is the one where `cue.start_ms <= current_time < cue.end_ms`. During a timing gap, no cue is active. If cues overlap, the cue with the latest start time among those covering the current instant is shown as active.
+- Replay Cue is one-shot: seek to the selected/active cue's start, play, and pause automatically at that cue's end. Loop Cue and Loop Selection are continuous: they repeat until the user cancels (toggle, Escape, changing material, or closing the player). Only one loop can be active at a time.
+- Hiding the transcript only hides the cue text; active-cue tracking, navigation, replay, and looping keep working underneath.
+- A valid file extension is not treated as proof that the media is actually playable — an unplayable or corrupted file produces a controlled error and disables playback controls rather than crashing.
+
 ## Vocabulary and Chunk Capture
 
 Users may save selected text as:

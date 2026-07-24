@@ -43,6 +43,12 @@ class PlaybackController(QObject):
     def set_volume(self, volume: float) -> None:
         self._audio_output.setVolume(volume)
 
+    def set_muted(self, muted: bool) -> None:
+        self._audio_output.setMuted(muted)
+
+    def set_video_output(self, video_widget) -> None:
+        self._player.setVideoOutput(video_widget)
+
     @property
     def position_ms(self) -> int:
         return self._player.position()
@@ -55,9 +61,21 @@ class PlaybackController(QObject):
     def is_playing(self) -> bool:
         return self._player.playbackState() == QMediaPlayer.PlaybackState.PlayingState
 
+    @property
+    def is_muted(self) -> bool:
+        return self._audio_output.isMuted()
+
+    @property
+    def media_status(self) -> QMediaPlayer.MediaStatus:
+        return self._player.mediaStatus()
+
     def _on_media_status_changed(self, status: QMediaPlayer.MediaStatus) -> None:
         if status == QMediaPlayer.MediaStatus.EndOfMedia:
             self.end_of_media.emit()
+        elif status == QMediaPlayer.MediaStatus.InvalidMedia:
+            self.playback_error.emit(
+                "The media file could not be loaded (invalid or unsupported content)."
+            )
 
     def _on_error(self, error: QMediaPlayer.Error, error_string: str) -> None:
         if error != QMediaPlayer.Error.NoError:

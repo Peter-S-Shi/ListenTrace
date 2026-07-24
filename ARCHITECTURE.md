@@ -252,7 +252,7 @@ Avoid logging:
 
 ## Architecture Decisions Still Open
 
-- whether UI uses view models or a lighter presenter pattern;
+- whether UI uses view models or a lighter presenter pattern (the player window currently talks to the application layer directly);
 - supported operating systems (only Windows verified so far);
 - packaging tool.
 
@@ -268,3 +268,12 @@ Avoid logging:
 - Media/subtitle validation lives in `infrastructure/media/validation.py` (existence, readability, supported extensions) and reuses the Milestone 1 subtitle parsers/errors — it does not re-verify actual playback; that remains the player's job in Milestone 3.
 - Atomicity: `infrastructure/db/repository.py::create_material_package` performs the material + subtitle-track + cue inserts as one transaction (commit only on full success, rollback on any exception). All validation (media, subtitle, duplicates) runs before this function is ever called, so a rejected import never touches the database.
 - Application services (`material_import_service`, `material_library_service`) return typed results/raise typed errors (`ImportSuccess`, `ImportNeedsConfirmation`, `MaterialValidationError` with a `category`, `MaterialNotFoundError`) rather than exposing SQL/exception details directly to the UI.
+
+## Architecture Decisions Resolved in Milestone 3
+
+- Active-cue resolution and cue navigation live in `domain/services/cue_index.py` — a plain, framework-free class (bisect over cue start times, then a bounded backward scan to honor "latest-started cue wins" on overlaps). It has no Qt or database dependency and is directly unit-tested.
+- Player presentation state (replay-once, single-cue loop, continuous-range loop, cancellation, transcript visibility) lives in `application/services/player_session.py`, also framework-free. It does not hold a playback-backend reference; instead `on_position_changed(position_ms)` returns a small `PlayerTick` (active cue index, whether to pause, whether to seek) that the UI applies to the real `PlaybackController`. This keeps loop/replay semantics fully unit-testable without a running Qt event loop, and keeps the UI from owning any of those rules (only executing the returned instructions).
+- Loop/replay boundary detection uses a fixed 50ms tolerance (`player_session.LOOP_END_TOLERANCE_MS`), because QtMultimedia position updates are not frame-exact. A "seek pending" guard suppresses repeated boundary-triggered seeks until a position update confirms the seek actually landed, preventing rapid re-triggering right at the loop edge.
+- The Milestone 2 gap ("a valid extension does not prove media is playable") is closed here: `PlaybackController` now surfaces `QMediaPlayer.MediaStatus.InvalidMedia` through its existing `playback_error` signal, and the player UI disables playback controls and shows a controlled message instead of failing silently or crashing.
+- Video vs. audio presentation is chosen from the already-stored `Material.media_kind` (set at import time in Milestone 2): video materials get a `QVideoWidget` attached via `PlaybackController.set_video_output`; audio materials get a simple title+time placeholder. Both share the same transport/cue/loop controls.
+- Opening the player performs no writes: `player_loading_service.load_material_for_player` only reads (material, subtitle track, cues) and raises a typed `PlayerOpenError` (`not_found` / `archived` / `media_missing` / `subtitle_missing`) rather than mutating any material metadata.

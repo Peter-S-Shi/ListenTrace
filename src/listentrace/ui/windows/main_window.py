@@ -18,11 +18,13 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from listentrace.application.errors import MaterialNotFoundError
+from listentrace.application.errors import MaterialNotFoundError, PlayerOpenError
 from listentrace.application.services import material_library_service as library
+from listentrace.application.services.player_loading_service import load_material_for_player
 from listentrace.domain.enums.material_status import MaterialStatus
 from listentrace.infrastructure.db.migrations import current_version
 from listentrace.ui.windows.import_dialog import ImportDialog
+from listentrace.ui.windows.player_window import PlayerWindow
 
 
 class MainWindow(QMainWindow):
@@ -34,6 +36,7 @@ class MainWindow(QMainWindow):
         self._connection = db_connection
         self._db_path = db_path
         self._showing_archived = False
+        self._player_window: PlayerWindow | None = None
 
         central = QWidget(self)
         outer_layout = QVBoxLayout(central)
@@ -53,14 +56,18 @@ class MainWindow(QMainWindow):
         list_buttons_row = QHBoxLayout()
         self._import_button = QPushButton("Import Material")
         self._import_button.clicked.connect(self._on_import_clicked)
+        self._open_player_button = QPushButton("Open Player")
+        self._open_player_button.clicked.connect(self._on_open_player_clicked)
         self._toggle_archived_button = QPushButton("Show Archived")
         self._toggle_archived_button.clicked.connect(self._on_toggle_archived)
         list_buttons_row.addWidget(self._import_button)
+        list_buttons_row.addWidget(self._open_player_button)
         list_buttons_row.addWidget(self._toggle_archived_button)
         list_column.addLayout(list_buttons_row)
 
         self._material_list = QListWidget()
         self._material_list.currentItemChanged.connect(self._on_selection_changed)
+        self._material_list.itemDoubleClicked.connect(self._on_material_double_clicked)
         list_column.addWidget(self._material_list)
 
         content_layout.addLayout(list_column, 1)
@@ -173,11 +180,34 @@ class MainWindow(QMainWindow):
         self._rename_button.setEnabled(enabled)
         self._archive_restore_button.setEnabled(enabled)
         self._remove_button.setEnabled(enabled)
+        self._open_player_button.setEnabled(enabled and not self._showing_archived)
 
     def _on_import_clicked(self) -> None:
         dialog = ImportDialog(self._connection, self)
         if dialog.exec() == QDialog.DialogCode.Accepted:
             self.refresh_library()
+
+    def _on_material_double_clicked(self, item: QListWidgetItem) -> None:
+        if self._showing_archived:
+            return
+        material_id = item.data(Qt.ItemDataRole.UserRole)
+        if material_id is not None:
+            self._open_player(material_id)
+
+    def _on_open_player_clicked(self) -> None:
+        material_id = self._selected_material_id()
+        if material_id is not None and not self._showing_archived:
+            self._open_player(material_id)
+
+    def _open_player(self, material_id: int) -> None:
+        try:
+            load_result = load_material_for_player(self._connection, material_id)
+        except PlayerOpenError as exc:
+            QMessageBox.warning(self, "Cannot Open Player", str(exc))
+            return
+
+        self._player_window = PlayerWindow(load_result, self)
+        self._player_window.show()
 
     def _on_toggle_archived(self) -> None:
         self._showing_archived = not self._showing_archived
