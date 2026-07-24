@@ -113,8 +113,14 @@ def _build_material_export(
     if privacy.CATEGORY_CURRENT_ANNOTATIONS in categories:
         block["current_material_annotations"] = _build_current_annotations(conn, material_id, privacy_fields)
 
-    if privacy.CATEGORY_QUIZ_ATTEMPTS in categories:
-        block["quiz_attempts"] = _build_quiz_attempts(conn, material_id, resolved_range, categories)
+    if privacy.CATEGORY_QUIZ_ATTEMPTS in categories or privacy.CATEGORY_QUIZ_QUESTIONS_AND_ANSWERS in categories:
+        # `quiz_questions_and_answers` has no meaning without its parent
+        # attempt — selecting it alone still builds the attempt container
+        # (summary fields included), matching the `sessions` block's own
+        # `SESSION_SUMMARIES or STAGE_RESPONSES` precedent above. Selecting
+        # only `quiz_attempts` still yields summary-only output (no
+        # `questions` key), since `include_qa` below is independent of this.
+        block["quiz_attempts"] = _build_quiz_attempts(conn, material_id, resolved_range, categories, privacy_fields)
 
     if privacy.CATEGORY_SHADOWING_EVIDENCE in categories:
         block["shadowing_evidence"] = _build_shadowing(conn, material_id, resolved_range, privacy_fields)
@@ -140,11 +146,15 @@ def _build_material_metadata(conn: sqlite3.Connection, material_row: sqlite3.Row
         "status": material_row["status"],
         "subtitle_capability": export_repo.get_subtitle_capability_for_material(conn, material_row["id"]),
     }
-    if privacy.PRIVACY_SOURCE_LABELS in privacy_fields:
-        if privacy.PRIVACY_LOCAL_FILE_NAMES in privacy_fields:
-            result["source_label"] = privacy.sanitize_filename_for_label(material_row["media_path"])
-        else:
-            result["source_label"] = f"{material_row['media_kind'] or 'media'} file"
+    # `source_label` is always present when material metadata is included —
+    # redacted in place when the field is excluded, never omitted, per the
+    # same "redact, don't drop" contract every other privacy field follows.
+    if privacy.PRIVACY_SOURCE_LABELS not in privacy_fields:
+        result["source_label"] = privacy.REDACTED_PLACEHOLDER
+    elif privacy.PRIVACY_LOCAL_FILE_NAMES in privacy_fields:
+        result["source_label"] = privacy.sanitize_filename_for_label(material_row["media_path"])
+    else:
+        result["source_label"] = f"{material_row['media_kind'] or 'media'} file"
     return result
 
 
@@ -220,7 +230,11 @@ def _build_current_annotations(conn: sqlite3.Connection, material_id: int, priva
 
 
 def _build_quiz_attempts(
-    conn: sqlite3.Connection, material_id: int, resolved_range: ResolvedDateRange, categories: frozenset[str]
+    conn: sqlite3.Connection,
+    material_id: int,
+    resolved_range: ResolvedDateRange,
+    categories: frozenset[str],
+    privacy_fields: frozenset[str],
 ) -> list[dict]:
     rows = history_repo.list_quiz_attempts(
         conn, material_id, resolved_range.start_utc, resolved_range.end_utc, statuses=["completed"]
@@ -249,30 +263,102 @@ def _build_quiz_attempts(
             ],
         }
         if include_qa:
-            entry["questions"] = _build_quiz_questions(conn, row["id"])
+            entry["questions"] = _build_quiz_questions(conn, row["id"], privacy_fields)
         result.append(entry)
     return result
 
 
-def _build_quiz_questions(conn: sqlite3.Connection, attempt_id: int) -> list[dict]:
+# Which prompt/correct_answer JSON keys hold transcript-derived text, per
+# question type — audited against every builder in `quiz_service.py`
+# (`_try_build_dictation`, `_try_build_keyword_recognition`,
+# `_try_build_audio_transcript_choice`, `_try_build_review_question`).
+# Structural/scoring fields not listed here (mode, blank_start/blank_end,
+# label_key, correct_choice_index, choices=["No","Yes"], expected) are never
+# redacted — only the actual transcript-quoting text values are.
+_TRANSCRIPT_TEXT_KEYS_BY_QUESTION_TYPE: dict[str, dict[str, tuple[str, ...]]] = {
+    "dictation": {"prompt": ("masked_text",), "correct_answer": ("answer_text", "normalized_answer_text")},
+    "keyword_recognition": {"prompt": ("target_text",), "correct_answer": ("target_text",)},
+    "audio_transcript_choice": {"prompt": ("choices",), "correct_answer": ("correct_text",)},
+    "review_missed": {"prompt": ("masked_text",), "correct_answer": ("answer_text", "normalized_answer_text")},
+}
+
+# The one payload key, on exactly one question type, that carries historical
+# mishearing text (Milestone 4/5's `heard_as`) rather than plain transcript
+# text — gated by `PRIVACY_MISHEARING_TEXT`, independently of
+# `PRIVACY_TRANSCRIPT_EXCERPTS`.
+_MISHEARING_TEXT_KEYS_BY_QUESTION_TYPE: dict[str, tuple[str, ...]] = {
+    "review_missed": ("heard_as",),
+}
+
+
+def _redact_payload_field(payload: dict, key: str, field: str, privacy_fields: frozenset[str]) -> None:
+    """Redacts `payload[key]` in place, unless it's a list (the one payload
+    shape that holds transcript text as a list of choices — `audio_
+    transcript_choice`'s `choices`), in which case every element is redacted
+    individually so the list itself (and its length) is preserved."""
+    if key not in payload or payload[key] is None:
+        return
+    value = payload[key]
+    if isinstance(value, list):
+        payload[key] = [privacy.redact_unless_included(v, field, privacy_fields) for v in value]
+    else:
+        payload[key] = privacy.redact_unless_included(value, field, privacy_fields)
+
+
+def _redact_quiz_question_payloads(
+    question_type: str, prompt: dict, correct_answer: dict, privacy_fields: frozenset[str]
+) -> tuple[dict, dict]:
+    """Applies `transcript_excerpts`/`mishearing_text` privacy control to
+    every transcript-derived or mishearing-text value in a question's
+    prompt/correct-answer payloads, for every supported question type —
+    never just `source_cue_text`. Position, question type, scoring-relevant
+    structure (mode, blank offsets, choice index, label key) and anything
+    not listed as transcript-derived/mishearing text is left untouched."""
+    prompt = dict(prompt)
+    correct_answer = dict(correct_answer)
+
+    transcript_keys = _TRANSCRIPT_TEXT_KEYS_BY_QUESTION_TYPE.get(question_type, {"prompt": (), "correct_answer": ()})
+    for key in transcript_keys["prompt"]:
+        _redact_payload_field(prompt, key, privacy.PRIVACY_TRANSCRIPT_EXCERPTS, privacy_fields)
+    for key in transcript_keys["correct_answer"]:
+        _redact_payload_field(correct_answer, key, privacy.PRIVACY_TRANSCRIPT_EXCERPTS, privacy_fields)
+
+    for key in _MISHEARING_TEXT_KEYS_BY_QUESTION_TYPE.get(question_type, ()):
+        _redact_payload_field(prompt, key, privacy.PRIVACY_MISHEARING_TEXT, privacy_fields)
+
+    return prompt, correct_answer
+
+
+def _build_quiz_questions(conn: sqlite3.Connection, attempt_id: int, privacy_fields: frozenset[str]) -> list[dict]:
     """Reads the immutable per-attempt snapshot only (`quiz_question`/
     `quiz_answer`) — never regenerates questions from live cue/annotation
     data, so a later edit to the material cannot change what an exported
-    historical attempt shows (mirrors Milestone 6's own snapshot guarantee)."""
+    historical attempt shows (mirrors Milestone 6's own snapshot guarantee).
+    The record itself is always retained; only its sensitive text values are
+    ever redacted (see `_redact_quiz_question_payloads`)."""
     questions = quiz_repository.list_quiz_questions(conn, attempt_id)
     answers = quiz_repository.list_quiz_answers_for_attempt(conn, attempt_id)
     result = []
     for question in questions:
         answer = answers.get(question.id)
+        prompt, correct_answer = _redact_quiz_question_payloads(
+            question.question_type, json.loads(question.prompt_payload), json.loads(question.correct_answer_payload), privacy_fields
+        )
         result.append(
             {
                 "position": question.position,
                 "question_type": question.question_type,
-                "source_cue_text": question.source_cue_text,
-                "prompt": json.loads(question.prompt_payload),
-                "correct_answer": json.loads(question.correct_answer_payload),
+                "source_cue_text": privacy.redact_unless_included(
+                    question.source_cue_text, privacy.PRIVACY_TRANSCRIPT_EXCERPTS, privacy_fields
+                ),
+                "prompt": prompt,
+                "correct_answer": correct_answer,
                 "learner_answer": {
-                    "raw_answer_text": answer.raw_answer_text if answer else None,
+                    "raw_answer_text": privacy.redact_unless_included(
+                        answer.raw_answer_text, privacy.PRIVACY_TRANSCRIPT_EXCERPTS, privacy_fields
+                    )
+                    if answer
+                    else None,
                     "selected_choice_index": answer.selected_choice_index if answer else None,
                     "is_correct": answer.is_correct if answer else None,
                 },

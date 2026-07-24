@@ -78,6 +78,11 @@ _SCOPE_LABELS = [
     ("Selected Materials", SCOPE_SELECTED_MATERIALS),
 ]
 
+_STALE_PREVIEW_MESSAGE = (
+    'Selections changed since this preview was generated — click "Generate Preview" again '
+    "before saving or copying. Nothing below reflects the current selections."
+)
+
 
 class ExportDialog(QDialog):
     """Milestone 9: a local, user-controlled export of learning evidence.
@@ -242,6 +247,21 @@ class ExportDialog(QDialog):
             self._scope_combo.setCurrentIndex(1)  # One Material
             self._material_list.setCurrentRow(preselect_row)
 
+        # Any change that could affect export content must invalidate a
+        # previously generated preview (see `_invalidate_preview`) — wired
+        # last, after the preselection above, so restoring the initial
+        # material selection does not itself trigger an invalidation of a
+        # preview that does not exist yet.
+        self._scope_combo.currentIndexChanged.connect(self._invalidate_preview)
+        self._material_list.itemSelectionChanged.connect(self._invalidate_preview)
+        self._preset_combo.currentIndexChanged.connect(self._invalidate_preview)
+        self._custom_start_edit.dateChanged.connect(self._invalidate_preview)
+        self._custom_end_edit.dateChanged.connect(self._invalidate_preview)
+        for checkbox in self._category_checkboxes.values():
+            checkbox.toggled.connect(self._invalidate_preview)
+        for checkbox in self._privacy_checkboxes.values():
+            checkbox.toggled.connect(self._invalidate_preview)
+
     # ---- scope / date range wiring ----
 
     def _on_scope_changed(self) -> None:
@@ -294,6 +314,35 @@ class ExportDialog(QDialog):
         return frozenset(key for key, box in self._privacy_checkboxes.items() if box.isChecked())
 
     # ---- preview generation ----
+
+    def _invalidate_preview(self, *_args) -> None:
+        """Called whenever any selection that affects export content changes
+        (scope, material selection, date preset, custom dates, evidence
+        categories, privacy fields) — clears the stored bundle/text so a
+        stale preview can never be saved or copied; the displayed preview
+        text is replaced with a visible stale notice rather than silently
+        left showing outdated content, and every Save/Copy action is
+        disabled until "Generate Preview" is clicked again."""
+        if self._bundle is None and self._markdown_text is None:
+            return  # nothing generated yet — no-op, avoids clobbering the initial empty state pointlessly
+        self._bundle = None
+        self._markdown_text = None
+        self._json_text = None
+        self._evaluation_text = None
+        self._markdown_preview.setPlainText(_STALE_PREVIEW_MESSAGE)
+        self._json_preview.setPlainText(_STALE_PREVIEW_MESSAGE)
+        self._evaluation_preview.setPlainText(_STALE_PREVIEW_MESSAGE)
+        self._size_label.setText("")
+        self._status_label.setText("Selections changed — generate a new preview before saving or copying.")
+        for button in (
+            self._save_markdown_button,
+            self._save_json_button,
+            self._save_template_button,
+            self._copy_markdown_button,
+            self._copy_json_button,
+            self._copy_template_button,
+        ):
+            button.setEnabled(False)
 
     def _on_generate_preview_clicked(self) -> None:
         scope = self._current_scope()

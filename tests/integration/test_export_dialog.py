@@ -122,6 +122,165 @@ def test_no_evidence_state_shows_empty_materials_and_still_generates_a_preview(q
     dialog.close()
 
 
+# ---- stale-preview invalidation ----
+
+
+def _assert_preview_is_stale(dialog):
+    assert dialog._bundle is None
+    assert dialog._markdown_text is None
+    assert dialog._json_text is None
+    assert dialog._evaluation_text is None
+    for button in (
+        dialog._save_markdown_button,
+        dialog._save_json_button,
+        dialog._save_template_button,
+        dialog._copy_markdown_button,
+        dialog._copy_json_button,
+        dialog._copy_template_button,
+    ):
+        assert not button.isEnabled()
+
+
+def test_changing_scope_invalidates_the_preview(qapp, tmp_path):
+    connection = open_connection(tmp_path / "smoke.db")
+    migrate(connection)
+    _make_material_with_cues(connection, tmp_path, title="A")
+    _make_material_with_cues(connection, tmp_path, title="B")
+
+    dialog = ExportDialog(connection, None)
+    dialog._on_generate_preview_clicked()
+    assert dialog._bundle is not None
+
+    dialog._scope_combo.setCurrentIndex(1)  # One Material
+    _assert_preview_is_stale(dialog)
+    dialog.close()
+
+
+def test_changing_selected_materials_invalidates_the_preview(qapp, tmp_path):
+    connection = open_connection(tmp_path / "smoke.db")
+    migrate(connection)
+    _make_material_with_cues(connection, tmp_path, title="A")
+    _make_material_with_cues(connection, tmp_path, title="B")
+
+    dialog = ExportDialog(connection, None)
+    dialog._scope_combo.setCurrentIndex(2)  # Selected Materials
+    dialog._material_list.setCurrentRow(0)
+    dialog._on_generate_preview_clicked()
+    assert dialog._bundle is not None
+
+    dialog._material_list.setCurrentRow(1)
+    _assert_preview_is_stale(dialog)
+    dialog.close()
+
+
+def test_changing_date_preset_invalidates_the_preview(qapp, tmp_path):
+    connection = open_connection(tmp_path / "smoke.db")
+    migrate(connection)
+    _make_material_with_cues(connection, tmp_path)
+
+    dialog = ExportDialog(connection, None)
+    dialog._on_generate_preview_clicked()
+    assert dialog._bundle is not None
+
+    dialog._preset_combo.setCurrentIndex(1)
+    _assert_preview_is_stale(dialog)
+    dialog.close()
+
+
+def test_changing_custom_dates_invalidates_the_preview(qapp, tmp_path):
+    from PySide6.QtCore import QDate
+
+    from listentrace.domain.services import date_range as date_range_rules
+    from listentrace.ui.windows.export_dialog import _PRESET_LABELS
+
+    connection = open_connection(tmp_path / "smoke.db")
+    migrate(connection)
+    _make_material_with_cues(connection, tmp_path)
+
+    dialog = ExportDialog(connection, None)
+    custom_index = next(i for i, (_, preset) in enumerate(_PRESET_LABELS) if preset == date_range_rules.PRESET_CUSTOM)
+    dialog._preset_combo.setCurrentIndex(custom_index)
+    dialog._on_generate_preview_clicked()
+    assert dialog._bundle is not None
+
+    dialog._custom_start_edit.setDate(QDate.currentDate().addDays(-5))
+    _assert_preview_is_stale(dialog)
+    dialog.close()
+
+
+def test_changing_evidence_categories_invalidates_the_preview(qapp, tmp_path):
+    connection = open_connection(tmp_path / "smoke.db")
+    migrate(connection)
+    _make_material_with_cues(connection, tmp_path)
+
+    dialog = ExportDialog(connection, None)
+    dialog._on_generate_preview_clicked()
+    assert dialog._bundle is not None
+
+    box = next(iter(dialog._category_checkboxes.values()))
+    box.setChecked(not box.isChecked())
+    _assert_preview_is_stale(dialog)
+    dialog.close()
+
+
+def test_changing_privacy_fields_invalidates_the_preview(qapp, tmp_path):
+    connection = open_connection(tmp_path / "smoke.db")
+    migrate(connection)
+    _make_material_with_cues(connection, tmp_path)
+
+    dialog = ExportDialog(connection, None)
+    dialog._on_generate_preview_clicked()
+    assert dialog._bundle is not None
+
+    box = next(iter(dialog._privacy_checkboxes.values()))
+    box.setChecked(not box.isChecked())
+    _assert_preview_is_stale(dialog)
+    dialog.close()
+
+
+def test_regenerating_after_invalidation_re_enables_save_and_copy(qapp, tmp_path):
+    connection = open_connection(tmp_path / "smoke.db")
+    migrate(connection)
+    _make_material_with_cues(connection, tmp_path)
+
+    dialog = ExportDialog(connection, None)
+    dialog._on_generate_preview_clicked()
+    box = next(iter(dialog._category_checkboxes.values()))
+    box.setChecked(not box.isChecked())
+    assert not dialog._save_markdown_button.isEnabled()
+
+    dialog._on_generate_preview_clicked()
+    assert dialog._bundle is not None
+    assert dialog._save_markdown_button.isEnabled()
+    dialog.close()
+
+
+def test_saved_output_always_corresponds_to_the_regenerated_selection(qapp, tmp_path, monkeypatch):
+    connection = open_connection(tmp_path / "smoke.db")
+    migrate(connection)
+    _make_material_with_cues(connection, tmp_path)
+
+    dialog = ExportDialog(connection, None)
+    dialog._on_generate_preview_clicked()
+    original_categories = dialog._selected_categories()
+
+    box = next(iter(dialog._category_checkboxes.values()))
+    box.setChecked(not box.isChecked())
+    assert dialog._selected_categories() != original_categories
+    assert dialog._bundle is None  # stale, cannot be saved
+
+    dialog._on_generate_preview_clicked()
+    direct_bundle = export_service.build_export(
+        connection,
+        dialog._current_scope(),
+        dialog._current_date_range(),
+        dialog._selected_categories(),
+        dialog._selected_privacy_fields(),
+    )
+    assert export_formatters.render_markdown(direct_bundle) == dialog._markdown_text
+    dialog.close()
+
+
 def test_learning_history_window_opens_export_dialog(qapp, tmp_path, monkeypatch):
     connection = open_connection(tmp_path / "smoke.db")
     migrate(connection)
