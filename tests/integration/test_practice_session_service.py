@@ -10,10 +10,13 @@ from listentrace.application.errors import (
     SessionNotFoundError,
     SessionValidationError,
 )
+from listentrace.application.services import annotation_service
 from listentrace.application.services import practice_session_service as svc
 from listentrace.domain.enums.shadowing_status import ShadowingStatus
+from listentrace.domain.enums.stage_status import StageStatus
 from listentrace.domain.models.material import Material
 from listentrace.domain.models.subtitle import SubtitleCue, SubtitleTrack
+from listentrace.infrastructure.db import session_repository as repo
 from listentrace.infrastructure.db.connection import open_connection
 from listentrace.infrastructure.db.learning_repository import get_annotation
 from listentrace.infrastructure.db.migrations import migrate
@@ -530,3 +533,206 @@ def test_shadowing_progress_survives_resume(conn):
     progress = next(p for p in state.shadowing_progress if p.subtitle_cue_id == cues[0].id)
     assert progress.status == ShadowingStatus.PRACTICED.value
     assert progress.note == "tricky liaison"
+
+
+# ==== Acceptance-correction regression tests ====
+
+# ---- 1. stage-completion invariants ----
+
+
+def test_editing_stage1_response_to_empty_reverts_completed_stage(conn):
+    material_id, _ = _make_material_with_cues(conn)
+    session = svc.start_session(conn, material_id)
+    svc.enter_stage(conn, session.id, "global_comprehension")
+    svc.save_stage_response(conn, session.id, "global_comprehension", "where", "A cafe")
+    svc.complete_stage(conn, session.id, "global_comprehension")
+    assert svc.load_session_state(conn, session.id).stage_progress["global_comprehension"].status == "completed"
+
+    svc.save_stage_response(conn, session.id, "global_comprehension", "where", "   ")
+    state = svc.load_session_state(conn, session.id)
+    assert state.stage_progress["global_comprehension"].status == "in_progress"
+
+
+def test_deleting_last_keyword_capture_reverts_completed_stage2(conn):
+    material_id, _ = _make_material_with_cues(conn)
+    session = svc.start_session(conn, material_id)
+    svc.enter_stage(conn, session.id, "keyword_capture")
+    capture_id = svc.add_keyword_capture(conn, session.id, "keyword", "bonjour")
+    svc.complete_stage(conn, session.id, "keyword_capture")
+    assert svc.load_session_state(conn, session.id).stage_progress["keyword_capture"].status == "completed"
+
+    svc.delete_keyword_capture(conn, session.id, capture_id)
+    state = svc.load_session_state(conn, session.id)
+    assert state.stage_progress["keyword_capture"].status == "in_progress"
+
+
+def test_deleting_last_diagnosis_reverts_completed_stage3(conn):
+    material_id, cues = _make_material_with_cues(conn)
+    session = svc.start_session(conn, material_id)
+    svc.enter_stage(conn, session.id, "transcript_diagnosis")
+    evidence_id = svc.record_session_diagnosis(conn, session.id, cues[0].id, 0, 7, "keyword")
+    svc.complete_stage(conn, session.id, "transcript_diagnosis")
+    assert svc.load_session_state(conn, session.id).stage_progress["transcript_diagnosis"].status == "completed"
+
+    svc.delete_session_diagnosis(conn, session.id, evidence_id)
+    state = svc.load_session_state(conn, session.id)
+    assert state.stage_progress["transcript_diagnosis"].status == "in_progress"
+
+
+def test_editing_stage5_summary_to_empty_reverts_completed_stage(conn):
+    material_id, _ = _make_material_with_cues(conn)
+    session = svc.start_session(conn, material_id)
+    svc.enter_stage(conn, session.id, "final_summary")
+    svc.save_stage_response(conn, session.id, "final_summary", "summary", "A short summary.")
+    svc.complete_stage(conn, session.id, "final_summary")
+    assert svc.load_session_state(conn, session.id).stage_progress["final_summary"].status == "completed"
+
+    svc.save_stage_response(conn, session.id, "final_summary", "summary", "")
+    state = svc.load_session_state(conn, session.id)
+    assert state.stage_progress["final_summary"].status == "in_progress"
+
+
+def test_complete_session_revalidates_evidence_behind_a_stale_completed_stage(conn):
+    material_id, cues = _make_material_with_cues(conn)
+    session = svc.start_session(conn, material_id)
+
+    for stage_key in ("global_comprehension", "keyword_capture", "shadowing", "final_summary"):
+        svc.enter_stage(conn, session.id, stage_key)
+        svc.skip_stage(conn, session.id, stage_key)
+
+    # Simulate a stale `completed` status with no backing evidence at all — a
+    # state the public API should never itself produce, but `complete_session`
+    # must defend against trusting stored status alone.
+    repo.set_stage_status(conn, session.id, "transcript_diagnosis", StageStatus.IN_PROGRESS.value)
+    repo.set_stage_status(conn, session.id, "transcript_diagnosis", StageStatus.COMPLETED.value)
+
+    with pytest.raises(SessionValidationError) as excinfo:
+        svc.complete_session(conn, session.id)
+    assert excinfo.value.category == "session_not_ready"
+
+    assert svc.get_session(conn, session.id).status == "active"
+    state = svc.load_session_state(conn, session.id)
+    assert state.stage_progress["transcript_diagnosis"].status == "in_progress"
+
+
+# ---- 2. Stage 3 application-layer enforcement ----
+
+
+def test_diagnosis_requires_transcript_revealed(conn):
+    material_id, cues = _make_material_with_cues(conn)
+    session = svc.start_session(conn, material_id)
+    with pytest.raises(SessionValidationError) as excinfo:
+        svc.record_session_diagnosis(conn, session.id, cues[0].id, 0, 7, "keyword")
+    assert excinfo.value.category == "transcript_not_revealed"
+
+    with pytest.raises(SessionValidationError) as excinfo:
+        svc.mark_stage3_no_difficulty(conn, session.id)
+    assert excinfo.value.category == "transcript_not_revealed"
+
+
+def test_diagnosis_requires_stage3_to_be_current_stage(conn):
+    material_id, cues = _make_material_with_cues(conn)
+    session = svc.start_session(conn, material_id)
+    svc.enter_stage(conn, session.id, "transcript_diagnosis")
+    svc.enter_stage(conn, session.id, "shadowing")  # transcript stays revealed, but stage3 no longer current
+
+    with pytest.raises(SessionValidationError) as excinfo:
+        svc.record_session_diagnosis(conn, session.id, cues[0].id, 0, 7, "keyword")
+    assert excinfo.value.category == "wrong_stage"
+
+    with pytest.raises(SessionValidationError) as excinfo:
+        svc.mark_stage3_no_difficulty(conn, session.id)
+    assert excinfo.value.category == "wrong_stage"
+
+    with pytest.raises(SessionValidationError) as excinfo:
+        svc.delete_session_diagnosis(conn, session.id, 999)
+    assert excinfo.value.category == "wrong_stage"
+
+
+def test_no_notable_difficulty_rejected_while_diagnosis_evidence_exists(conn):
+    material_id, cues = _make_material_with_cues(conn)
+    session = svc.start_session(conn, material_id)
+    svc.enter_stage(conn, session.id, "transcript_diagnosis")
+    svc.record_session_diagnosis(conn, session.id, cues[0].id, 0, 7, "keyword")
+
+    with pytest.raises(SessionValidationError) as excinfo:
+        svc.mark_stage3_no_difficulty(conn, session.id)
+    assert excinfo.value.category == "diagnosis_evidence_exists"
+
+
+def test_recording_diagnosis_clears_a_prior_no_notable_difficulty_outcome(conn):
+    material_id, cues = _make_material_with_cues(conn)
+    session = svc.start_session(conn, material_id)
+    svc.enter_stage(conn, session.id, "transcript_diagnosis")
+    svc.mark_stage3_no_difficulty(conn, session.id)
+    state = svc.load_session_state(conn, session.id)
+    assert state.stage_progress["transcript_diagnosis"].outcome_key == "no_notable_difficulty"
+
+    svc.record_session_diagnosis(conn, session.id, cues[0].id, 0, 7, "keyword")
+    state = svc.load_session_state(conn, session.id)
+    assert state.stage_progress["transcript_diagnosis"].outcome_key is None
+
+
+# ---- 3. cue ownership ----
+
+
+def test_record_session_diagnosis_rejects_a_cue_from_a_different_material(conn):
+    material_a, cues_a = _make_material_with_cues(conn, cue_texts=("Material A cue",))
+    material_b, cues_b = _make_material_with_cues(conn, cue_texts=("Material B cue",))
+    session = svc.start_session(conn, material_a)
+    svc.enter_stage(conn, session.id, "transcript_diagnosis")
+
+    with pytest.raises(SessionValidationError) as excinfo:
+        svc.record_session_diagnosis(conn, session.id, cues_b[0].id, 0, 6, "keyword")
+    assert excinfo.value.category == "cue_material_mismatch"
+
+    # The matching-material cue must still work normally.
+    evidence_id = svc.record_session_diagnosis(conn, session.id, cues_a[0].id, 0, 6, "keyword")
+    assert evidence_id is not None
+
+
+# ---- 4. truthful annotation links after diagnosis edits ----
+
+
+def test_update_session_diagnosis_clears_stale_annotation_link_when_no_match_exists(conn):
+    material_id, cues = _make_material_with_cues(conn)
+    session = svc.start_session(conn, material_id)
+    svc.enter_stage(conn, session.id, "transcript_diagnosis")
+    evidence_id = svc.record_session_diagnosis(conn, session.id, cues[0].id, 0, 7, "keyword")
+    original = next(e for e in svc.list_session_diagnosis(conn, session.id) if e.id == evidence_id)
+    original_annotation_id = original.annotation_id
+    assert original_annotation_id is not None
+
+    # No `unknown_word_or_chunk` annotation exists for this cue/range, so the
+    # link must be cleared, not left pointing at the old `keyword` annotation.
+    svc.update_session_diagnosis(conn, session.id, evidence_id, "unknown_word_or_chunk", 0, 7)
+
+    updated = next(e for e in svc.list_session_diagnosis(conn, session.id) if e.id == evidence_id)
+    assert updated.annotation_id is None
+    # The original annotation itself must be untouched.
+    assert get_annotation(conn, original_annotation_id).label_key == "keyword"
+
+
+def test_update_session_diagnosis_relinks_to_a_different_existing_annotation(conn):
+    material_id, cues = _make_material_with_cues(conn)
+    session = svc.start_session(conn, material_id)
+    svc.enter_stage(conn, session.id, "transcript_diagnosis")
+    evidence_id = svc.record_session_diagnosis(conn, session.id, cues[0].id, 0, 7, "keyword")
+    original = next(e for e in svc.list_session_diagnosis(conn, session.id) if e.id == evidence_id)
+    original_annotation_id = original.annotation_id
+
+    # A material-level annotation for the new label/range already exists
+    # (e.g. created independently via the Milestone 4 standalone workspace).
+    other_ids = annotation_service.create_annotations(
+        conn, cues[0].id, 0, 7, ["unknown_word_or_chunk"]
+    )
+    other_annotation_id = other_ids[0]
+
+    svc.update_session_diagnosis(conn, session.id, evidence_id, "unknown_word_or_chunk", 0, 7)
+
+    updated = next(e for e in svc.list_session_diagnosis(conn, session.id) if e.id == evidence_id)
+    assert updated.annotation_id == other_annotation_id
+    assert updated.annotation_id != original_annotation_id
+    # Neither annotation row was mutated by the relink.
+    assert get_annotation(conn, original_annotation_id).label_key == "keyword"
+    assert get_annotation(conn, other_annotation_id).label_key == "unknown_word_or_chunk"

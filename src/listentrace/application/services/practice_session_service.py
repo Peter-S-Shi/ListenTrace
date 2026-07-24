@@ -22,7 +22,11 @@ from listentrace.domain.models.session_diagnosis_evidence import SessionDiagnosi
 from listentrace.domain.services import session_rules as rules
 from listentrace.domain.services.text_range import TextRangeError, validate_selection
 from listentrace.infrastructure.db import session_repository as repo
-from listentrace.infrastructure.db.learning_repository import find_annotation, insert_annotations
+from listentrace.infrastructure.db.learning_repository import (
+    find_annotation,
+    get_material_id_for_subtitle_cue,
+    insert_annotations,
+)
 from listentrace.infrastructure.db.repository import (
     get_cue_by_id,
     get_cues_for_track,
@@ -66,6 +70,57 @@ def _require_stage_unlocked(session: PracticeSession, stage_key: str) -> None:
 
 def _responses_dict(conn: sqlite3.Connection, session_id: int, stage_key: str) -> dict[str, str]:
     return {r.prompt_key: r.response_text for r in repo.list_stage_responses(conn, session_id, stage_key)}
+
+
+def _require_transcript_diagnosis_stage(conn: sqlite3.Connection, session_id: int) -> PracticeSession:
+    """Session diagnosis and the "no notable difficulty" outcome are Stage 3
+    actions: they require an active session, a transcript that has actually been
+    revealed, and Stage 3 to be the *current* stage — not just "revealed at some
+    point in the past"."""
+    session = _require_active_session(conn, session_id)
+    if session.transcript_revealed_at is None:
+        raise SessionValidationError(
+            "transcript_not_revealed",
+            "The transcript must be revealed before recording diagnosis evidence.",
+        )
+    if session.current_stage != StageKey.TRANSCRIPT_DIAGNOSIS.value:
+        raise SessionValidationError(
+            "wrong_stage",
+            "Diagnosis evidence can only be recorded while Stage 3 is the current stage.",
+        )
+    return session
+
+
+def _evaluate_stage_eligibility(
+    conn: sqlite3.Connection, session_id: int, stage_key: str, outcome_key: str | None
+) -> bool:
+    """The single source of truth for "does this stage currently have enough
+    evidence to be marked completed" — used when completing a stage, when
+    re-evaluating a stage after its evidence changes, and when defensively
+    revalidating every already-`completed` stage in `complete_session`."""
+    if stage_key == StageKey.GLOBAL_COMPREHENSION.value:
+        return rules.stage1_can_complete(_responses_dict(conn, session_id, stage_key))
+    if stage_key == StageKey.KEYWORD_CAPTURE.value:
+        return rules.stage2_can_complete(len(repo.list_keyword_captures(conn, session_id)))
+    if stage_key == StageKey.TRANSCRIPT_DIAGNOSIS.value:
+        return rules.stage3_can_complete(repo.count_session_diagnosis(conn, session_id), outcome_key)
+    if stage_key == StageKey.SHADOWING.value:
+        return rules.stage4_can_complete(repo.count_unresolved_shadowing(conn, session_id))
+    return rules.stage5_can_complete(_responses_dict(conn, session_id, stage_key).get("summary", ""))
+
+
+def _reevaluate_stage(conn: sqlite3.Connection, session_id: int, stage_key: str) -> None:
+    """After Stage 1/2/3/5 evidence is edited or deleted, downgrade a stage stored
+    as `completed` back to `in_progress` if it no longer satisfies its completion
+    rule. Never touches `not_started` or `skipped` — skipping is a deliberate
+    action, not a completion claim, so it is never re-evaluated. This is a
+    system-triggered correction, not a user navigation action, so it bypasses
+    `session_rules.is_valid_stage_transition` and writes the status directly."""
+    progress = repo.get_stage_progress(conn, session_id, stage_key)
+    if progress is None or progress.status != StageStatus.COMPLETED.value:
+        return
+    if not _evaluate_stage_eligibility(conn, session_id, stage_key, progress.outcome_key):
+        repo.set_stage_status(conn, session_id, stage_key, StageStatus.IN_PROGRESS.value)
 
 
 # ---- lifecycle ----
@@ -116,11 +171,26 @@ def complete_session(conn: sqlite3.Connection, session_id: int) -> None:
         raise SessionValidationError(
             "invalid_transition", f"Cannot complete a session with status {session.status!r}."
         )
-    statuses = {p.stage_key: p.status for p in repo.list_stage_progress(conn, session_id)}
+    stage_progress_list = repo.list_stage_progress(conn, session_id)
+    statuses = {p.stage_key: p.status for p in stage_progress_list}
     if not rules.session_can_complete(statuses):
         raise SessionValidationError(
             "session_not_ready", "Every stage must be completed or skipped before finishing the session."
         )
+
+    # Defensive revalidation: a stage stored as `completed` must still be backed
+    # by real evidence, not merely a stored status that may have gone stale.
+    for progress in stage_progress_list:
+        if progress.status != StageStatus.COMPLETED.value:
+            continue
+        if not _evaluate_stage_eligibility(conn, session_id, progress.stage_key, progress.outcome_key):
+            repo.set_stage_status(conn, session_id, progress.stage_key, StageStatus.IN_PROGRESS.value)
+            raise SessionValidationError(
+                "session_not_ready",
+                f"Stage {progress.stage_key!r} no longer has qualifying evidence; it can no longer be "
+                "counted as completed.",
+            )
+
     repo.set_session_status(conn, session_id, SessionStatus.COMPLETED.value)
 
 
@@ -233,18 +303,7 @@ def complete_stage(conn: sqlite3.Connection, session_id: int, stage_key: str) ->
             "invalid_stage_transition", f"Cannot complete a stage with status {progress.status!r}."
         )
 
-    if stage_key == StageKey.GLOBAL_COMPREHENSION.value:
-        eligible = rules.stage1_can_complete(_responses_dict(conn, session_id, stage_key))
-    elif stage_key == StageKey.KEYWORD_CAPTURE.value:
-        eligible = rules.stage2_can_complete(len(repo.list_keyword_captures(conn, session_id)))
-    elif stage_key == StageKey.TRANSCRIPT_DIAGNOSIS.value:
-        eligible = rules.stage3_can_complete(repo.count_session_diagnosis(conn, session_id), progress.outcome_key)
-    elif stage_key == StageKey.SHADOWING.value:
-        eligible = rules.stage4_can_complete(repo.count_unresolved_shadowing(conn, session_id))
-    else:
-        eligible = rules.stage5_can_complete(_responses_dict(conn, session_id, stage_key).get("summary", ""))
-
-    if not eligible:
+    if not _evaluate_stage_eligibility(conn, session_id, stage_key, progress.outcome_key):
         raise SessionValidationError(
             "cannot_complete_stage",
             "This stage has no evidence yet. Add evidence first, or use Skip Stage.",
@@ -259,10 +318,16 @@ def save_stage_response(
     _require_stage_key(stage_key)
     _require_stage_unlocked(session, stage_key)
     repo.upsert_stage_response(conn, session_id, stage_key, prompt_key, response_text or "")
+    _reevaluate_stage(conn, session_id, stage_key)
 
 
 def mark_stage3_no_difficulty(conn: sqlite3.Connection, session_id: int) -> None:
-    _require_active_session(conn, session_id)
+    _require_transcript_diagnosis_stage(conn, session_id)
+    if repo.count_session_diagnosis(conn, session_id) > 0:
+        raise SessionValidationError(
+            "diagnosis_evidence_exists",
+            "Cannot mark 'no notable difficulty' while diagnosis evidence exists for this session.",
+        )
     repo.set_stage_outcome(
         conn, session_id, StageKey.TRANSCRIPT_DIAGNOSIS.value, StageOutcome.NO_NOTABLE_DIFFICULTY.value
     )
@@ -297,6 +362,7 @@ def update_keyword_capture(
     if not text_value:
         raise SessionValidationError("empty_capture_text", "Capture text cannot be empty.")
     repo.update_keyword_capture(conn, capture_id, capture_type, text_value)
+    _reevaluate_stage(conn, session_id, StageKey.KEYWORD_CAPTURE.value)
 
 
 def delete_keyword_capture(conn: sqlite3.Connection, session_id: int, capture_id: int) -> None:
@@ -306,6 +372,7 @@ def delete_keyword_capture(conn: sqlite3.Connection, session_id: int, capture_id
     if existing is None or existing.practice_session_id != session_id:
         raise KeywordCaptureNotFoundError(capture_id)
     repo.delete_keyword_capture(conn, capture_id)
+    _reevaluate_stage(conn, session_id, StageKey.KEYWORD_CAPTURE.value)
 
 
 def reorder_keyword_captures(conn: sqlite3.Connection, session_id: int, ordered_ids: list[int]) -> None:
@@ -335,11 +402,17 @@ def record_session_diagnosis(
     creates a material-level `Annotation` for this exact cue/label/range (reusing an
     existing one rather than overwriting it), and always creates an independent
     session-scoped snapshot row."""
-    _require_active_session(conn, session_id)
+    session = _require_transcript_diagnosis_stage(conn, session_id)
 
     cue = get_cue_by_id(conn, subtitle_cue_id)
     if cue is None:
         raise CueNotFoundError(subtitle_cue_id)
+
+    cue_material_id = get_material_id_for_subtitle_cue(conn, subtitle_cue_id)
+    if cue_material_id != session.material_id:
+        raise SessionValidationError(
+            "cue_material_mismatch", "This cue does not belong to the session's material."
+        )
 
     if label_key not in _VALID_LABELS:
         raise SessionValidationError("invalid_label", f"Unknown label: {label_key!r}")
@@ -387,7 +460,15 @@ def record_session_diagnosis(
         heard_as=heard_as_value,
         note=note_value,
     )
-    return repo.insert_session_diagnosis(conn, evidence)
+    evidence_id = repo.insert_session_diagnosis(conn, evidence)
+
+    # Mutually exclusive with "no notable difficulty": recording real evidence
+    # means that claim is no longer true for this session.
+    progress = repo.get_stage_progress(conn, session_id, StageKey.TRANSCRIPT_DIAGNOSIS.value)
+    if progress is not None and progress.outcome_key == StageOutcome.NO_NOTABLE_DIFFICULTY.value:
+        repo.set_stage_outcome(conn, session_id, StageKey.TRANSCRIPT_DIAGNOSIS.value, None)
+
+    return evidence_id
 
 
 def update_session_diagnosis(
@@ -400,9 +481,11 @@ def update_session_diagnosis(
     heard_as: str | None = None,
     note: str | None = None,
 ) -> None:
-    """Updates only the session snapshot. Never mutates the linked material-level
-    `Annotation`, even if one is linked via `annotation_id`."""
-    _require_active_session(conn, session_id)
+    """Updates the session snapshot and re-derives `annotation_id` to match the new
+    label/range — relinking to whichever material-level `Annotation` exactly
+    matches now, or clearing the link to `NULL` if none does. The linked
+    `Annotation` row itself is never mutated, only which row (if any) is linked."""
+    _require_transcript_diagnosis_stage(conn, session_id)
 
     existing = repo.get_session_diagnosis(conn, evidence_id)
     if existing is None or existing.practice_session_id != session_id:
@@ -437,18 +520,34 @@ def update_session_diagnosis(
         )
 
     note_value = note.strip() if note and note.strip() else None
+
+    # Never retain a stale link: re-derive it for the (possibly new) label/range
+    # rather than keeping whatever `existing.annotation_id` happened to be.
+    matching_annotation = find_annotation(conn, existing.subtitle_cue_id, label_key, selection_start, selection_end)
+    new_annotation_id = matching_annotation.id if matching_annotation is not None else None
+
     repo.update_session_diagnosis(
-        conn, evidence_id, label_key, selected_text, selection_start, selection_end, heard_as_value, note_value
+        conn,
+        evidence_id,
+        new_annotation_id,
+        label_key,
+        selected_text,
+        selection_start,
+        selection_end,
+        heard_as_value,
+        note_value,
     )
+    _reevaluate_stage(conn, session_id, StageKey.TRANSCRIPT_DIAGNOSIS.value)
 
 
 def delete_session_diagnosis(conn: sqlite3.Connection, session_id: int, evidence_id: int) -> None:
     """Deletes only the session snapshot; never cascades to the linked `Annotation`."""
-    _require_active_session(conn, session_id)
+    _require_transcript_diagnosis_stage(conn, session_id)
     existing = repo.get_session_diagnosis(conn, evidence_id)
     if existing is None or existing.practice_session_id != session_id:
         raise DiagnosisNotFoundError(evidence_id)
     repo.delete_session_diagnosis(conn, evidence_id)
+    _reevaluate_stage(conn, session_id, StageKey.TRANSCRIPT_DIAGNOSIS.value)
 
 
 def list_session_diagnosis(conn: sqlite3.Connection, session_id: int):

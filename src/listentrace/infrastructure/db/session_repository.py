@@ -235,7 +235,9 @@ def set_stage_status(
     conn.commit()
 
 
-def set_stage_outcome(conn: sqlite3.Connection, session_id: int, stage_key: str, outcome_key: str) -> None:
+def set_stage_outcome(
+    conn: sqlite3.Connection, session_id: int, stage_key: str, outcome_key: str | None
+) -> None:
     conn.execute(
         "UPDATE session_stage_progress SET outcome_key = ?, updated_at = datetime('now') "
         "WHERE practice_session_id = ? AND stage_key = ?",
@@ -415,6 +417,7 @@ def list_session_diagnosis_for_cue(
 def update_session_diagnosis(
     conn: sqlite3.Connection,
     evidence_id: int,
+    annotation_id: int | None,
     label_key: str,
     selected_text: str,
     selection_start: int,
@@ -422,16 +425,18 @@ def update_session_diagnosis(
     heard_as: str | None,
     note: str | None,
 ) -> None:
-    """Updates only the session snapshot row. Never touches `annotation` — the
-    linked material-level row, if any, is intentionally left untouched."""
+    """Updates the session snapshot row, including which `annotation` row (if any)
+    it links to — the caller is responsible for re-deriving `annotation_id` to
+    match the new label/range. Never mutates the `annotation` row itself, only
+    which row this snapshot points at."""
     conn.execute(
         """
         UPDATE session_diagnosis_evidence
-        SET label_key = ?, selected_text = ?, selection_start = ?, selection_end = ?,
+        SET annotation_id = ?, label_key = ?, selected_text = ?, selection_start = ?, selection_end = ?,
             heard_as = ?, note = ?, updated_at = datetime('now')
         WHERE id = ?
         """,
-        (label_key, selected_text, selection_start, selection_end, heard_as, note, evidence_id),
+        (annotation_id, label_key, selected_text, selection_start, selection_end, heard_as, note, evidence_id),
     )
     conn.commit()
 
