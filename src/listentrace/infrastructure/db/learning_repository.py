@@ -100,6 +100,24 @@ def list_annotations_for_cue(conn: sqlite3.Connection, subtitle_cue_id: int) -> 
     return [_row_to_annotation(row) for row in rows]
 
 
+def list_annotations_for_material(conn: sqlite3.Connection, material_id: int) -> list[Annotation]:
+    """Every annotation across every cue of one material, via
+    annotation -> subtitle_cue -> subtitle_track. Used by quiz generation
+    (Review Quiz sourcing, Keyword Recognition target pooling), which needs
+    material-wide diagnosis history rather than one cue at a time."""
+    rows = conn.execute(
+        """
+        SELECT annotation.* FROM annotation
+        JOIN subtitle_cue ON subtitle_cue.id = annotation.subtitle_cue_id
+        JOIN subtitle_track ON subtitle_track.id = subtitle_cue.subtitle_track_id
+        WHERE subtitle_track.material_id = ?
+        ORDER BY annotation.id
+        """,
+        (material_id,),
+    ).fetchall()
+    return [_row_to_annotation(row) for row in rows]
+
+
 def update_annotation(
     conn: sqlite3.Connection,
     annotation_id: int,

@@ -18,16 +18,28 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from listentrace.application.errors import ActiveSessionExistsError, MaterialNotFoundError, PlayerOpenError
+from listentrace.application.errors import (
+    ActiveSessionExistsError,
+    MaterialNotFoundError,
+    PlayerOpenError,
+    QuizValidationError,
+)
 from listentrace.application.services import material_library_service as library
 from listentrace.application.services import practice_session_service
+from listentrace.application.services import quiz_service
 from listentrace.application.services.player_loading_service import load_material_for_player
 from listentrace.domain.enums.material_status import MaterialStatus
 from listentrace.infrastructure.db.migrations import current_version
 from listentrace.ui.windows.guided_session_window import GuidedSessionWindow
 from listentrace.ui.windows.import_dialog import ImportDialog
 from listentrace.ui.windows.player_window import PlayerWindow
+from listentrace.ui.windows.quiz_history_dialog import QuizHistoryDialog
+from listentrace.ui.windows.quiz_window import QuizWindow
 from listentrace.ui.windows.session_history_dialog import SessionHistoryDialog
+
+_DEFAULT_QUIZ_QUESTION_COUNT = 10
+_MIN_QUIZ_QUESTION_COUNT = 1
+_MAX_QUIZ_QUESTION_COUNT = 50
 
 
 class MainWindow(QMainWindow):
@@ -41,6 +53,7 @@ class MainWindow(QMainWindow):
         self._showing_archived = False
         self._player_window: PlayerWindow | None = None
         self._guided_session_window: GuidedSessionWindow | None = None
+        self._quiz_window: QuizWindow | None = None
 
         central = QWidget(self)
         outer_layout = QVBoxLayout(central)
@@ -77,6 +90,21 @@ class MainWindow(QMainWindow):
         list_buttons_row.addWidget(self._session_history_button)
         list_buttons_row.addWidget(self._toggle_archived_button)
         list_column.addLayout(list_buttons_row)
+
+        quiz_buttons_row = QHBoxLayout()
+        self._start_material_quiz_button = QPushButton("Start Material Quiz")
+        self._start_material_quiz_button.clicked.connect(self._on_start_material_quiz_clicked)
+        self._start_review_quiz_button = QPushButton("Start Review Quiz")
+        self._start_review_quiz_button.clicked.connect(self._on_start_review_quiz_clicked)
+        self._resume_quiz_button = QPushButton("Resume Quiz")
+        self._resume_quiz_button.clicked.connect(self._on_resume_quiz_clicked)
+        self._quiz_history_button = QPushButton("Quiz History")
+        self._quiz_history_button.clicked.connect(self._on_quiz_history_clicked)
+        quiz_buttons_row.addWidget(self._start_material_quiz_button)
+        quiz_buttons_row.addWidget(self._start_review_quiz_button)
+        quiz_buttons_row.addWidget(self._resume_quiz_button)
+        quiz_buttons_row.addWidget(self._quiz_history_button)
+        list_column.addLayout(quiz_buttons_row)
 
         self._material_list = QListWidget()
         self._material_list.currentItemChanged.connect(self._on_selection_changed)
@@ -196,15 +224,21 @@ class MainWindow(QMainWindow):
         self._open_player_button.setEnabled(enabled and not self._showing_archived)
         self._start_intensive_button.setEnabled(enabled and not self._showing_archived)
         self._session_history_button.setEnabled(enabled and not self._showing_archived)
+        self._start_material_quiz_button.setEnabled(enabled and not self._showing_archived)
+        self._start_review_quiz_button.setEnabled(enabled and not self._showing_archived)
+        self._quiz_history_button.setEnabled(enabled and not self._showing_archived)
         self._update_resume_button_state()
 
     def _update_resume_button_state(self) -> None:
         material_id = self._selected_material_id()
         if material_id is None or self._showing_archived:
             self._resume_intensive_button.setEnabled(False)
+            self._resume_quiz_button.setEnabled(False)
             return
         active = practice_session_service.find_active_session(self._connection, material_id)
         self._resume_intensive_button.setEnabled(active is not None)
+        active_quizzes = quiz_service.find_active_quizzes_for_material(self._connection, material_id)
+        self._resume_quiz_button.setEnabled(len(active_quizzes) > 0)
 
     def _on_import_clicked(self) -> None:
         dialog = ImportDialog(self._connection, self)
@@ -298,6 +332,93 @@ class MainWindow(QMainWindow):
             return
         self._guided_session_window = GuidedSessionWindow(self._connection, load_result, session_id, self)
         self._guided_session_window.show()
+
+    def _prompt_quiz_question_count(self, title: str) -> int | None:
+        count, ok = QInputDialog.getInt(
+            self,
+            title,
+            "Number of questions (a target, not a promise — the material may only support fewer):",
+            _DEFAULT_QUIZ_QUESTION_COUNT,
+            _MIN_QUIZ_QUESTION_COUNT,
+            _MAX_QUIZ_QUESTION_COUNT,
+        )
+        return count if ok else None
+
+    def _on_start_material_quiz_clicked(self) -> None:
+        material_id = self._selected_material_id()
+        if material_id is None or self._showing_archived:
+            return
+        requested_count = self._prompt_quiz_question_count("Start Material Quiz")
+        if requested_count is None:
+            return
+        try:
+            attempt = quiz_service.create_material_quiz(self._connection, material_id, requested_count)
+        except QuizValidationError as exc:
+            QMessageBox.warning(self, "Cannot Start Quiz", str(exc))
+            return
+        if attempt.actual_count < requested_count:
+            QMessageBox.information(
+                self,
+                "Smaller Quiz Created",
+                f"This material only supports {attempt.actual_count} meaningful question(s) "
+                f"out of the {requested_count} requested — the smaller quiz was created.",
+            )
+        self._open_quiz(material_id, attempt.id)
+        self._update_resume_button_state()
+
+    def _on_start_review_quiz_clicked(self) -> None:
+        material_id = self._selected_material_id()
+        if material_id is None or self._showing_archived:
+            return
+        requested_count = self._prompt_quiz_question_count("Start Review Quiz")
+        if requested_count is None:
+            return
+        try:
+            attempt = quiz_service.create_review_quiz(self._connection, material_id, requested_count)
+        except QuizValidationError as exc:
+            QMessageBox.warning(self, "Cannot Start Review Quiz", str(exc))
+            return
+        if attempt.actual_count < requested_count:
+            QMessageBox.information(
+                self,
+                "Smaller Quiz Created",
+                f"This material only has {attempt.actual_count} usable piece(s) of saved diagnosis "
+                f"evidence out of the {requested_count} requested — the smaller quiz was created.",
+            )
+        self._open_quiz(material_id, attempt.id)
+        self._update_resume_button_state()
+
+    def _on_resume_quiz_clicked(self) -> None:
+        material_id = self._selected_material_id()
+        if material_id is None or self._showing_archived:
+            return
+        active_quizzes = quiz_service.find_active_quizzes_for_material(self._connection, material_id)
+        if not active_quizzes:
+            self.show_error("No active quiz to resume.")
+            return
+        if len(active_quizzes) == 1:
+            self._open_quiz(material_id, active_quizzes[0].id)
+            return
+        self._on_quiz_history_clicked()
+
+    def _on_quiz_history_clicked(self) -> None:
+        material_id = self._selected_material_id()
+        if material_id is None:
+            return
+        detail = library.get_material_detail(self._connection, material_id)
+        dialog = QuizHistoryDialog(self._connection, material_id, detail.title, self)
+        if dialog.exec() == QDialog.DialogCode.Accepted and dialog.selected_attempt_id is not None:
+            self._open_quiz(material_id, dialog.selected_attempt_id)
+        self._update_resume_button_state()
+
+    def _open_quiz(self, material_id: int, attempt_id: int) -> None:
+        try:
+            load_result = load_material_for_player(self._connection, material_id)
+        except PlayerOpenError as exc:
+            QMessageBox.warning(self, "Cannot Open Quiz", str(exc))
+            return
+        self._quiz_window = QuizWindow(self._connection, load_result, attempt_id, self)
+        self._quiz_window.show()
 
     def _on_toggle_archived(self) -> None:
         self._showing_archived = not self._showing_archived

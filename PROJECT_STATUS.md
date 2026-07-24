@@ -1,6 +1,6 @@
 # ListenTrace Project Status
 
-Last updated: 2026-07-25
+Last updated: 2026-07-24
 
 ## Project Purpose
 
@@ -8,7 +8,7 @@ ListenTrace is a local-first desktop application for transcript-guided foreign-l
 
 ## Repository Verification
 
-The remote repository exists, is private, and uses `main` as its default branch. It contains the initial documentation commit, the Milestone 1 application-foundation commit, the Milestone 2 material-library commit, the Milestone 3 synchronized-player commit (plus its acceptance-correction follow-up), the Milestone 4 transcript-workspace commit (plus its acceptance-correction follow-up and a small post-milestone presentation-refresh follow-up), and the Milestone 5 guided-session commit (plus its acceptance-correction follow-up); no pull requests; no continuous-integration configuration.
+The remote repository exists, is private, and uses `main` as its default branch. It contains the initial documentation commit, the Milestone 1 application-foundation commit, the Milestone 2 material-library commit, the Milestone 3 synchronized-player commit (plus its acceptance-correction follow-up), the Milestone 4 transcript-workspace commit (plus its acceptance-correction follow-up and a small post-milestone presentation-refresh follow-up), the Milestone 5 guided-session commit (plus its acceptance-correction follow-up), and the Milestone 6 quizzes-and-recall-practice commit; no pull requests; no continuous-integration configuration.
 
 ## Current Engineering State
 
@@ -17,22 +17,23 @@ The remote repository exists, is private, and uses `main` as its default branch.
 | Product concept | Defined |
 | Product workflow | Defined at roadmap level |
 | Public engineering documentation | Committed and pushed to `main` |
-| Application code | Implemented (foundation + material library + synchronized player + transcript workspace + guided intensive-listening session) |
-| Desktop shell | Material library + player window (with integrated transcript workspace) + guided session window (five stages) + session history dialog, manually verified end-to-end |
-| Database schema | Schema version 4: adds `practice_session`, `session_stage_progress`, `stage_response`, `keyword_capture`, `session_diagnosis_evidence`, `shadowing_cue_progress` (additive; Milestone 1/2/4 tables unchanged) |
+| Application code | Implemented (foundation + material library + synchronized player + transcript workspace + guided intensive-listening session + quizzes and recall practice) |
+| Desktop shell | Material library + player window (with integrated transcript workspace) + guided session window (five stages) + session history dialog + quiz window + quiz history dialog + quiz review dialog, manually verified end-to-end |
+| Database schema | Schema version 5: adds `quiz_attempt`, `quiz_question`, `quiz_answer` (additive; Milestone 1/2/4/5 tables unchanged) |
 | Media/subtitle import | Implemented and tested (Milestone 2, unchanged) |
-| Material library | Implemented and tested (Milestone 2), opens the player (Milestone 3) and the guided session (Milestone 5) |
+| Material library | Implemented and tested (Milestone 2), opens the player (Milestone 3), the guided session (Milestone 5), and quizzes (Milestone 6) |
 | Synchronized player | Implemented and tested (Milestone 3 + acceptance-correction pass, unchanged this milestone) |
-| Transcript workspace | Implemented and tested (Milestone 4, unchanged this milestone except the shared highlighting extraction described below): multi-label annotations on whole-cue or partial text ranges, Misheard/`heard_as` validation, per-cue Cue Notes (empty-save = delete), Saved Language Items (word/phrase/chunk/sentence_pattern) with exact-duplicate rejection and same-text-elsewhere confirmation, global per-label colors, editing cue kept independent of the active playback cue |
-| Guided intensive-listening session | Implemented and tested: five-stage resumable session (global comprehension, keyword capture, transcript diagnosis, shadowing, final summary), one active session per material, explicit skip on every stage, transcript-reveal lock on Stages 1/2, session-scoped diagnosis evidence reusing Milestone 4's annotation tools, shadowing practiced/skipped tracking, completed/abandoned read-only history |
+| Transcript workspace | Implemented and tested (Milestone 4, unchanged this milestone) |
+| Guided intensive-listening session | Implemented and tested (Milestone 5, unchanged this milestone): five-stage resumable session, one active session per material, explicit skip on every stage, transcript-reveal lock on Stages 1/2, session-scoped diagnosis evidence, shadowing practiced/skipped tracking, completed/abandoned read-only history |
+| Quizzes and recall practice | Implemented and tested: four deterministic, locally-generated question types (cue dictation/fill-in-the-blank, keyword recognition, audio-to-transcript choice, review of missed/misheard cues) across two quiz modes (Material Quiz, Review Quiz), hidden correctness until atomic submission, one consolidated post-submission review, close/resume without answer loss, permanently read-only completed/abandoned attempts, safe generation (smaller quiz or outright refusal rather than padding) |
 | Subtitle parsing | Implemented and tested (Milestone 1, unchanged) |
-| Automated tests | 238 tests passing (8 database/migrations, 8 import, 8 library, 3 media playback, 7 subtitle parsing, 8 cue index, 9 player session, 5 player loading, 13 player window, 11 UI smoke, 7 text range, 7 text-offset conversion, 25 annotations, 6 cue notes, 19 saved language items, 5 label preferences, 20 player-workspace UI integration, 11 session rules, 49 practice-session service, 9 guided-session window) |
+| Automated tests | 297 tests passing (9 database/migrations, 8 import, 8 library, 3 media playback, 7 subtitle parsing, 8 cue index, 9 player session, 5 player loading, 13 player window, 18 UI smoke, 7 text range, 7 text-offset conversion, 25 annotations, 6 cue notes, 19 saved language items, 5 label preferences, 20 player-workspace UI integration, 11 session rules, 49 practice-session service, 9 guided-session window, 16 quiz rules, 35 quiz service) |
 | Build and packaging | Not started |
 | Continuous integration | Not configured |
 
 ## Current Milestone
 
-**Milestone 5 — Guided Intensive Listening**
+**Milestone 6 — Quizzes and Recall Practice**
 
 Status: **Completed**
 
@@ -76,6 +77,15 @@ Status: **Completed**
   4. **Annotation links stay truthful after diagnosis edits.** `update_session_diagnosis` now re-derives `annotation_id` for the (possibly changed) label/range on every edit — relinking to an exact-matching material `Annotation` if one exists, or clearing the link to `NULL` if none does — instead of leaving the original `annotation_id` in place regardless of what the snapshot was edited to.
   - 12 new focused regression tests (one or two per invariant: stage-completion downgrade for each of Stages 1/2/3/5, `complete_session`'s defensive re-check, transcript-revealed/current-stage enforcement, no-notable-difficulty mutual exclusivity in both directions, cue-material-mismatch rejection, and both annotation-relink outcomes — cleared-to-`NULL` and relinked-to-a-different-annotation) — 238 total, all passing, including in a clean virtual environment
   - No UI changes were required: `GuidedSessionWindow` already surfaces any `SessionValidationError` generically via its status label, so the new error categories display correctly without modification — verified with a manual end-to-end run through the real window.
+- Milestone 6 — Quizzes and Recall Practice:
+  - Schema version 5 (additive migration, no data loss): `quiz_attempt` (lifecycle: `active`/`completed`/`abandoned`, stored generation `seed`, `requested_count` vs. `actual_count`, `correct_count` left `NULL` until scored — no one-active-quiz-per-material constraint, multiple concurrent active attempts are allowed by design), `quiz_question` (immutable per-attempt generation snapshot in stable `position` order — `question_type`, `subtitle_cue_id`, optional `source_annotation_id`/`source_saved_item_id`/`source_keyword_capture_id` links each `ON DELETE SET NULL`, JSON `prompt_payload`/`correct_answer_payload`/`scoring_config`), `quiz_answer` (one row eagerly created per question, mutable while active — `raw_answer_text`, `normalized_answer_text`, `selected_choice_index`, `is_correct` left `NULL` until submission, `answered_state`). Verified to upgrade cleanly from a Milestone 5 (v4) database with existing material/session data intact.
+  - `domain/services/quiz_rules.py`: pure, framework-free generation/scoring math — case-/punctuation-/whitespace-insensitive text normalization, tokenization and meaningful-token filtering, deterministic blank-span selection, whole-token-boundary containment checks (`cue_contains_target`, avoiding ambiguous substring matches), distractor de-duplication, and the quiz lifecycle transition table. Unit-tested directly with no sqlite/Qt (`tests/unit/test_quiz_rules.py`).
+  - `application/services/quiz_service.py`: generation (`create_material_quiz`/`create_review_quiz`, both driven by one seeded `random.Random` instance for full reproducibility from the stored seed), lifecycle (`resume_quiz`/`abandon_quiz`/`submit_quiz`), answer persistence (`save_quiz_answer`, never computing or exposing correctness), and the consolidated review builder (`build_quiz_review`, available only once an attempt is `completed`). `submit_quiz` scores every question and marks the attempt `completed` as a single atomic transaction — the only place `QuizAnswer.is_correct` is ever written.
+  - Quiz generation reuses existing material/cue/annotation/saved-item/keyword-capture data rather than duplicating any of it: Material Quiz mixes Cue Dictation/Fill-in-the-Blank, Keyword Recognition, and Audio-to-Transcript-Choice across usable cues (each cue used at most once per quiz); Review Quiz generates only Review-Missed-Cue questions, sourced from the material's own `Annotation` diagnosis history in `misheard > known_not_heard > unknown_word_or_chunk > connected_reduced_speech` priority order. A weak or ambiguous question (a blank that would leave no context, an audio-choice question without enough valid distractors) is skipped rather than forced; a requested count that the material cannot fully support yields a smaller quiz, and a material with zero usable data is refused outright.
+  - `ui/windows/quiz_window.py` (new): question-by-question quiz taking, reusing `PlayerSession`/`PlaybackController` for cue playback exactly as the guided session does; never reveals correctness at any status. `ui/windows/quiz_review_dialog.py` (new): the one consolidated post-submission review (answer, correct answer, correct/incorrect, source cue, question type, scoring-rule explanation). `ui/windows/quiz_history_dialog.py` (new): lists every attempt across all three statuses. `ui/windows/main_window.py`: new **Start Material Quiz**, **Start Review Quiz**, **Resume Quiz**, and **Quiz History** entry points.
+  - 59 new automated tests (16 domain quiz-rules, 35 quiz-service integration covering all four question types/both quiz modes/safe generation/lifecycle/atomic scoring/historical-snapshot stability, 7 new MainWindow/QuizWindow/QuizHistoryDialog/QuizReviewDialog UI smoke, plus 1 new migration test) on top of the prior 238 — 297 total, all passing, including in a clean virtual environment outside the working tree.
+  - Manual smoke test: a 13-step script driving the real `MainWindow`/`QuizWindow`/`QuizReviewDialog`/`QuizHistoryDialog` classes under offscreen Qt — start a Material Quiz, answer every question, confirm correctness stays hidden pre-submission, close and reopen with all answers preserved, submit and view the consolidated review, confirm a completed quiz reopens read-only, abandon a second quiz, generate a Review Quiz from real diagnosis evidence and confirm it prioritizes the `misheard` label, confirm Quiz History lists all three attempts, and confirm the Milestone 5 guided session and Milestone 2 material library remain unaffected — all passed.
+  - Confirmed zero PySide6 imports remain in `domain/` or `application/` — all Milestone 6 generation/scoring/lifecycle logic is framework-free; only `ui/` references Qt for quizzes.
 
 ### Manual smoke steps verified
 
@@ -83,7 +93,7 @@ Launch and open a valid material; confirm Milestone 3 playback still works; sele
 
 ## Planned Next Work
 
-- Milestone 6 — Quizzes and Recall Practice (see `ROADMAP.md`)
+- Milestone 7 — Shadowing and Local Recording (see `ROADMAP.md`)
 
 ## Known Risks
 
@@ -97,6 +107,8 @@ Launch and open a valid material; confirm Milestone 3 playback still works; sele
 - After any annotation/note/saved-item/keyword-capture/session-diagnosis Save, Update, or Delete action, the corresponding list widget loses its selection (the form clears); the user must reselect a row to continue editing it. A minor UX rough edge, not a correctness issue.
 - Saved Language Item source text/range is a locked identity once saved (by design — see Architecture); changing what text an item refers to requires delete-and-recreate rather than in-place edit.
 - The transcript-reveal auto-resolution of Stages 1/2 (see Architecture) is a documented design decision to avoid a permanently-stuck stage, but it does mean a learner who reveals the transcript without deliberately finishing Stage 1/2 first gets an automatic skip rather than a prompt to go back.
+- Review Quiz always generates only the Review-Missed-Cue question type (never Dictation/Keyword-Recognition/Audio-Transcript-Choice), and Material Quiz never draws on session-scoped `SessionDiagnosisEvidence` directly — only material-level `Annotation` rows. This is a documented design decision (see Architecture), not an oversight: it resolves an ambiguity in how the milestone's four question types map onto its two quiz modes.
+- Quiz question generation targets are capped at one question per cue (Material Quiz) or one per qualifying annotation (Review Quiz) within a single attempt — a material can support more questions than one quiz attempt will ever contain; a learner wanting deeper coverage starts additional attempts.
 
 ## Unknown or Unverified
 
@@ -105,8 +117,8 @@ Launch and open a valid material; confirm Milestone 3 playback still works; sele
 - Packaging method
 - Continuous-integration configuration
 - Behavior with very large media libraries, very large subtitle tracks, or a very large number of annotations/saved items/session records on one cue or material
-- Behavior with a very large number of prior sessions in Session History for one material (no pagination implemented)
+- Behavior with a very large number of prior sessions in Session History, or prior quiz attempts in Quiz History, for one material (no pagination implemented in either)
 
 ## Next Engineering Objective
 
-Begin Milestone 6 — Quizzes and Recall Practice: material-derived listening/transcript-recall exercises (cue-level dictation or fill-in-the-blank, keyword recognition, audio-to-transcript choice, review of previously misheard/missed cues), built on the verified Milestone 3 player, Milestone 4 transcript workspace, and Milestone 5 guided-session evidence, per `ROADMAP.md`.
+Begin Milestone 7 — Shadowing and Local Recording: cue-by-cue shadowing mode, optional microphone recording, local playback of learner recordings, manual source/learner audio comparison, recording retention and deletion controls, and clear microphone permission and privacy messages, built on the verified sentence navigation and local-storage boundaries from Milestones 3–6, per `ROADMAP.md`.

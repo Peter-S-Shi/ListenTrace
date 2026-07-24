@@ -80,3 +80,21 @@ class KeywordCaptureNotFoundError(Exception):
     def __init__(self, capture_id: int):
         self.capture_id = capture_id
         super().__init__(f"Keyword capture {capture_id} not found")
+
+
+class QuizNotFoundError(Exception):
+    def __init__(self, quiz_attempt_id: int):
+        self.quiz_attempt_id = quiz_attempt_id
+        super().__init__(f"Quiz attempt {quiz_attempt_id} not found")
+
+
+class QuizQuestionNotFoundError(Exception):
+    def __init__(self, question_id: int):
+        self.question_id = question_id
+        super().__init__(f"Quiz question {question_id} not found")
+
+
+class QuizValidationError(Exception):
+    def __init__(self, category: str, message: str):
+        self.category = category
+        super().__init__(message)

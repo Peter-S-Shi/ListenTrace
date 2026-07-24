@@ -3,14 +3,23 @@ from __future__ import annotations
 import struct
 import wave
 
-from PySide6.QtWidgets import QMessageBox
+from PySide6.QtWidgets import QInputDialog, QMessageBox
 
 from listentrace.application.services import material_library_service as library
 from listentrace.application.services import practice_session_service as session_service
+from listentrace.application.services import quiz_service
 from listentrace.application.services.material_import_service import import_material
 from listentrace.infrastructure.db.connection import open_connection
 from listentrace.infrastructure.db.migrations import migrate
 from listentrace.ui.windows.main_window import MainWindow
+
+_MULTI_CUE_SRT = (
+    "1\n00:00:00,000 --> 00:00:02,000\nBonjour tout le monde\n\n"
+    "2\n00:00:02,000 --> 00:00:04,000\nComment allez vous aujourd hui\n\n"
+    "3\n00:00:04,000 --> 00:00:06,000\nJe suis tres content de vous voir\n\n"
+    "4\n00:00:06,000 --> 00:00:08,000\nAu revoir et bonne journee\n\n"
+    "5\n00:00:08,000 --> 00:00:10,000\nMerci beaucoup pour votre aide\n"
+)
 
 
 def _make_wav(path, seconds=1, framerate=8000):
@@ -29,7 +38,7 @@ def test_main_window_starts_with_initialized_database(qapp, tmp_path):
     window = MainWindow(connection, db_path)
 
     assert window.windowTitle() == "ListenTrace"
-    assert "Schema version: 4" in window._status_label.text()
+    assert "Schema version: 5" in window._status_label.text()
 
     window.close()
 
@@ -265,3 +274,205 @@ def test_session_history_dialog_opens_selected_session(qapp, tmp_path):
 
     window._guided_session_window.close()
     window.close()
+
+
+def test_start_material_quiz_opens_quiz_window_and_enables_resume(qapp, tmp_path, monkeypatch):
+    connection = open_connection(tmp_path / "smoke.db")
+    migrate(connection)
+
+    media = tmp_path / "lesson.wav"
+    _make_wav(media)
+    subtitle = tmp_path / "lesson.srt"
+    subtitle.write_text(_MULTI_CUE_SRT, encoding="utf-8")
+    result = import_material(connection, media, subtitle, "Lesson One")
+
+    monkeypatch.setattr(QInputDialog, "getInt", lambda *a, **k: (3, True))
+
+    window = MainWindow(connection, tmp_path / "smoke.db")
+    window._material_list.setCurrentItem(window._material_list.item(0))
+    assert window._resume_quiz_button.isEnabled() is False
+
+    window._on_start_material_quiz_clicked()
+
+    assert window._quiz_window is not None
+    active = quiz_service.find_active_quizzes_for_material(connection, result.material_id)
+    assert len(active) == 1
+    assert window._resume_quiz_button.isEnabled() is True
+
+    window._quiz_window.close()
+    window.close()
+
+
+def test_start_material_quiz_cancelled_input_dialog_does_not_create_a_quiz(qapp, tmp_path, monkeypatch):
+    connection = open_connection(tmp_path / "smoke.db")
+    migrate(connection)
+
+    media = tmp_path / "lesson.wav"
+    _make_wav(media)
+    subtitle = tmp_path / "lesson.srt"
+    subtitle.write_text(_MULTI_CUE_SRT, encoding="utf-8")
+    result = import_material(connection, media, subtitle, "Lesson One")
+
+    monkeypatch.setattr(QInputDialog, "getInt", lambda *a, **k: (3, False))
+
+    window = MainWindow(connection, tmp_path / "smoke.db")
+    window._material_list.setCurrentItem(window._material_list.item(0))
+    window._on_start_material_quiz_clicked()
+
+    assert window._quiz_window is None
+    assert quiz_service.find_active_quizzes_for_material(connection, result.material_id) == []
+
+    window.close()
+
+
+def test_start_review_quiz_without_diagnosis_evidence_shows_a_warning(qapp, tmp_path, monkeypatch):
+    connection = open_connection(tmp_path / "smoke.db")
+    migrate(connection)
+
+    media = tmp_path / "lesson.wav"
+    _make_wav(media)
+    subtitle = tmp_path / "lesson.srt"
+    subtitle.write_text(_MULTI_CUE_SRT, encoding="utf-8")
+    import_material(connection, media, subtitle, "Lesson One")
+
+    monkeypatch.setattr(QInputDialog, "getInt", lambda *a, **k: (3, True))
+    warnings = []
+    monkeypatch.setattr(
+        QMessageBox, "warning", lambda *a, **k: warnings.append(a) or QMessageBox.StandardButton.Ok
+    )
+
+    window = MainWindow(connection, tmp_path / "smoke.db")
+    window._material_list.setCurrentItem(window._material_list.item(0))
+    window._on_start_review_quiz_clicked()
+
+    assert window._quiz_window is None
+    assert len(warnings) == 1
+
+    window.close()
+
+
+def test_resume_quiz_button_opens_active_quiz(qapp, tmp_path):
+    connection = open_connection(tmp_path / "smoke.db")
+    migrate(connection)
+
+    media = tmp_path / "lesson.wav"
+    _make_wav(media)
+    subtitle = tmp_path / "lesson.srt"
+    subtitle.write_text(_MULTI_CUE_SRT, encoding="utf-8")
+    result = import_material(connection, media, subtitle, "Lesson One")
+    quiz_service.create_material_quiz(connection, result.material_id, requested_count=3, seed=1)
+
+    window = MainWindow(connection, tmp_path / "smoke.db")
+    window._material_list.setCurrentItem(window._material_list.item(0))
+    assert window._resume_quiz_button.isEnabled() is True
+
+    window._on_resume_quiz_clicked()
+    assert window._quiz_window is not None
+
+    window._quiz_window.close()
+    window.close()
+
+
+def test_quiz_history_dialog_opens_selected_quiz(qapp, tmp_path):
+    connection = open_connection(tmp_path / "smoke.db")
+    migrate(connection)
+
+    media = tmp_path / "lesson.wav"
+    _make_wav(media)
+    subtitle = tmp_path / "lesson.srt"
+    subtitle.write_text(_MULTI_CUE_SRT, encoding="utf-8")
+    result = import_material(connection, media, subtitle, "Lesson One")
+    first = quiz_service.create_material_quiz(connection, result.material_id, requested_count=2, seed=1)
+    quiz_service.abandon_quiz(connection, first.id)
+    second = quiz_service.create_material_quiz(connection, result.material_id, requested_count=2, seed=2)
+
+    window = MainWindow(connection, tmp_path / "smoke.db")
+    window._material_list.setCurrentItem(window._material_list.item(0))
+
+    from listentrace.ui.windows.quiz_history_dialog import QuizHistoryDialog
+
+    dialog = QuizHistoryDialog(connection, result.material_id, "Lesson One", window)
+    assert dialog._list.count() == 2
+    dialog._list.setCurrentRow(0)
+    dialog._on_open_clicked()
+    assert dialog.selected_attempt_id in (first.id, second.id)
+
+    window._open_quiz(result.material_id, dialog.selected_attempt_id)
+    assert window._quiz_window is not None
+
+    window._quiz_window.close()
+    window.close()
+
+
+def test_quiz_window_full_take_submit_and_review_flow(qapp, tmp_path):
+    connection = open_connection(tmp_path / "smoke.db")
+    migrate(connection)
+
+    media = tmp_path / "lesson.wav"
+    _make_wav(media)
+    subtitle = tmp_path / "lesson.srt"
+    subtitle.write_text(_MULTI_CUE_SRT, encoding="utf-8")
+    result = import_material(connection, media, subtitle, "Lesson One")
+    attempt = quiz_service.create_material_quiz(connection, result.material_id, requested_count=5, seed=1)
+
+    from listentrace.application.services.player_loading_service import load_material_for_player
+    from listentrace.ui.windows.quiz_window import QuizWindow
+
+    load_result = load_material_for_player(connection, result.material_id)
+    quiz_window = QuizWindow(connection, load_result, attempt.id, None)
+
+    import json
+
+    from listentrace.domain.enums.question_type import QuestionType
+
+    state = quiz_service.load_quiz_state(connection, attempt.id)
+    for index, question in enumerate(state.questions):
+        quiz_window._show_question(index)
+        correct = json.loads(question.correct_answer_payload)
+        if question.question_type in (QuestionType.DICTATION.value, QuestionType.REVIEW_MISSED.value):
+            quiz_window._answer_line_edit.setText(correct["answer_text"])
+        else:
+            quiz_window._choice_radio_buttons[correct["correct_choice_index"]].setChecked(True)
+    quiz_window._save_current_answer()
+
+    quiz_window._save_current_answer()
+    quiz_service.submit_quiz(connection, attempt.id)
+    quiz_window._refresh_state()
+
+    completed = quiz_service.get_quiz_attempt(connection, attempt.id)
+    assert completed.status == "completed"
+    assert completed.correct_count == len(state.questions)
+    assert quiz_window._review_button.isEnabled() is True
+
+    from listentrace.ui.windows.quiz_review_dialog import QuizReviewDialog
+
+    review_dialog = QuizReviewDialog(connection, attempt.id, quiz_window)
+    assert review_dialog._list.count() == len(state.questions)
+
+    review_dialog.close()
+    quiz_window.close()
+
+
+def test_quiz_window_abandon_makes_it_read_only(qapp, tmp_path, monkeypatch):
+    connection = open_connection(tmp_path / "smoke.db")
+    migrate(connection)
+
+    media = tmp_path / "lesson.wav"
+    _make_wav(media)
+    subtitle = tmp_path / "lesson.srt"
+    subtitle.write_text(_MULTI_CUE_SRT, encoding="utf-8")
+    result = import_material(connection, media, subtitle, "Lesson One")
+    attempt = quiz_service.create_material_quiz(connection, result.material_id, requested_count=3, seed=1)
+
+    from listentrace.application.services.player_loading_service import load_material_for_player
+    from listentrace.ui.windows.quiz_window import QuizWindow
+
+    load_result = load_material_for_player(connection, result.material_id)
+    quiz_window = QuizWindow(connection, load_result, attempt.id, None)
+
+    monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.StandardButton.Yes)
+    monkeypatch.setattr(QMessageBox, "information", lambda *a, **k: QMessageBox.StandardButton.Ok)
+    quiz_window._on_abandon_clicked()
+
+    abandoned = quiz_service.get_quiz_attempt(connection, attempt.id)
+    assert abandoned.status == "abandoned"

@@ -2,7 +2,7 @@
 
 This document defines the first domain direction. It is not a frozen database schema.
 
-**Status (through Milestone 5)**: `Material`, `SubtitleTrack`, `SubtitleCue`, `Annotation`, `CueNote`, `SavedLanguageItem`, `AnnotationLabelPreference`, `PracticeSession`, `SessionStageProgress`, `StageResponse`, `KeywordCapture`, `SessionDiagnosisEvidence`, and `ShadowingCueProgress` are implemented as actual SQLite tables (schema version 4). Migration 2 added `Material.normalized_path`; migration 3 (Milestone 4) added the four learning-evidence tables; migration 4 (Milestone 5, additive, no data loss) added the six guided-session tables — see their sections below for the field lists actually implemented, which differ from this document's original design sketch in one deliberate way: `Annotation` did **not** gain a `practice_session_id` column. Instead, a session's diagnosis evidence is its own table (`SessionDiagnosisEvidence`) that optionally *links to* an `Annotation` row rather than living inside it — see that section for why. `QuizSession`, `QuizItemResult`, and `RecordingReference` remain design direction only and will be added as migrations in the milestones that need them.
+**Status (through Milestone 6)**: `Material`, `SubtitleTrack`, `SubtitleCue`, `Annotation`, `CueNote`, `SavedLanguageItem`, `AnnotationLabelPreference`, `PracticeSession`, `SessionStageProgress`, `StageResponse`, `KeywordCapture`, `SessionDiagnosisEvidence`, `ShadowingCueProgress`, `QuizAttempt`, `QuizQuestion`, and `QuizAnswer` are implemented as actual SQLite tables (schema version 5). Migration 2 added `Material.normalized_path`; migration 3 (Milestone 4) added the four learning-evidence tables; migration 4 (Milestone 5, additive, no data loss) added the six guided-session tables; migration 5 (Milestone 6, additive, no data loss) added the three quiz tables — see their sections below for the field lists actually implemented, which differ from this document's original design sketch in two deliberate ways: `Annotation` did **not** gain a `practice_session_id` column (see `SessionDiagnosisEvidence` below for why), and the quiz design replaced the sketched `QuizSession`/`QuizItemResult` pair with `QuizAttempt`/`QuizQuestion`/`QuizAnswer` — a three-table split that separates the attempt's lifecycle from each question's immutable generation snapshot from the learner's mutable in-progress answer, so a question's persisted prompt/correct-answer payload is never touched again after generation while its answer can still be edited freely before submission. `RecordingReference` remains design direction only and will be added as a migration in the milestone that needs it.
 
 ## Entity Overview
 
@@ -28,11 +28,22 @@ PracticeSession                       (implemented, Milestone 5)
   1 --- many KeywordCaptures
   1 --- many SessionDiagnosisEvidence
   1 --- many ShadowingCueProgress
-  1 --- many QuizSessions             (design direction only, not yet implemented)
   1 --- many RecordingReferences      (design direction only, not yet implemented)
+
+Material
+  1 --- many QuizAttempts             (implemented, Milestone 6 — independent of PracticeSession)
+
+QuizAttempt                           (implemented, Milestone 6)
+  1 --- many QuizQuestions            (generation snapshot, stable position order)
+QuizQuestion
+  1 --- 0..1 QuizAnswer               (eagerly created with the question; unanswered until saved)
+  0..1 --- 1 Annotation               (optional source-evidence link, `ON DELETE SET NULL`)
+  0..1 --- 1 SavedLanguageItem        (optional source-evidence link, `ON DELETE SET NULL`)
+  0..1 --- 1 KeywordCapture           (optional source-evidence link, `ON DELETE SET NULL`)
 
 Annotation
   0..1 --- many SessionDiagnosisEvidence  (optional link, `ON DELETE SET NULL` — see below)
+  0..1 --- many QuizQuestions              (optional source-evidence link, `ON DELETE SET NULL`)
 ```
 
 ## Material
@@ -323,33 +334,70 @@ Implemented fields:
 
 Rule: this table stores *only* the color preference. Label semantics/meaning are defined by the domain layer (`AnnotationLabel` enum), never by this table — changing a color must never be able to change what a stored `Annotation.label_key` means.
 
-## QuizSession
+## QuizAttempt
 
-Suggested fields:
+One quiz attempt (Material Quiz or Review Quiz) on one material. **Implemented (migration 5).** Independent of `PracticeSession` — a quiz does not require or belong to a guided intensive-listening session.
+
+Implemented fields:
 
 - `id`
-- `practice_session_id`
-- `quiz_type`
+- `material_id` (FK → `material.id`, `ON DELETE CASCADE`)
+- `quiz_mode` (`material` or `review`)
 - `status`
-- `started_at`
-- `completed_at`
-- `total_items`
-- `correct_count`
+- `seed` (the deterministic RNG seed generation was run with — stored so an attempt's question set is reproducible/debuggable; auto-generated if the caller does not supply one)
+- `requested_count` (what the learner asked for)
+- `actual_count` (what could actually be generated — see Safe Generation below; may be less than `requested_count`, never more)
+- `correct_count` (`NULL` until `submit_quiz` scores the attempt)
+- `started_at` / `updated_at` / `last_resumed_at` / `completed_at` / `abandoned_at`
 
-## QuizItemResult
+Status values (`domain/enums/quiz_status.py`): `active`, `completed`, `abandoned`. Allowed transitions (`domain/services/quiz_rules.py::is_valid_quiz_transition`): `active -> completed` and `active -> abandoned` only, mirroring `PracticeSession`'s lifecycle.
 
-Suggested fields:
+Constraint deliberately **not** enforced: unlike `PracticeSession`, there is no "one active quiz per material" unique index — the Milestone 6 prompt explicitly allows multiple concurrently-active quiz attempts per material, listed and resumed distinctly via Quiz History.
+
+## QuizQuestion
+
+One generated question within a `QuizAttempt` — an immutable snapshot, never rewritten after generation. **Implemented (migration 5).**
+
+Implemented fields:
 
 - `id`
-- `quiz_session_id`
-- `subtitle_cue_id`
-- `prompt_payload`
-- `expected_payload`
-- `response_payload`
-- `is_correct`
+- `quiz_attempt_id` (FK → `quiz_attempt.id`, `ON DELETE CASCADE`)
+- `position` (0-based stable order; `UNIQUE (quiz_attempt_id, position)`)
+- `question_type` (`dictation`, `keyword_recognition`, `audio_transcript_choice`, or `review_missed`)
+- `subtitle_cue_id` (FK → `subtitle_cue.id`, `ON DELETE CASCADE` — the cue played for this question)
+- `source_annotation_id` / `source_saved_item_id` / `source_keyword_capture_id` (all optional, `ON DELETE SET NULL` — whichever one, if any, this question's target/evidence was drawn from; a question snapshot survives its source being edited or deleted afterward)
+- `prompt_payload` (JSON: what the learner is shown — never includes the answer itself, e.g. a dictation cue's full text is never present in `prompt_payload`, only in `correct_answer_payload`)
+- `correct_answer_payload` (JSON: the answer snapshot used for scoring and for the consolidated review — never re-derived from live cue/annotation text after generation)
+- `scoring_config` (JSON: `{"rule": ..., "version": 1}` — either `normalized_text_exact` for dictation/review-missed questions or `exact_choice_index` for keyword-recognition/audio-transcript-choice questions; the consolidated review's scoring-rule explanation is derived from this at display time)
+- `created_at`
+
+## QuizAnswer
+
+The learner's answer to one `QuizQuestion` — mutable while the attempt is `active`, frozen once `completed`/`abandoned`. **Implemented (migration 5).** One row is eagerly created (`unanswered`, all value fields `NULL`) for every question at quiz-creation time, mirroring `ShadowingCueProgress`'s eager-row pattern — saving an answer is always an update, never an insert.
+
+Implemented fields:
+
+- `id`
+- `quiz_question_id` (FK → `quiz_question.id`, `ON DELETE CASCADE`; `UNIQUE` — exactly one answer row per question)
+- `raw_answer_text` (the learner's typed text, unmodified, for `dictation`/`review_missed` questions)
+- `normalized_answer_text` (the same scoring normalization applied to `raw_answer_text` — case-folded, punctuation-stripped, whitespace-collapsed — computed and stored when the answer is saved, not only at scoring time)
+- `selected_choice_index` (for `keyword_recognition`/`audio_transcript_choice` questions)
+- `is_correct` (`NULL` until `submit_quiz` scores the attempt — correctness is genuinely absent from the row, not merely hidden by the UI, until the whole attempt is submitted)
+- `answered_state` (`unanswered` or `answered`)
 - `answered_at`
 
-Structured payloads should use a documented versioned format rather than arbitrary serialization.
+Constraint actually enforced: `UNIQUE (quiz_question_id)`.
+
+## Quiz Generation and Scoring (`domain/services/quiz_rules.py`, `application/services/quiz_service.py`)
+
+Generation is deterministic and reproducible: every random choice (which cue gets which question type, which meaningful token is blanked, which distractors are picked, review-evidence tie-break ordering within the same priority label) is made through one seeded `random.Random(seed)` instance, and the seed itself is persisted on `QuizAttempt`. The pure selection/validation math (text normalization, tokenization, blank-span selection, whole-token-boundary containment checks, distractor de-duplication) lives in `domain/services/quiz_rules.py` with no sqlite or Qt dependency; `application/services/quiz_service.py` orchestrates it against real material/cue/annotation/saved-item/keyword-capture data and persists the result.
+
+- **Material Quiz**: built only from "usable" cues (cues with at least one non-punctuation, non-whitespace token). Each cue is used for at most one question; if fewer usable cues exist than `requested_count`, the smaller quiz is created rather than reusing a cue or padding with a weak question — if *no* usable cues exist, creation is refused (`QuizValidationError("no_usable_cues", ...)`).
+- **Review Quiz**: built only from the material's own `Annotation` rows (never another material's, and never a session-scoped `SessionDiagnosisEvidence` row directly — `Annotation` is the material-level, cross-session evidence table), filtered to the four diagnosis labels and ordered by the priority `misheard > known_not_heard > unknown_word_or_chunk > connected_reduced_speech`. If no qualifying annotation exists, creation is refused (`QuizValidationError("no_meaningful_questions", ...)`). Every Review Quiz question is `review_missed`, always blanking exactly the annotation's own stored range — no additional token selection.
+- **Dictation** questions choose between full-cue dictation and single-meaningful-token fill-in-the-blank; blanking is skipped in favor of full-cue mode whenever a cue has fewer than two meaningful tokens (blanking a cue's only real content would leave nothing to answer from).
+- **Keyword Recognition** questions prefer a target tied to real evidence on that cue (an `Annotation` or `SavedLanguageItem` already attached to it) before falling back to a deterministically chosen token from the cue itself; a negative ("did NOT occur") question's target is verified via whole-token-boundary containment (`quiz_rules.cue_contains_target`) to genuinely not occur in that cue before being used.
+- **Audio-to-Transcript-Choice** questions require at least 2 valid distractors (other cues in the same material, deduplicated by normalized text against both the correct answer and each other) before being created at all; a cue without enough distinct distractors is skipped rather than shipped as a weak 2-choice or duplicate-choice question.
+- **Scoring**: `dictation`/`review_missed` compare `normalize_answer_text(raw_answer)` against the stored `normalized_answer_text` in `correct_answer_payload` (case-insensitive, punctuation-insensitive, whitespace-collapsed, otherwise exact); `keyword_recognition`/`audio_transcript_choice` compare `selected_choice_index` against the stored `correct_choice_index`. Scoring happens exactly once, inside `quiz_service.submit_quiz`, as a single all-or-nothing transaction that also marks the attempt `completed` — an answer's `is_correct` is `NULL` at every point before that call.
 
 ## RecordingReference
 
@@ -378,4 +426,4 @@ Analytics should be derived from reliable session, annotation, quiz, and review 
 - Source media, subtitle files, recordings, databases, and exports are local user data.
 - Database migrations must be additive and tested.
 - Display colors never replace semantic label keys.
-- Migrations 1→2→3→4 have each been additive only (no table rewritten or dropped) and are each covered by an automated upgrade test starting from the prior version's schema with real data present.
+- Migrations 1→2→3→4→5 have each been additive only (no table rewritten or dropped) and are each covered by an automated upgrade test starting from the prior version's schema with real data present.

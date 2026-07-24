@@ -196,6 +196,56 @@ MIGRATIONS: list[tuple[int, str]] = [
         );
         """,
     ),
+    (
+        5,
+        """
+        CREATE TABLE quiz_attempt (
+            id INTEGER PRIMARY KEY,
+            material_id INTEGER NOT NULL REFERENCES material(id) ON DELETE CASCADE,
+            quiz_mode TEXT NOT NULL DEFAULT 'material',
+            status TEXT NOT NULL DEFAULT 'active',
+            seed INTEGER NOT NULL,
+            requested_count INTEGER NOT NULL,
+            actual_count INTEGER NOT NULL DEFAULT 0,
+            correct_count INTEGER,
+            started_at TEXT NOT NULL DEFAULT (datetime('now')),
+            updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+            last_resumed_at TEXT NOT NULL DEFAULT (datetime('now')),
+            completed_at TEXT,
+            abandoned_at TEXT
+        );
+
+        CREATE TABLE quiz_question (
+            id INTEGER PRIMARY KEY,
+            quiz_attempt_id INTEGER NOT NULL REFERENCES quiz_attempt(id) ON DELETE CASCADE,
+            position INTEGER NOT NULL,
+            question_type TEXT NOT NULL,
+            subtitle_cue_id INTEGER NOT NULL REFERENCES subtitle_cue(id) ON DELETE CASCADE,
+            source_annotation_id INTEGER REFERENCES annotation(id) ON DELETE SET NULL,
+            source_saved_item_id INTEGER REFERENCES saved_language_item(id) ON DELETE SET NULL,
+            source_keyword_capture_id INTEGER REFERENCES keyword_capture(id) ON DELETE SET NULL,
+            prompt_payload TEXT NOT NULL,
+            correct_answer_payload TEXT NOT NULL,
+            scoring_config TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            UNIQUE (quiz_attempt_id, position)
+        );
+
+        CREATE TABLE quiz_answer (
+            id INTEGER PRIMARY KEY,
+            quiz_question_id INTEGER NOT NULL REFERENCES quiz_question(id) ON DELETE CASCADE,
+            raw_answer_text TEXT,
+            normalized_answer_text TEXT,
+            selected_choice_index INTEGER,
+            is_correct INTEGER,
+            answered_state TEXT NOT NULL DEFAULT 'unanswered',
+            answered_at TEXT,
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+            UNIQUE (quiz_question_id)
+        );
+        """,
+    ),
 ]
 
 

@@ -331,6 +331,22 @@ def list_keyword_captures(conn: sqlite3.Connection, session_id: int) -> list[Key
     return [_row_to_keyword_capture(row) for row in rows]
 
 
+def list_keyword_captures_for_material(conn: sqlite3.Connection, material_id: int) -> list[KeywordCapture]:
+    """Every keyword capture across every guided-intensive-listening session for one
+    material, via keyword_capture -> practice_session. Used by quiz generation to
+    pool Keyword Recognition targets from the learner's own Stage 2 captures."""
+    rows = conn.execute(
+        """
+        SELECT keyword_capture.* FROM keyword_capture
+        JOIN practice_session ON practice_session.id = keyword_capture.practice_session_id
+        WHERE practice_session.material_id = ?
+        ORDER BY keyword_capture.id
+        """,
+        (material_id,),
+    ).fetchall()
+    return [_row_to_keyword_capture(row) for row in rows]
+
+
 def reorder_keyword_captures(conn: sqlite3.Connection, session_id: int, ordered_ids: list[int]) -> None:
     """Rewrite `position` for every capture id in `ordered_ids`, atomically."""
     try:

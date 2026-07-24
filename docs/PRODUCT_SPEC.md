@@ -184,6 +184,16 @@ Possible exercises:
 
 Quiz behavior must be safe when there are too few cues or duplicate answer candidates.
 
+### Confirmed Quiz Behavior (Milestone 6)
+
+- A quiz belongs to one material and is either a **Material Quiz** (built from usable cues) or a **Review Quiz** (built from that material's own saved diagnosis history — `Annotation` rows labeled `misheard`/`known_not_heard`/`unknown_word_or_chunk`/`connected_reduced_speech`, prioritized in that order). A Review Quiz only ever produces Review-Missed-Cue questions; a Material Quiz freely mixes Cue Dictation/Fill-in-the-Blank, Keyword Recognition, and Audio-to-Transcript-Choice questions.
+- Correctness is never revealed per-question. The learner answers every question, then submits the whole quiz once — an atomic, all-or-nothing scoring transaction — and only then sees one consolidated review: their answer, the correct answer, correct/incorrect, the source cue, the question type, and a short explanation of the deterministic scoring rule used.
+- Dictation/fill-in/review-missed scoring ignores leading/trailing whitespace, collapses internal whitespace, ignores case, and ignores punctuation, but otherwise requires exact spelling — no fuzzy matching, semantic matching, or AI judgment of any kind.
+- A requested question count is a target, not a promise: if a material cannot support that many meaningful questions, a smaller quiz is created and the learner is told why; if no meaningful question can be produced at all, quiz creation is refused outright. A cue or piece of diagnosis evidence is never reused within one quiz, and a weak or ambiguous question (too few valid transcript-choice distractors, a blank that would leave no context) is skipped rather than forced.
+- Every question is generated deterministically from a stored seed, and its prompt/correct-answer/scoring snapshot is written once at generation time and never rewritten — a later edit or deletion of the live subtitle, annotation, or saved item it was drawn from has no effect on a quiz that already exists.
+- A quiz attempt has three states — `active`, `completed`, `abandoned` — the same shape as a guided intensive-listening session. Closing an active quiz preserves it for resume without losing any saved answers. Completed and abandoned attempts are permanently read-only; answers can never be changed after submission. Unlike guided sessions, more than one quiz attempt may be active on the same material at once — Quiz History lists and reopens all of them, distinctly.
+- The standalone player and the guided intensive session are unaffected by quizzes: a quiz is a separate entry point (Start Material Quiz / Start Review Quiz / Resume Quiz / Quiz History) reusing the same playback timing behavior, not a mode of either existing window.
+
 ## Learning History
 
 Record only meaningful and reliable evidence:
