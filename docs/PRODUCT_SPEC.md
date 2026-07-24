@@ -99,7 +99,7 @@ Use cue-level playback:
 5. replay source or learner audio;
 6. continue.
 
-Automatic evaluation is not required initially. Recording and learner-audio playback are Milestone 7's job — Milestone 5 tracks practiced/skipped status and a practice count per cue, driven only by explicit learner action (never inferred from playback alone), with no microphone access at all.
+Automatic evaluation is not required. Milestone 5 tracks practiced/skipped status and a practice count per cue, driven only by explicit learner action (never inferred from playback alone). Recording and learner-audio playback are implemented in Milestone 7 — see "Confirmed Shadowing and Recording Behavior" below — and remain entirely optional: creating, comparing, or deleting a recording never changes a cue's practiced/skipped status.
 
 ### Stage 5 — Final Recall
 
@@ -116,6 +116,20 @@ The five-stage flow above is now a real, resumable guided session — built on t
 - **Shadowing tracks explicit action, not playback time.** A cue only becomes "practiced" when the learner presses Mark Practiced, and the count only increases on repeated explicit presses. Skip Remaining Cues resolves everything left over in one confirmed action.
 - **A playback problem never blocks the session.** If the underlying media fails to play, only the playback-dependent buttons (play/pause, replay, loop) are disabled — every stage's text-based evidence, navigation, and session-completion path stay fully usable.
 - **Nothing here modifies the source subtitle or media files** — session records are ListenTrace's own, deleted independently of (and never deleting) the imported files.
+
+### Confirmed Shadowing and Recording Behavior (Milestone 7)
+
+Shadowing recording works identically from two entry points — Guided Session Stage 4 and a standalone Shadowing Practice window opened directly from the material library — sharing one recording implementation rather than two.
+
+- **Multiple takes, never overwritten.** A cue may keep any number of recordings. New takes never replace older ones; the learner reviews, plays, or deletes any take individually, deletes every take for one cue, or deletes every take for a whole material — each a separate, explicitly confirmed action.
+- **Recording never touches Stage 4 completion.** Creating, comparing, or deleting a recording does not mark a cue practiced or skipped, and does not affect stage or session completion in any way — Mark Practiced/Skip Cue remain entirely independent actions the learner takes separately, exactly as in Milestone 5.
+- **Session-linked vs. standalone recordings are distinguished, not merged.** A recording made during Guided Session Stage 4 links to that practice session; a recording made in standalone Shadowing Practice does not. Nothing about a practice session's status can silently delete a standalone-looking recording.
+- **The microphone is never swapped silently.** Available input devices are listed for the learner to choose from; the last valid choice is remembered for next time. If that saved device is no longer connected, ListenTrace does not silently substitute a different one — it tells the learner plainly and asks them to choose again.
+- **Source and take audio are never mixed.** The learner can play the source cue and a take separately at any time, or run one combined action that plays the source cue, pauses briefly, then plays the take — the two streams never overlap.
+- **A take is not usable until it is confirmed valid.** An empty, corrupted, or interrupted capture (a closed window, a lost device, an app crash) is never listed as a normal playable take; it is either cleaned up automatically or shown as failed, and the learner is told clearly rather than seeing a silent gap.
+- **Only one recording can be in progress at a time**, across the whole application — starting a second one while the first is still capturing is refused, not silently allowed to collide.
+- **Recordings are WAV, local-only, and retained until deleted.** Before the first recording attempt, the learner is told plainly that the microphone will be accessed, that audio stays on the device, that nothing is uploaded, and that recordings remain until they choose to delete them.
+- **Nothing here modifies the source subtitle or media files**, and recording files are never placed beside them — they live under ListenTrace's own managed local storage, named with non-personal, collision-resistant filenames (no material title, transcript text, username, machine name, or source file path).
 
 ## Player Requirements
 

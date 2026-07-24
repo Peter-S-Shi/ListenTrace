@@ -30,3 +30,14 @@ def get_log_dir() -> Path:
     log_dir = get_app_data_dir() / "logs"
     log_dir.mkdir(parents=True, exist_ok=True)
     return log_dir
+
+
+def get_recordings_dir() -> Path:
+    """Managed storage root for learner shadowing recordings — under the app-data
+    directory, never beside the original imported media. Callers (UI entry
+    points) resolve this once and pass it explicitly into `recording_service`,
+    the same way a database path/connection is passed rather than re-resolved,
+    so tests can point recordings at a throwaway `tmp_path` instead."""
+    recordings_dir = get_app_data_dir() / "recordings"
+    recordings_dir.mkdir(parents=True, exist_ok=True)
+    return recordings_dir

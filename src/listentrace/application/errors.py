@@ -98,3 +98,15 @@ class QuizValidationError(Exception):
     def __init__(self, category: str, message: str):
         self.category = category
         super().__init__(message)
+
+
+class RecordingNotFoundError(Exception):
+    def __init__(self, recording_id: int):
+        self.recording_id = recording_id
+        super().__init__(f"Recording {recording_id} not found")
+
+
+class RecordingValidationError(Exception):
+    def __init__(self, category: str, message: str):
+        self.category = category
+        super().__init__(message)

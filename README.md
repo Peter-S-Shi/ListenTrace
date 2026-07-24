@@ -67,11 +67,13 @@ Run the automated tests:
 
 ## Development Status
 
-Milestones 1–6 are implemented and verified. Users can import a local media file plus an SRT/WebVTT subtitle into a library, view details, rename, archive/restore, and remove records, then open a synchronized player: play/pause/seek, active-cue tracking, previous/next-cue navigation, replay-once, single-cue and continuous-range looping, transcript show/hide, volume/mute, and keyboard shortcuts. The player includes an integrated transcript workspace: select an editing cue (independent of whatever cue is currently playing), select a text range, and save one or more semantic labels (keyword, known-but-not-heard, connected/reduced speech, misheard, unknown word/chunk) as annotations; keep a free-form note per cue; and save reusable word/phrase/chunk/sentence-pattern language items with source context.
+Milestones 1–7 are implemented and verified. Users can import a local media file plus an SRT/WebVTT subtitle into a library, view details, rename, archive/restore, and remove records, then open a synchronized player: play/pause/seek, active-cue tracking, previous/next-cue navigation, replay-once, single-cue and continuous-range looping, transcript show/hide, volume/mute, and keyboard shortcuts. The player includes an integrated transcript workspace: select an editing cue (independent of whatever cue is currently playing), select a text range, and save one or more semantic labels (keyword, known-but-not-heard, connected/reduced speech, misheard, unknown word/chunk) as annotations; keep a free-form note per cue; and save reusable word/phrase/chunk/sentence-pattern language items with source context.
 
 The library also offers a guided, resumable intensive-listening session (Start/Resume Intensive Practice, plus a Session History view) alongside the standalone player: five sequential stages — global comprehension, keyword/fragment capture, transcript comparison and error diagnosis, sentence-level shadowing, and a transcript-free final summary — each with its own persisted status (not started/in progress/completed/skipped) and explicit Skip Stage support so the workflow never becomes a rigid exam. At most one intensive session is active per material at a time; completed or abandoned sessions remain as read-only history. Revealing the transcript for Stage 3 locks Stages 1 and 2 as read-only evidence for that session. Stage 3 diagnosis reuses the exact same semantic-label/highlighting/Unicode-offset logic as the standalone workspace, recording a repeatable per-session snapshot that optionally links to (without ever overwriting) a shared material-level annotation. Duplicate handling, atomic writes, and no modification of source files apply throughout.
 
 The library also offers deterministic, locally-generated quizzes (Start Material Quiz / Start Review Quiz / Resume Quiz / Quiz History): cue dictation or fill-in-the-blank, keyword recognition (does a word/chunk occur in this cue?), audio-to-transcript multiple choice, and — for a Review Quiz built from a material's own saved diagnosis history — targeted recall of previously misheard or missed spots, prioritized `misheard > known but not heard > unknown word/chunk > connected/reduced speech`. A requested question count is a target, not a promise: a material with too little usable content produces a smaller quiz or is refused outright rather than padded with weak or duplicate questions. Correctness is never revealed question-by-question — the learner answers the whole quiz, submits it once (an atomic, all-or-nothing scoring transaction), and only then sees one consolidated review showing their answer, the correct answer, correct/incorrect, the source cue, the question type, and a short explanation of the scoring rule. Quiz attempts can be closed and resumed without losing answers; completed and abandoned attempts are permanently read-only, and multiple quiz attempts may be active on the same material at once. Text scoring ignores case, punctuation, and extra whitespace but otherwise requires exact spelling — no fuzzy or AI-assisted matching.
+
+The library also offers shadowing recording, from Guided Session Stage 4 or a standalone Shadowing Practice window (both reuse the exact same recording widget — there is only one recording system, not two): pick a microphone (remembered for next time, never silently swapped if it disappears), record a take as local WAV, and keep as many takes per cue as wanted until explicitly deleted (one take, every take for a cue, or every take for a material). Play any take, or run a source-then-take comparison that plays the original cue, pauses briefly, then plays the take — never mixed together. A take is only ever listed once it is confirmed valid; a failed or aborted capture never appears as a normal playable take. Only one recording can be in progress at a time, and a capture interrupted by a crash or forced close is automatically cleaned up the next time the app starts. Recording is entirely optional in Guided Session Stage 4 and never changes any stage's completion status.
 
 See:
 
@@ -88,60 +90,69 @@ src/listentrace/
   application/
     dto/              # ImportSuccess/ImportNeedsConfirmation, MaterialSummary/MaterialDetail,
                        # PlayerLoadResult, LoopMode/PlayerTick, SavedItemSuccess/NeedsConfirmation,
-                       # CueWorkspace, PracticeSessionState, QuizState, QuizReviewItem/QuizReviewResult
+                       # CueWorkspace, PracticeSessionState, QuizState, QuizReviewItem/QuizReviewResult,
+                       # DeviceResolution, DeletionSummary
     services/         # material_import_service, material_library_service,
                        # player_loading_service, player_session (pure, no Qt),
                        # annotation_service, cue_note_service, saved_language_item_service,
                        # label_preference_service, cue_workspace_service, practice_session_service,
-                       # quiz_service
+                       # quiz_service, recording_service
   domain/
     enums/            # MaterialStatus, AnnotationLabel, SavedItemType, SessionStatus, StageStatus,
                        # StageKey, KeywordCaptureType, StageOutcome, ShadowingStatus, QuizMode,
-                       # QuizStatus, QuestionType, AnsweredState
+                       # QuizStatus, QuestionType, AnsweredState, RecordingStatus
     models/           # Material, SubtitleTrack, SubtitleCue, Annotation, CueNote, SavedLanguageItem,
                        # PracticeSession, SessionStageProgress, StageResponse, KeywordCapture,
                        # SessionDiagnosisEvidence, ShadowingCueProgress, QuizAttempt, QuizQuestion,
-                       # QuizAnswer
+                       # QuizAnswer, Recording, MicrophonePreference
     services/         # CueIndex (active-cue/navigation rules), text_range (canonical selection
                        # offsets), session_rules (session/stage lifecycle + completion eligibility),
-                       # quiz_rules (deterministic generation/scoring math) — all pure, no Qt
+                       # quiz_rules (deterministic generation/scoring math), recording_rules
+                       # (status transitions + managed-path construction), comparison_sequence
+                       # (source-vs-take comparison state machine) — all pure, no Qt
   infrastructure/
     db/               # SQLite connection, migrations, repository + learning_repository +
-                       # session_repository + quiz_repository functions
+                       # session_repository + quiz_repository + recording_repository functions
     subtitles/        # SRT/WebVTT parsers, timecode and text normalization
-    media/            # PlaybackController adapter around QtMultimedia; file validation/fingerprinting
-    appdata.py         # cross-platform app-data directory resolution
+    media/            # PlaybackController adapter around QtMultimedia playback; RecordingController
+                       # adapter around QtMultimedia audio capture; file validation/fingerprinting
+    appdata.py         # cross-platform app-data directory resolution (database, logs, recordings)
     logging_setup.py   # rotating file + console logging
   ui/
     annotation_highlighting.py  # shared transcript-highlight painting (used by PlayerWindow and
                                  # GuidedSessionWindow — not duplicated)
     text_offset_conversion.py   # shared Qt UTF-16 <-> Python code-point offset conversion
     app.py            # application entry point
+    widgets/          # RecordingPanel — the one recording UI, shared by GuidedSessionWindow
+                       # Stage 4 and ShadowingPracticeWindow (not duplicated)
     windows/          # MainWindow (material library), ImportDialog, PlayerWindow
                        # (with integrated transcript workspace), LabelColorDialog,
                        # GuidedSessionWindow (five-stage guided session), SessionHistoryDialog,
-                       # QuizWindow, QuizHistoryDialog, QuizReviewDialog
+                       # QuizWindow, QuizHistoryDialog, QuizReviewDialog, ShadowingPracticeWindow
 tests/
   unit/               # subtitle parsing, CueIndex, PlayerSession, text_range, session_rules,
-                       # quiz_rules
+                       # quiz_rules, recording_rules, comparison_sequence
   integration/        # database/migrations, import, library, player, player workspace,
                        # annotations, cue notes, saved language items, label preferences,
-                       # practice_session_service, guided session window, quiz_service, UI smoke
+                       # practice_session_service, guided session window, quiz_service,
+                       # recording_service, UI smoke
   fixtures/
 docs/
 ```
 
 ## Current Limitations
 
-- No shadowing audio recording or progress analytics yet (planned for Milestone 7+); Milestone 5's shadowing stage tracks practiced/skipped status and count but never records or plays back the learner's own voice.
+- No progress analytics yet (planned for Milestone 8); recordings are captured and retained but not yet summarized into trends.
+- Recordings are fixed-format WAV only — no user-selectable formats, transcoding, trimming, editing, noise reduction, waveform display, automatic take ranking, or pronunciation/speech-recognition scoring (see `docs/PRODUCT_SPEC.md`).
 - Quizzes are deterministic and locally generated only — no AI-generated questions, fuzzy/semantic answer grading, speech recognition, or adaptive difficulty (see `docs/PRODUCT_SPEC.md`).
 - Only one primary subtitle track per material is managed through the UI, though the schema supports more.
 - Plain-text (non-timed) transcript import is not supported.
 - Player loop/replay timing uses a small internal tolerance (50ms) appropriate for QtMultimedia's position-update cadence; it is not frame-exact.
 - Canonical text-selection offsets are Python code-point based; text requiring UTF-16 surrogate pairs (some emoji) is verified to round-trip correctly in both the standalone workspace and the guided session's Stage 3 diagnosis panel.
-- Real-file, multi-codec playback and audio/video-device behavior are only verified with a synthesized WAV and one locally generated H.264/MP4 clip, on Windows so far.
+- Real-file, multi-codec playback, audio/video-device behavior, and microphone recording are only verified with a synthesized WAV, one locally generated H.264/MP4 clip, and (for recording) three real physical microphones, on Windows so far.
 - After saving/updating/deleting an annotation, saved item, keyword capture, or session diagnosis, the corresponding list loses its selection (the form clears) — the user reselects a row to continue editing it.
 - Text-only transcripts cannot provide reliable sentence seeking unless timing data is added.
+- If a recording file cannot be deleted while removing its material (e.g. locked by another process at that exact moment), the material and its records are still removed and the orphaned file is left on disk undetected — a rare, documented tradeoff rather than blocking removal.
 - Speech recognition, pronunciation scoring, automatic translation, subtitle generation, dictionary lookups, and cloud synchronization are outside the first release.
 - Users are responsible for using media and transcript material they are legally permitted to use.
 

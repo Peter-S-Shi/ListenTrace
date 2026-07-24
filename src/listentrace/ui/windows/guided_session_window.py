@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sqlite3
+from pathlib import Path
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QTextCursor
@@ -47,6 +48,7 @@ from listentrace.ui.text_offset_conversion import (
     codepoint_index_to_qt_offset,
     qt_offset_to_codepoint_index,
 )
+from listentrace.ui.widgets.recording_panel import RecordingPanel
 from listentrace.ui.windows.player_window import _OVERLAP_HIGHLIGHT, _color_badge_icon, _format_time
 
 _STAGE_TITLES: dict[str, str] = {
@@ -81,6 +83,7 @@ class GuidedSessionWindow(QMainWindow):
         connection: sqlite3.Connection,
         load_result: PlayerLoadResult,
         session_id: int,
+        recordings_dir: Path,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
@@ -102,7 +105,11 @@ class GuidedSessionWindow(QMainWindow):
         self._shadowing_index: int | None = 0 if self._cues else None
         self._editing_capture_id: int | None = None
         self._stage2_locked = False
+        self._comparison_replay_pending = False
         self._initialized = False
+
+        self._recording_panel = RecordingPanel(connection, recordings_dir, self)
+        self._recording_panel.request_play_source.connect(self._on_recording_panel_request_play_source)
 
         central = QWidget(self)
         layout = QVBoxLayout(central)
@@ -198,6 +205,11 @@ class GuidedSessionWindow(QMainWindow):
             # Nothing to flush on the very first display: the outgoing stage's
             # widgets haven't been populated with real data yet at that point.
             self._save_current_stage_inputs()
+
+        if stage_key != StageKey.SHADOWING.value:
+            # Leaving Stage 4 (or navigating within the session generally) must
+            # not leave a capture running unattended and unstoppable.
+            self._recording_panel.abort_active_recording()
 
         if session.status == SessionStatus.ACTIVE.value:
             try:
@@ -347,6 +359,8 @@ class GuidedSessionWindow(QMainWindow):
 
     def closeEvent(self, event) -> None:
         self._save_current_stage_inputs()
+        self._recording_panel.abort_active_recording()
+        self._recording_panel.release_take_playback()
         self._playback.stop()
         super().closeEvent(event)
 
@@ -364,6 +378,9 @@ class GuidedSessionWindow(QMainWindow):
         if tick.pause:
             self._playback.pause()
             self._sync_playback_button_texts()
+            if self._comparison_replay_pending:
+                self._comparison_replay_pending = False
+                self._recording_panel.notify_source_finished()
         if tick.seek_to_ms is not None:
             self._playback.seek(tick.seek_to_ms)
 
@@ -940,6 +957,8 @@ class GuidedSessionWindow(QMainWindow):
         self._shadowing_note_edit.setPlaceholderText("Optional note for this cue")
         layout.addWidget(self._shadowing_note_edit)
 
+        layout.addWidget(self._recording_panel)
+
         layout.addStretch(1)
         return panel
 
@@ -959,6 +978,7 @@ class GuidedSessionWindow(QMainWindow):
             self._skip_cue_button.setEnabled(False)
             self._skip_remaining_button.setEnabled(False)
             self._shadowing_note_edit.setEnabled(False)
+            self._recording_panel.set_context(self._material.id, None, self._session_id)
             return
 
         if self._shadowing_index is None:
@@ -985,6 +1005,10 @@ class GuidedSessionWindow(QMainWindow):
             not read_only and any(p.status == ShadowingStatus.NOT_STARTED.value for p in state.shadowing_progress)
         )
         self._shadowing_note_edit.setEnabled(not read_only)
+
+        if cue.id is not None:
+            self._recording_panel.set_context(self._material.id, cue.id, self._session_id)
+        self._recording_panel.set_read_only(read_only)
 
     def _save_shadowing_note(self) -> None:
         if self._shadowing_index is None or self._read_only() or not self._cues:
@@ -1028,6 +1052,20 @@ class GuidedSessionWindow(QMainWindow):
         if self._shadowing_index is None:
             return
         seek_to = self._player_session.loop_cue(self._shadowing_index)
+        self._playback.seek(seek_to)
+        self._playback.play()
+        self._sync_playback_button_texts()
+
+    def _on_recording_panel_request_play_source(self) -> None:
+        """The recording panel's "Compare" action asks for one source-cue
+        replay; we drive it with the same one-shot `replay_cue` mechanism as
+        the Replay Cue button, and tell the panel once it naturally finishes
+        (via the `_comparison_replay_pending` flag checked in
+        `_on_position_changed`)."""
+        if self._shadowing_index is None:
+            return
+        self._comparison_replay_pending = True
+        seek_to = self._player_session.replay_cue(self._shadowing_index)
         self._playback.seek(seek_to)
         self._playback.play()
         self._sync_playback_button_texts()

@@ -2,7 +2,7 @@
 
 This document defines the first domain direction. It is not a frozen database schema.
 
-**Status (through Milestone 6)**: `Material`, `SubtitleTrack`, `SubtitleCue`, `Annotation`, `CueNote`, `SavedLanguageItem`, `AnnotationLabelPreference`, `PracticeSession`, `SessionStageProgress`, `StageResponse`, `KeywordCapture`, `SessionDiagnosisEvidence`, `ShadowingCueProgress`, `QuizAttempt`, `QuizQuestion`, and `QuizAnswer` are implemented as actual SQLite tables (schema version 5). Migration 2 added `Material.normalized_path`; migration 3 (Milestone 4) added the four learning-evidence tables; migration 4 (Milestone 5, additive, no data loss) added the six guided-session tables; migration 5 (Milestone 6, additive, no data loss) added the three quiz tables — see their sections below for the field lists actually implemented, which differ from this document's original design sketch in two deliberate ways: `Annotation` did **not** gain a `practice_session_id` column (see `SessionDiagnosisEvidence` below for why), and the quiz design replaced the sketched `QuizSession`/`QuizItemResult` pair with `QuizAttempt`/`QuizQuestion`/`QuizAnswer` — a three-table split that separates the attempt's lifecycle from each question's immutable generation snapshot from the learner's mutable in-progress answer, so a question's persisted prompt/correct-answer payload is never touched again after generation while its answer can still be edited freely before submission. `RecordingReference` remains design direction only and will be added as a migration in the milestone that needs it.
+**Status (through Milestone 7)**: `Material`, `SubtitleTrack`, `SubtitleCue`, `Annotation`, `CueNote`, `SavedLanguageItem`, `AnnotationLabelPreference`, `PracticeSession`, `SessionStageProgress`, `StageResponse`, `KeywordCapture`, `SessionDiagnosisEvidence`, `ShadowingCueProgress`, `QuizAttempt`, `QuizQuestion`, `QuizAnswer`, `Recording`, and `MicrophonePreference` are implemented as actual SQLite tables (schema version 7). Migration 2 added `Material.normalized_path`; migration 3 (Milestone 4) added the four learning-evidence tables; migration 4 (Milestone 5, additive, no data loss) added the six guided-session tables; migration 5 (Milestone 6, additive, no data loss) added the three quiz tables; migration 6 (Milestone 6 acceptance correction, additive) added `QuizQuestion.source_cue_text`; migration 7 (Milestone 7, additive, no data loss) added `Recording` and `MicrophonePreference` — see their sections below for the field lists actually implemented, which differ from this document's original design sketch in three deliberate ways: `Annotation` did **not** gain a `practice_session_id` column (see `SessionDiagnosisEvidence` below for why), the quiz design replaced the sketched `QuizSession`/`QuizItemResult` pair with `QuizAttempt`/`QuizQuestion`/`QuizAnswer`, and `RecordingReference` was renamed `Recording` with a `practice_session_id` that is optional and `ON DELETE SET NULL` rather than required — see the `Recording` section below for why.
 
 ## Entity Overview
 
@@ -21,6 +21,7 @@ SubtitleCue
   1 --- many SavedLanguageItems       (implemented, Milestone 4)
   1 --- many SessionDiagnosisEvidence (implemented, Milestone 5)
   1 --- many ShadowingCueProgress     (implemented, Milestone 5, one row per session/cue)
+  1 --- many Recordings               (implemented, Milestone 7 — independent of PracticeSession)
 
 PracticeSession                       (implemented, Milestone 5)
   1 --- 5   SessionStageProgress      (exactly one row per stage key, created with the session)
@@ -28,10 +29,11 @@ PracticeSession                       (implemented, Milestone 5)
   1 --- many KeywordCaptures
   1 --- many SessionDiagnosisEvidence
   1 --- many ShadowingCueProgress
-  1 --- many RecordingReferences      (design direction only, not yet implemented)
+  0..1 --- many Recordings            (implemented, Milestone 7 — optional link, `ON DELETE SET NULL`)
 
 Material
   1 --- many QuizAttempts             (implemented, Milestone 6 — independent of PracticeSession)
+  1 --- many Recordings               (implemented, Milestone 7 — independent of PracticeSession)
 
 QuizAttempt                           (implemented, Milestone 6)
   1 --- many QuizQuestions            (generation snapshot, stable position order)
@@ -402,21 +404,40 @@ Generation is deterministic and reproducible: every random choice (which cue get
 - **Audio-to-Transcript-Choice** questions require at least 2 valid distractors (other cues in the same material, deduplicated by normalized text against both the correct answer and each other) before being created at all; a cue without enough distinct distractors is skipped rather than shipped as a weak 2-choice or duplicate-choice question.
 - **Scoring**: `dictation`/`review_missed` compare `normalize_answer_text(raw_answer)` against the stored `normalized_answer_text` in `correct_answer_payload` (case-insensitive, punctuation-insensitive, whitespace-collapsed, otherwise exact); `keyword_recognition`/`audio_transcript_choice` compare `selected_choice_index` against the stored `correct_choice_index`. Scoring happens exactly once, inside `quiz_service.submit_quiz`, as a single all-or-nothing transaction that also marks the attempt `completed` — an answer's `is_correct` is `NULL` at every point before that call.
 
-## RecordingReference
+## Recording
 
-References an optional local learner recording.
+One learner shadowing take. **Implemented (migration 7).** A cue may have any number of recordings — new takes never overwrite or replace older ones; the learner deletes what they no longer want. Renamed from the original design sketch's `RecordingReference` (same purpose) once the actual ownership/lifecycle requirements were worked out.
 
-Suggested fields:
+Implemented fields:
 
 - `id`
-- `practice_session_id`
-- `subtitle_cue_id`
-- `file_path`
-- `format`
-- `duration_ms`
-- `created_at`
+- `material_id` (FK → `material.id`, `ON DELETE CASCADE` — always present; every recording belongs to exactly one material)
+- `subtitle_cue_id` (FK → `subtitle_cue.id`, `ON DELETE CASCADE` — the cue this take is shadowing; validated against `material_id` by `recording_service.begin_recording`, never trusted from caller input)
+- `practice_session_id` (optional, FK → `practice_session.id`, `ON DELETE SET NULL`) — set when the take was created from Guided Session Stage 4, `NULL` when created from standalone Shadowing Practice. **Deliberately `SET NULL`, not `CASCADE`**: a take is app-managed local data in its own right (a `PracticeSession`'s deletion — currently only ever a soft `abandoned` status, never a real row delete — must not silently take a learner's recording down with it); losing the session link just makes an already-standalone-looking take fully standalone.
+- `relative_file_path` (`UNIQUE` — app-managed path, relative to the recordings root under the app-data directory, e.g. `"<material_id>/<uuid4>.wav"`; a collision-resistant filename, never a material title, transcript text, username, machine name, or absolute source path)
+- `format` (always `"wav"` for Milestone 7 — no user-selectable formats, transcoding, or external codec dependencies)
+- `duration_ms` (`NULL` until the take is scored `ready`)
+- `device_descriptor` (the human-readable device description at capture time, e.g. `"Microphone Array (Realtek(R) Audio)"` — diagnostic/display only, not used for playback)
+- `status` (`recording`, `ready`, or `failed` — see below)
+- `failure_detail` (set only when `status = 'failed'`; a short diagnostic message, never raw exception internals)
+- `created_at` / `updated_at`
 
-Recording bytes should remain outside SQLite.
+**Lifecycle.** Three statuses are actually stored: `recording` (capture in progress, not yet usable), `ready` (validated, playable), `failed` (invalid/zero-length capture, or an aborted/interrupted one — the file is removed, but the row is kept so the learner sees that *something* happened rather than a silent no-op). The product's stated four-stage lifecycle (`recording`/`ready`/`failed`/`deleted`) treats `deleted` as a real, hard removal of both the row and the managed file (`recording_service.delete_take`) rather than a fourth stored status — a `deleted` row with no backing file would be a broken reference, not history worth keeping. Allowed status transitions (`domain/services/recording_rules.py::is_valid_recording_transition`): `recording -> ready` and `recording -> failed` only; both are terminal. Only one row may be in `recording` status across the whole database at a time (`recording_service.begin_recording` refuses a second concurrent capture); a row still `recording` after an app crash/forced close is recovered at the next startup (`recording_service.recover_interrupted_recordings`, called once from `ui/app.py`), which marks it `failed` and cleans up its partial file so the single-active-recording rule never gets permanently stuck.
+
+**Not stored in SQLite:** raw audio bytes. `relative_file_path` is the only pointer to the actual WAV file, stored under `appdata.get_recordings_dir()`.
+
+## MicrophonePreference
+
+The learner's remembered microphone choice. **Implemented (migration 7).** A single row (`id = 1`, enforced by `CHECK (id = 1)`), app-wide rather than per-material — recording is a device-level choice, not a per-lesson one.
+
+Implemented fields:
+
+- `id` (always `1`)
+- `device_id` (a stable, hex-encoded device identity from Qt's `QAudioDevice.id()` — not the human-readable description, which can collide or change)
+- `device_description` (human-readable, shown in the device dropdown and remembered for display even if the device later disappears)
+- `updated_at`
+
+`recording_service.resolve_preferred_device` never silently substitutes a different device for one that was saved but is no longer connected — it returns no device plus a clear `fallback_reason`, and the UI requires the learner to explicitly choose again.
 
 ## Future Progress Events
 
@@ -429,4 +450,4 @@ Analytics should be derived from reliable session, annotation, quiz, and review 
 - Source media, subtitle files, recordings, databases, and exports are local user data.
 - Database migrations must be additive and tested.
 - Display colors never replace semantic label keys.
-- Migrations 1→2→3→4→5→6 have each been additive only (no table rewritten or dropped) and are each covered by an automated upgrade test starting from the prior version's schema with real data present. Migration 6 adds `quiz_question.source_cue_text` and backfills it from the live `subtitle_cue.text` for any pre-existing rows.
+- Migrations 1→2→3→4→5→6→7 have each been additive only (no table rewritten or dropped) and are each covered by an automated upgrade test starting from the prior version's schema with real data present. Migration 6 adds `quiz_question.source_cue_text` and backfills it from the live `subtitle_cue.text` for any pre-existing rows. Migration 7 adds `recording` and `microphone_preference`.

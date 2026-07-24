@@ -36,6 +36,7 @@ from listentrace.ui.windows.player_window import PlayerWindow
 from listentrace.ui.windows.quiz_history_dialog import QuizHistoryDialog
 from listentrace.ui.windows.quiz_window import QuizWindow
 from listentrace.ui.windows.session_history_dialog import SessionHistoryDialog
+from listentrace.ui.windows.shadowing_practice_window import ShadowingPracticeWindow
 
 _DEFAULT_QUIZ_QUESTION_COUNT = 10
 _MIN_QUIZ_QUESTION_COUNT = 1
@@ -43,17 +44,19 @@ _MAX_QUIZ_QUESTION_COUNT = 50
 
 
 class MainWindow(QMainWindow):
-    def __init__(self, db_connection: sqlite3.Connection, db_path: Path) -> None:
+    def __init__(self, db_connection: sqlite3.Connection, db_path: Path, recordings_dir: Path) -> None:
         super().__init__()
         self.setWindowTitle("ListenTrace")
         self.resize(720, 480)
 
         self._connection = db_connection
         self._db_path = db_path
+        self._recordings_dir = recordings_dir
         self._showing_archived = False
         self._player_window: PlayerWindow | None = None
         self._guided_session_window: GuidedSessionWindow | None = None
         self._quiz_window: QuizWindow | None = None
+        self._shadowing_practice_window: ShadowingPracticeWindow | None = None
 
         central = QWidget(self)
         outer_layout = QVBoxLayout(central)
@@ -81,6 +84,8 @@ class MainWindow(QMainWindow):
         self._resume_intensive_button.clicked.connect(self._on_resume_intensive_clicked)
         self._session_history_button = QPushButton("Session History")
         self._session_history_button.clicked.connect(self._on_session_history_clicked)
+        self._shadowing_practice_button = QPushButton("Shadowing Practice")
+        self._shadowing_practice_button.clicked.connect(self._on_shadowing_practice_clicked)
         self._toggle_archived_button = QPushButton("Show Archived")
         self._toggle_archived_button.clicked.connect(self._on_toggle_archived)
         list_buttons_row.addWidget(self._import_button)
@@ -88,6 +93,7 @@ class MainWindow(QMainWindow):
         list_buttons_row.addWidget(self._start_intensive_button)
         list_buttons_row.addWidget(self._resume_intensive_button)
         list_buttons_row.addWidget(self._session_history_button)
+        list_buttons_row.addWidget(self._shadowing_practice_button)
         list_buttons_row.addWidget(self._toggle_archived_button)
         list_column.addLayout(list_buttons_row)
 
@@ -224,6 +230,7 @@ class MainWindow(QMainWindow):
         self._open_player_button.setEnabled(enabled and not self._showing_archived)
         self._start_intensive_button.setEnabled(enabled and not self._showing_archived)
         self._session_history_button.setEnabled(enabled and not self._showing_archived)
+        self._shadowing_practice_button.setEnabled(enabled and not self._showing_archived)
         self._start_material_quiz_button.setEnabled(enabled and not self._showing_archived)
         self._start_review_quiz_button.setEnabled(enabled and not self._showing_archived)
         self._quiz_history_button.setEnabled(enabled and not self._showing_archived)
@@ -330,8 +337,24 @@ class MainWindow(QMainWindow):
         except PlayerOpenError as exc:
             QMessageBox.warning(self, "Cannot Open Guided Session", str(exc))
             return
-        self._guided_session_window = GuidedSessionWindow(self._connection, load_result, session_id, self)
+        self._guided_session_window = GuidedSessionWindow(
+            self._connection, load_result, session_id, self._recordings_dir, self
+        )
         self._guided_session_window.show()
+
+    def _on_shadowing_practice_clicked(self) -> None:
+        material_id = self._selected_material_id()
+        if material_id is None or self._showing_archived:
+            return
+        try:
+            load_result = load_material_for_player(self._connection, material_id)
+        except PlayerOpenError as exc:
+            QMessageBox.warning(self, "Cannot Open Shadowing Practice", str(exc))
+            return
+        self._shadowing_practice_window = ShadowingPracticeWindow(
+            self._connection, load_result, self._recordings_dir, self
+        )
+        self._shadowing_practice_window.show()
 
     def _prompt_quiz_question_count(self, title: str) -> int | None:
         count, ok = QInputDialog.getInt(
@@ -463,7 +486,14 @@ class MainWindow(QMainWindow):
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
         )
         if answer == QMessageBox.StandardButton.Yes:
-            library.remove_material(self._connection, material_id)
+            summary = library.remove_material(self._connection, self._recordings_dir, material_id)
+            if not summary.all_succeeded:
+                QMessageBox.warning(
+                    self,
+                    "Some Recording Files Could Not Be Deleted",
+                    f"{len(summary.failed)} recording file(s) for this material could not be deleted "
+                    "and may remain on disk. The material record itself was removed.",
+                )
             self.refresh_library()
 
     def show_error(self, message: str) -> None:

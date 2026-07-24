@@ -28,6 +28,14 @@ class PlaybackController(QObject):
     def load(self, media_path: Path | str) -> None:
         self._player.setSource(QUrl.fromLocalFile(str(media_path)))
 
+    def unload(self) -> None:
+        """Clear the loaded source and release its file handle. `stop()` alone
+        does not do this — on Windows, a stopped `QMediaPlayer` still holds an
+        exclusive lock on its source file until a different source is loaded or
+        the source is explicitly cleared, which blocks deleting that file."""
+        self._player.stop()
+        self._player.setSource(QUrl())
+
     def play(self) -> None:
         self._player.play()
 

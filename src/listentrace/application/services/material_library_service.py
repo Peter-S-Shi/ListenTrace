@@ -4,7 +4,9 @@ import sqlite3
 from pathlib import Path
 
 from listentrace.application.dto.material_views import MaterialDetail, MaterialSummary
+from listentrace.application.dto.recording_views import DeletionSummary
 from listentrace.application.errors import MaterialNotFoundError
+from listentrace.application.services import recording_service
 from listentrace.domain.enums.material_status import MaterialStatus
 from listentrace.domain.models.material import Material
 from listentrace.infrastructure.db.repository import (
@@ -77,7 +79,16 @@ def restore_material(conn: sqlite3.Connection, material_id: int) -> None:
     _repo_set_status(conn, material_id, MaterialStatus.ACTIVE)
 
 
-def remove_material(conn: sqlite3.Connection, material_id: int) -> None:
+def remove_material(conn: sqlite3.Connection, recordings_dir: Path, material_id: int) -> DeletionSummary:
+    """Removes ListenTrace's own records for a material. Recording files are
+    ListenTrace-managed local data (unlike the source media/subtitle files,
+    which are never touched) — deleted explicitly here, before the DB cascade
+    would otherwise remove their rows without cleaning up the files themselves.
+    A recording whose file could not be deleted is reported back rather than
+    silently left as an orphaned file; the material is removed regardless, since
+    blocking the whole removal on one locked recording file would be worse."""
     if get_material(conn, material_id) is None:
         raise MaterialNotFoundError(material_id)
+    summary = recording_service.delete_takes_for_material(conn, recordings_dir, material_id)
     delete_material(conn, material_id)
+    return summary

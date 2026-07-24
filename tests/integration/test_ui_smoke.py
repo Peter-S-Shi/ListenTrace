@@ -3,6 +3,7 @@ from __future__ import annotations
 import struct
 import wave
 
+from PySide6.QtCore import QEventLoop, QTimer
 from PySide6.QtWidgets import QInputDialog, QMessageBox
 
 from listentrace.application.services import material_library_service as library
@@ -22,6 +23,12 @@ _MULTI_CUE_SRT = (
 )
 
 
+def _pump(ms: int) -> None:
+    loop = QEventLoop()
+    QTimer.singleShot(ms, loop.quit)
+    loop.exec()
+
+
 def _make_wav(path, seconds=1, framerate=8000):
     with wave.open(str(path), "w") as wf:
         wf.setnchannels(1)
@@ -35,10 +42,10 @@ def test_main_window_starts_with_initialized_database(qapp, tmp_path):
     connection = open_connection(db_path)
     migrate(connection)
 
-    window = MainWindow(connection, db_path)
+    window = MainWindow(connection, db_path, tmp_path / "recordings")
 
     assert window.windowTitle() == "ListenTrace"
-    assert "Schema version: 6" in window._status_label.text()
+    assert "Schema version: 7" in window._status_label.text()
 
     window.close()
 
@@ -47,7 +54,7 @@ def test_main_window_shows_empty_library_state(qapp, tmp_path):
     connection = open_connection(tmp_path / "empty.db")
     migrate(connection)
 
-    window = MainWindow(connection, tmp_path / "empty.db")
+    window = MainWindow(connection, tmp_path / "empty.db", tmp_path / "recordings")
 
     assert window._material_list.count() == 1
     assert "empty" in window._material_list.item(0).text().lower()
@@ -65,7 +72,7 @@ def test_main_window_lists_imported_material_and_shows_detail(qapp, tmp_path):
     subtitle.write_text("1\n00:00:00,000 --> 00:00:02,000\nBonjour\n", encoding="utf-8")
     import_material(connection, media, subtitle, "Lesson One")
 
-    window = MainWindow(connection, tmp_path / "smoke.db")
+    window = MainWindow(connection, tmp_path / "smoke.db", tmp_path / "recordings")
 
     assert window._material_list.count() == 1
     item = window._material_list.item(0)
@@ -89,7 +96,7 @@ def test_main_window_double_click_opens_player_for_active_material(qapp, tmp_pat
     subtitle.write_text("1\n00:00:00,000 --> 00:00:02,000\nBonjour\n", encoding="utf-8")
     import_material(connection, media, subtitle, "Lesson One")
 
-    window = MainWindow(connection, tmp_path / "smoke.db")
+    window = MainWindow(connection, tmp_path / "smoke.db", tmp_path / "recordings")
     item = window._material_list.item(0)
     window._on_material_double_clicked(item)
 
@@ -111,7 +118,7 @@ def test_open_player_button_disabled_in_archived_view(qapp, tmp_path):
     result = import_material(connection, media, subtitle, "Lesson One")
     library.archive_material(connection, result.material_id)
 
-    window = MainWindow(connection, tmp_path / "smoke.db")
+    window = MainWindow(connection, tmp_path / "smoke.db", tmp_path / "recordings")
     window._on_toggle_archived()
 
     assert window._material_list.count() == 1
@@ -132,7 +139,7 @@ def test_double_click_in_archived_view_does_not_open_player(qapp, tmp_path):
     result = import_material(connection, media, subtitle, "Lesson One")
     library.archive_material(connection, result.material_id)
 
-    window = MainWindow(connection, tmp_path / "smoke.db")
+    window = MainWindow(connection, tmp_path / "smoke.db", tmp_path / "recordings")
     window._on_toggle_archived()
     item = window._material_list.item(0)
     window._on_material_double_clicked(item)
@@ -152,7 +159,7 @@ def test_start_intensive_practice_opens_guided_window_and_enables_resume(qapp, t
     subtitle.write_text("1\n00:00:00,000 --> 00:00:02,000\nBonjour\n", encoding="utf-8")
     result = import_material(connection, media, subtitle, "Lesson One")
 
-    window = MainWindow(connection, tmp_path / "smoke.db")
+    window = MainWindow(connection, tmp_path / "smoke.db", tmp_path / "recordings")
     window._material_list.setCurrentItem(window._material_list.item(0))
     assert window._resume_intensive_button.isEnabled() is False
 
@@ -179,7 +186,7 @@ def test_start_intensive_practice_with_active_session_offers_resume_choice(qapp,
 
     monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.StandardButton.Yes)
 
-    window = MainWindow(connection, tmp_path / "smoke.db")
+    window = MainWindow(connection, tmp_path / "smoke.db", tmp_path / "recordings")
     window._material_list.setCurrentItem(window._material_list.item(0))
     window._on_start_intensive_clicked()
 
@@ -205,7 +212,7 @@ def test_start_intensive_practice_abandon_and_start_new(qapp, tmp_path, monkeypa
 
     monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.StandardButton.No)
 
-    window = MainWindow(connection, tmp_path / "smoke.db")
+    window = MainWindow(connection, tmp_path / "smoke.db", tmp_path / "recordings")
     window._material_list.setCurrentItem(window._material_list.item(0))
     window._on_start_intensive_clicked()
 
@@ -231,7 +238,7 @@ def test_resume_intensive_practice_button_opens_active_session(qapp, tmp_path):
     result = import_material(connection, media, subtitle, "Lesson One")
     session_service.start_session(connection, result.material_id)
 
-    window = MainWindow(connection, tmp_path / "smoke.db")
+    window = MainWindow(connection, tmp_path / "smoke.db", tmp_path / "recordings")
     window._material_list.setCurrentItem(window._material_list.item(0))
     assert window._resume_intensive_button.isEnabled() is True
 
@@ -256,7 +263,7 @@ def test_session_history_dialog_opens_selected_session(qapp, tmp_path):
     second = session_service.start_session(connection, result.material_id)
     session_service.abandon_session(connection, second.id)
 
-    window = MainWindow(connection, tmp_path / "smoke.db")
+    window = MainWindow(connection, tmp_path / "smoke.db", tmp_path / "recordings")
     window._material_list.setCurrentItem(window._material_list.item(0))
 
     from listentrace.ui.windows.session_history_dialog import SessionHistoryDialog
@@ -288,7 +295,7 @@ def test_start_material_quiz_opens_quiz_window_and_enables_resume(qapp, tmp_path
 
     monkeypatch.setattr(QInputDialog, "getInt", lambda *a, **k: (3, True))
 
-    window = MainWindow(connection, tmp_path / "smoke.db")
+    window = MainWindow(connection, tmp_path / "smoke.db", tmp_path / "recordings")
     window._material_list.setCurrentItem(window._material_list.item(0))
     assert window._resume_quiz_button.isEnabled() is False
 
@@ -315,7 +322,7 @@ def test_start_material_quiz_cancelled_input_dialog_does_not_create_a_quiz(qapp,
 
     monkeypatch.setattr(QInputDialog, "getInt", lambda *a, **k: (3, False))
 
-    window = MainWindow(connection, tmp_path / "smoke.db")
+    window = MainWindow(connection, tmp_path / "smoke.db", tmp_path / "recordings")
     window._material_list.setCurrentItem(window._material_list.item(0))
     window._on_start_material_quiz_clicked()
 
@@ -341,7 +348,7 @@ def test_start_review_quiz_without_diagnosis_evidence_shows_a_warning(qapp, tmp_
         QMessageBox, "warning", lambda *a, **k: warnings.append(a) or QMessageBox.StandardButton.Ok
     )
 
-    window = MainWindow(connection, tmp_path / "smoke.db")
+    window = MainWindow(connection, tmp_path / "smoke.db", tmp_path / "recordings")
     window._material_list.setCurrentItem(window._material_list.item(0))
     window._on_start_review_quiz_clicked()
 
@@ -362,7 +369,7 @@ def test_resume_quiz_button_opens_active_quiz(qapp, tmp_path):
     result = import_material(connection, media, subtitle, "Lesson One")
     quiz_service.create_material_quiz(connection, result.material_id, requested_count=3, seed=1)
 
-    window = MainWindow(connection, tmp_path / "smoke.db")
+    window = MainWindow(connection, tmp_path / "smoke.db", tmp_path / "recordings")
     window._material_list.setCurrentItem(window._material_list.item(0))
     assert window._resume_quiz_button.isEnabled() is True
 
@@ -386,7 +393,7 @@ def test_quiz_history_dialog_opens_selected_quiz(qapp, tmp_path):
     quiz_service.abandon_quiz(connection, first.id)
     second = quiz_service.create_material_quiz(connection, result.material_id, requested_count=2, seed=2)
 
-    window = MainWindow(connection, tmp_path / "smoke.db")
+    window = MainWindow(connection, tmp_path / "smoke.db", tmp_path / "recordings")
     window._material_list.setCurrentItem(window._material_list.item(0))
 
     from listentrace.ui.windows.quiz_history_dialog import QuizHistoryDialog
@@ -476,3 +483,299 @@ def test_quiz_window_abandon_makes_it_read_only(qapp, tmp_path, monkeypatch):
 
     abandoned = quiz_service.get_quiz_attempt(connection, attempt.id)
     assert abandoned.status == "abandoned"
+
+
+# ---- Milestone 7: shadowing and local recording ----
+
+
+def _write_valid_wav(path, seconds=1, framerate=8000):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with wave.open(str(path), "w") as wf:
+        wf.setnchannels(1)
+        wf.setsampwidth(2)
+        wf.setframerate(framerate)
+        wf.writeframes(struct.pack("<h", 0) * framerate * seconds)
+
+
+def _import_shadowing_lesson(connection, tmp_path):
+    media = tmp_path / "lesson.wav"
+    _make_wav(media)
+    subtitle = tmp_path / "lesson.srt"
+    subtitle.write_text(_MULTI_CUE_SRT, encoding="utf-8")
+    return import_material(connection, media, subtitle, "Lesson One")
+
+
+def test_shadowing_practice_button_opens_window_for_selected_material(qapp, tmp_path):
+    connection = open_connection(tmp_path / "smoke.db")
+    migrate(connection)
+    result = _import_shadowing_lesson(connection, tmp_path)
+
+    window = MainWindow(connection, tmp_path / "smoke.db", tmp_path / "recordings")
+    window._material_list.setCurrentItem(window._material_list.item(0))
+    assert window._shadowing_practice_button.isEnabled() is True
+
+    window._on_shadowing_practice_clicked()
+
+    assert window._shadowing_practice_window is not None
+    assert window._shadowing_practice_window.windowTitle().endswith("Lesson One")
+
+    window._shadowing_practice_window.close()
+    window.close()
+
+
+def test_shadowing_practice_window_cue_navigation_updates_recording_context(qapp, tmp_path):
+    connection = open_connection(tmp_path / "smoke.db")
+    migrate(connection)
+    result = _import_shadowing_lesson(connection, tmp_path)
+
+    from listentrace.application.services.player_loading_service import load_material_for_player
+    from listentrace.ui.windows.shadowing_practice_window import ShadowingPracticeWindow
+
+    load_result = load_material_for_player(connection, result.material_id)
+    window = ShadowingPracticeWindow(connection, load_result, tmp_path / "recordings")
+
+    first_cue_id = window._recording_panel._subtitle_cue_id
+    assert first_cue_id == load_result.cues[0].id
+
+    window._on_next_clicked()
+
+    assert window._recording_panel._subtitle_cue_id == load_result.cues[1].id
+    assert window._recording_panel._subtitle_cue_id != first_cue_id
+    assert window._recording_panel._practice_session_id is None
+
+    window.close()
+
+
+def test_shadowing_practice_window_lists_an_existing_take_for_the_current_cue(qapp, tmp_path):
+    connection = open_connection(tmp_path / "smoke.db")
+    migrate(connection)
+    result = _import_shadowing_lesson(connection, tmp_path)
+    recordings_dir = tmp_path / "recordings"
+
+    from listentrace.application.services import recording_service
+    from listentrace.infrastructure.db.repository import get_cues_for_track, get_subtitle_track_for_material
+
+    track = get_subtitle_track_for_material(connection, result.material_id)
+    first_cue = get_cues_for_track(connection, track.id)[0]
+
+    recording, path = recording_service.begin_recording(
+        connection, recordings_dir, result.material_id, first_cue.id, "dev-1", "Test Mic"
+    )
+    _write_valid_wav(path, seconds=1)
+    recording_service.finish_recording(connection, recordings_dir, recording.id)
+
+    from listentrace.application.services.player_loading_service import load_material_for_player
+    from listentrace.ui.windows.shadowing_practice_window import ShadowingPracticeWindow
+
+    load_result = load_material_for_player(connection, result.material_id)
+    window = ShadowingPracticeWindow(connection, load_result, recordings_dir)
+
+    assert window._recording_panel._takes_list.count() == 1
+    assert "Take #" in window._recording_panel._takes_list.item(0).text()
+
+    window.close()
+
+
+def test_recording_panel_delete_take_button_removes_row_and_file(qapp, tmp_path, monkeypatch):
+    connection = open_connection(tmp_path / "smoke.db")
+    migrate(connection)
+    result = _import_shadowing_lesson(connection, tmp_path)
+    recordings_dir = tmp_path / "recordings"
+
+    from listentrace.application.services import recording_service
+    from listentrace.infrastructure.db.repository import get_cues_for_track, get_subtitle_track_for_material
+
+    track = get_subtitle_track_for_material(connection, result.material_id)
+    first_cue = get_cues_for_track(connection, track.id)[0]
+
+    recording, path = recording_service.begin_recording(
+        connection, recordings_dir, result.material_id, first_cue.id, "dev-1", "Test Mic"
+    )
+    _write_valid_wav(path, seconds=1)
+    recording_service.finish_recording(connection, recordings_dir, recording.id)
+
+    from listentrace.ui.widgets.recording_panel import RecordingPanel
+
+    panel = RecordingPanel(connection, recordings_dir)
+    panel.set_context(result.material_id, first_cue.id, None)
+    assert panel._takes_list.count() == 1
+
+    panel._takes_list.setCurrentRow(0)
+    monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.StandardButton.Yes)
+    panel._on_delete_take_clicked()
+
+    assert panel._takes_list.count() == 0
+    assert not path.exists()
+    assert recording_service.get_take(connection, recording.id) is None
+
+    panel.close()
+
+
+def test_recording_panel_can_delete_a_take_immediately_after_playing_it(qapp, tmp_path, monkeypatch):
+    """Regression test: a stopped QMediaPlayer keeps its source file locked on
+    Windows until the source is explicitly cleared. Playing a take and then
+    deleting it right afterward must still succeed — caught by the Milestone 7
+    real-microphone manual smoke test, where "Compare" (which plays a take)
+    followed by "Delete Take" on the same recording used to fail with
+    file_deletion_failed."""
+    connection = open_connection(tmp_path / "smoke.db")
+    migrate(connection)
+    result = _import_shadowing_lesson(connection, tmp_path)
+    recordings_dir = tmp_path / "recordings"
+
+    from listentrace.application.services import recording_service
+    from listentrace.infrastructure.db.repository import get_cues_for_track, get_subtitle_track_for_material
+
+    track = get_subtitle_track_for_material(connection, result.material_id)
+    first_cue = get_cues_for_track(connection, track.id)[0]
+
+    recording, path = recording_service.begin_recording(
+        connection, recordings_dir, result.material_id, first_cue.id, "dev-1", "Test Mic"
+    )
+    _write_valid_wav(path, seconds=1)
+    recording_service.finish_recording(connection, recordings_dir, recording.id)
+
+    from listentrace.ui.widgets.recording_panel import RecordingPanel
+
+    panel = RecordingPanel(connection, recordings_dir)
+    panel.set_context(result.material_id, first_cue.id, None)
+    panel._takes_list.setCurrentRow(0)
+
+    panel._on_play_take_clicked()
+    _pump(300)
+
+    panel._takes_list.setCurrentRow(0)
+    warnings_seen: list[str] = []
+    monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.StandardButton.Yes)
+    monkeypatch.setattr(QMessageBox, "warning", lambda *a, **k: warnings_seen.append(str(a)))
+    panel._on_delete_take_clicked()
+
+    assert warnings_seen == []
+    assert panel._takes_list.count() == 0
+    assert not path.exists()
+
+    panel.close()
+
+
+def test_guided_session_stage4_recording_panel_syncs_to_current_shadowing_cue(qapp, tmp_path):
+    connection = open_connection(tmp_path / "smoke.db")
+    migrate(connection)
+    result = _import_shadowing_lesson(connection, tmp_path)
+
+    session = session_service.start_session(connection, result.material_id)
+
+    from listentrace.application.services.player_loading_service import load_material_for_player
+    from listentrace.ui.windows.guided_session_window import GuidedSessionWindow
+
+    load_result = load_material_for_player(connection, result.material_id)
+    window = GuidedSessionWindow(connection, load_result, session.id, tmp_path / "recordings")
+    window._show_stage("shadowing")
+
+    assert window._recording_panel._subtitle_cue_id == load_result.cues[0].id
+    assert window._recording_panel._practice_session_id == session.id
+
+    window._on_shadowing_next_clicked()
+
+    assert window._recording_panel._subtitle_cue_id == load_result.cues[1].id
+
+    window.close()
+
+
+def test_guided_session_stage4_recording_does_not_alter_mark_practiced_flow(qapp, tmp_path):
+    """Creating/finishing a recording must not itself mark a cue practiced, and
+    marking a cue practiced must not disturb an already-listed take — the two
+    are fully independent, per the Milestone 7 product boundary."""
+    connection = open_connection(tmp_path / "smoke.db")
+    migrate(connection)
+    result = _import_shadowing_lesson(connection, tmp_path)
+    recordings_dir = tmp_path / "recordings"
+    session = session_service.start_session(connection, result.material_id)
+
+    from listentrace.application.services import recording_service
+    from listentrace.application.services.player_loading_service import load_material_for_player
+    from listentrace.infrastructure.db.repository import get_cues_for_track, get_subtitle_track_for_material
+    from listentrace.ui.windows.guided_session_window import GuidedSessionWindow
+
+    track = get_subtitle_track_for_material(connection, result.material_id)
+    first_cue = get_cues_for_track(connection, track.id)[0]
+
+    recording, path = recording_service.begin_recording(
+        connection, recordings_dir, result.material_id, first_cue.id, "dev-1", "Test Mic",
+        practice_session_id=session.id,
+    )
+    _write_valid_wav(path, seconds=1)
+    recording_service.finish_recording(connection, recordings_dir, recording.id)
+
+    load_result = load_material_for_player(connection, result.material_id)
+    window = GuidedSessionWindow(connection, load_result, session.id, recordings_dir)
+    window._show_stage("shadowing")
+    assert window._recording_panel._takes_list.count() == 1
+
+    window._on_mark_practiced_clicked()
+
+    state = session_service.load_session_state(connection, session.id)
+    progress = next(p for p in state.shadowing_progress if p.subtitle_cue_id == first_cue.id)
+    assert progress.status == "practiced"
+    # The take created before "Mark Practiced" must still be there, untouched.
+    assert window._recording_panel._takes_list.count() == 1
+    assert recording_service.get_take(connection, recording.id).status == "ready"
+
+    window.close()
+
+
+def test_remove_material_deletes_recording_files_from_disk(qapp, tmp_path):
+    connection = open_connection(tmp_path / "smoke.db")
+    migrate(connection)
+    result = _import_shadowing_lesson(connection, tmp_path)
+    recordings_dir = tmp_path / "recordings"
+
+    from listentrace.application.services import recording_service
+    from listentrace.infrastructure.db.repository import get_cues_for_track, get_subtitle_track_for_material
+
+    track = get_subtitle_track_for_material(connection, result.material_id)
+    first_cue = get_cues_for_track(connection, track.id)[0]
+
+    recording, path = recording_service.begin_recording(
+        connection, recordings_dir, result.material_id, first_cue.id, "dev-1", "Test Mic"
+    )
+    _write_valid_wav(path, seconds=1)
+    recording_service.finish_recording(connection, recordings_dir, recording.id)
+    assert path.exists()
+
+    summary = library.remove_material(connection, recordings_dir, result.material_id)
+
+    assert summary.all_succeeded
+    assert not path.exists()
+
+
+def test_main_window_remove_material_warns_when_a_recording_file_cannot_be_deleted(qapp, tmp_path, monkeypatch):
+    connection = open_connection(tmp_path / "smoke.db")
+    migrate(connection)
+    result = _import_shadowing_lesson(connection, tmp_path)
+    recordings_dir = tmp_path / "recordings"
+
+    from listentrace.application.services import recording_service
+    from listentrace.infrastructure.db.repository import get_cues_for_track, get_subtitle_track_for_material
+
+    track = get_subtitle_track_for_material(connection, result.material_id)
+    first_cue = get_cues_for_track(connection, track.id)[0]
+
+    recording, path = recording_service.begin_recording(
+        connection, recordings_dir, result.material_id, first_cue.id, "dev-1", "Test Mic"
+    )
+    # Force the eventual unlink() to fail: a directory sits where the file should be.
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.mkdir()
+    recording_service.finish_recording(connection, recordings_dir, recording.id)  # -> failed, file left as a dir
+
+    window = MainWindow(connection, tmp_path / "smoke.db", recordings_dir)
+    window._material_list.setCurrentItem(window._material_list.item(0))
+
+    warnings: list[str] = []
+    monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.StandardButton.Yes)
+    monkeypatch.setattr(QMessageBox, "warning", lambda self, title, text, *a, **k: warnings.append(title))
+
+    window._on_remove_clicked()
+
+    assert any("Could Not Be Deleted" in title for title in warnings)
+    window.close()

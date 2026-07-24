@@ -72,7 +72,7 @@ def test_archive_and_restore(conn, tmp_path):
 def test_remove_material_cascades_and_preserves_source_files(conn, tmp_path):
     material_id, media, subtitle = _import_sample(conn, tmp_path)
 
-    library.remove_material(conn, material_id)
+    library.remove_material(conn, tmp_path / "recordings", material_id)
 
     assert conn.execute("SELECT COUNT(*) FROM material").fetchone()[0] == 0
     assert conn.execute("SELECT COUNT(*) FROM subtitle_track").fetchone()[0] == 0
@@ -95,11 +95,11 @@ def test_missing_source_file_is_detected(conn, tmp_path):
 
 def test_operations_on_removed_material_raise_not_found(conn, tmp_path):
     material_id, _, _ = _import_sample(conn, tmp_path)
-    library.remove_material(conn, material_id)
+    library.remove_material(conn, tmp_path / "recordings", material_id)
 
     with pytest.raises(MaterialNotFoundError):
         library.rename_material(conn, material_id, "Ghost")
     with pytest.raises(MaterialNotFoundError):
         library.archive_material(conn, material_id)
     with pytest.raises(MaterialNotFoundError):
-        library.remove_material(conn, material_id)
+        library.remove_material(conn, tmp_path / "recordings", material_id)

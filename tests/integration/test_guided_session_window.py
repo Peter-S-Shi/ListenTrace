@@ -51,7 +51,7 @@ def _open_guided_window(conn, tmp_path, media_path=None):
     result = import_material(conn, media_path, srt, "Guided Lesson")
     load_result = load_material_for_player(conn, result.material_id)
     session = svc.start_session(conn, result.material_id)
-    window = GuidedSessionWindow(conn, load_result, session.id)
+    window = GuidedSessionWindow(conn, load_result, session.id, tmp_path / "recordings")
     return window, result.material_id, session.id
 
 
@@ -109,7 +109,7 @@ def test_close_and_resume_restores_stage_and_responses(qapp, conn, tmp_path):
     window.close()
 
     load_result = load_material_for_player(conn, material_id)
-    reopened = GuidedSessionWindow(conn, load_result, session_id)
+    reopened = GuidedSessionWindow(conn, load_result, session_id, tmp_path / "recordings")
     assert reopened._stack.currentIndex() == 1
     assert "Stage 2 of 5" in reopened._stage_progress_label.text()
     assert reopened._stage1_edits["who_is_speaking"].toPlainText() == "A man"
@@ -173,7 +173,7 @@ def test_completed_session_reopens_read_only(qapp, conn, tmp_path, monkeypatch):
     window.close()
 
     load_result = load_material_for_player(conn, material_id)
-    reopened = GuidedSessionWindow(conn, load_result, session_id)
+    reopened = GuidedSessionWindow(conn, load_result, session_id, tmp_path / "recordings")
     assert "COMPLETED" in reopened._stage_progress_label.text()
     assert reopened._continue_button.isEnabled() is False
     assert reopened._skip_button.isEnabled() is False

@@ -8,7 +8,7 @@ ListenTrace is a local-first desktop application for transcript-guided foreign-l
 
 ## Repository Verification
 
-The remote repository exists, is private, and uses `main` as its default branch. It contains the initial documentation commit, the Milestone 1 application-foundation commit, the Milestone 2 material-library commit, the Milestone 3 synchronized-player commit (plus its acceptance-correction follow-up), the Milestone 4 transcript-workspace commit (plus its acceptance-correction follow-up and a small post-milestone presentation-refresh follow-up), the Milestone 5 guided-session commit (plus its acceptance-correction follow-up), and the Milestone 6 quizzes-and-recall-practice commit (plus its acceptance-correction follow-up); no pull requests; no continuous-integration configuration.
+The remote repository exists, is private, and uses `main` as its default branch. It contains the initial documentation commit, the Milestone 1 application-foundation commit, the Milestone 2 material-library commit, the Milestone 3 synchronized-player commit (plus its acceptance-correction follow-up), the Milestone 4 transcript-workspace commit (plus its acceptance-correction follow-up and a small post-milestone presentation-refresh follow-up), the Milestone 5 guided-session commit (plus its acceptance-correction follow-up), the Milestone 6 quizzes-and-recall-practice commit (plus its acceptance-correction follow-up), and the Milestone 7 shadowing-and-local-recording commit; no pull requests; no continuous-integration configuration.
 
 ## Current Engineering State
 
@@ -17,23 +17,24 @@ The remote repository exists, is private, and uses `main` as its default branch.
 | Product concept | Defined |
 | Product workflow | Defined at roadmap level |
 | Public engineering documentation | Committed and pushed to `main` |
-| Application code | Implemented (foundation + material library + synchronized player + transcript workspace + guided intensive-listening session + quizzes and recall practice) |
-| Desktop shell | Material library + player window (with integrated transcript workspace) + guided session window (five stages) + session history dialog + quiz window + quiz history dialog + quiz review dialog, manually verified end-to-end |
-| Database schema | Schema version 6: adds `quiz_attempt`, `quiz_question`, `quiz_answer` (version 5), then adds `quiz_question.source_cue_text` (version 6, backfilled for pre-existing rows; additive; Milestone 1/2/4/5 tables unchanged) |
+| Application code | Implemented (foundation + material library + synchronized player + transcript workspace + guided intensive-listening session + quizzes and recall practice + shadowing and local recording) |
+| Desktop shell | Material library + player window (with integrated transcript workspace) + guided session window (five stages, Stage 4 now includes recording) + session history dialog + quiz window + quiz history dialog + quiz review dialog + standalone Shadowing Practice window, manually verified end-to-end including a real-microphone pass |
+| Database schema | Schema version 7: adds `quiz_attempt`, `quiz_question`, `quiz_answer` (version 5), `quiz_question.source_cue_text` (version 6, backfilled for pre-existing rows), then adds `recording` and `microphone_preference` (version 7; additive; Milestone 1/2/4/5 tables unchanged) |
 | Media/subtitle import | Implemented and tested (Milestone 2, unchanged) |
-| Material library | Implemented and tested (Milestone 2), opens the player (Milestone 3), the guided session (Milestone 5), and quizzes (Milestone 6) |
+| Material library | Implemented and tested (Milestone 2), opens the player (Milestone 3), the guided session (Milestone 5), quizzes (Milestone 6), and standalone Shadowing Practice (Milestone 7); removing a material now also deletes its recording files, not just its database rows |
 | Synchronized player | Implemented and tested (Milestone 3 + acceptance-correction pass, unchanged this milestone) |
 | Transcript workspace | Implemented and tested (Milestone 4, unchanged this milestone) |
-| Guided intensive-listening session | Implemented and tested (Milestone 5, unchanged this milestone): five-stage resumable session, one active session per material, explicit skip on every stage, transcript-reveal lock on Stages 1/2, session-scoped diagnosis evidence, shadowing practiced/skipped tracking, completed/abandoned read-only history |
+| Guided intensive-listening session | Implemented and tested (Milestone 5): five-stage resumable session, one active session per material, explicit skip on every stage, transcript-reveal lock on Stages 1/2, session-scoped diagnosis evidence, shadowing practiced/skipped tracking, completed/abandoned read-only history; Stage 4 now also supports recording (Milestone 7), without changing any completion semantics |
 | Quizzes and recall practice | Implemented and tested: four deterministic, locally-generated question types (cue dictation/fill-in-the-blank, keyword recognition, audio-to-transcript choice, review of missed/misheard cues) across two quiz modes (Material Quiz, Review Quiz), hidden correctness until atomic submission, one consolidated post-submission review, close/resume without answer loss, permanently read-only completed/abandoned attempts, safe generation (smaller quiz or outright refusal rather than padding); plus an acceptance-correction pass (source-cue-text snapshot, Review Quiz evidence deduplication, `scoring_config`-authoritative atomic scoring with answer-shape validation) |
+| Shadowing and local recording | Implemented and tested: WAV takes recorded from Guided Session Stage 4 or standalone Shadowing Practice through one shared recording widget; multiple takes per cue retained until explicitly deleted (single take, cue-wide, or material-wide); microphone device listed/selected/remembered with no silent substitution when the saved device disappears; source-vs-take comparison plays sequentially, never mixed; a take is never listed as playable until validated; only one capture may be active at a time, enforced at the database level and recovered automatically after a crash |
 | Subtitle parsing | Implemented and tested (Milestone 1, unchanged) |
-| Automated tests | 307 tests passing (10 database/migrations, 8 import, 8 library, 3 media playback, 7 subtitle parsing, 8 cue index, 9 player session, 5 player loading, 13 player window, 18 UI smoke, 7 text range, 7 text-offset conversion, 25 annotations, 6 cue notes, 19 saved language items, 5 label preferences, 20 player-workspace UI integration, 11 session rules, 49 practice-session service, 9 guided-session window, 16 quiz rules, 44 quiz service) |
+| Automated tests | 359 tests passing (11 database/migrations, 8 import, 8 library, 3 media playback, 7 subtitle parsing, 8 cue index, 9 player session, 5 player loading, 13 player window, 27 UI smoke, 7 text range, 7 text-offset conversion, 25 annotations, 6 cue notes, 19 saved language items, 5 label preferences, 20 player-workspace UI integration, 11 session rules, 49 practice-session service, 9 guided-session window, 16 quiz rules, 44 quiz service, 7 recording rules, 6 comparison sequence, 29 recording service) |
 | Build and packaging | Not started |
 | Continuous integration | Not configured |
 
 ## Current Milestone
 
-**Milestone 6 — Quizzes and Recall Practice**
+**Milestone 7 — Shadowing and Local Recording**
 
 Status: **Completed**
 
@@ -92,6 +93,17 @@ Status: **Completed**
   3. **Scoring branched on `question_type`, not the persisted `scoring_config`.** The two happened to always agree today, but `scoring_config` — documented as the scoring source of truth — was not actually authoritative, and an unrecognized future rule/version would have been silently scored under a guessed branch. Fixed by making `scoring_config`'s `rule`/`version` authoritative in both `submit_quiz` and `save_quiz_answer`; an unsupported rule/version now aborts the entire submission transaction instead of scoring around it, and `save_quiz_answer` now validates answer shape against the rule (text-only vs. in-range-choice-only) before persisting.
   - 10 new focused regression tests (2 source-cue-text snapshot/live-edit immunity, 2 review-quiz dedup, 5 scoring-authority/answer-shape validation, 1 v5→v6 migration backfill) on top of the prior 297 — 307 total, all passing, including in a clean virtual environment outside the working tree.
   - No UI changes were required beyond removing the now-unused live cue lookup in `QuizReviewDialog`; `QuizWindow` already catches `QuizValidationError` from `save_quiz_answer` generically, so the new `invalid_answer_shape`/`unsupported_scoring_rule` categories surface correctly without modification.
+- Milestone 7 — Shadowing and Local Recording:
+  - **Schema version 7** (additive migration, no data loss): `recording` (`material_id`/`subtitle_cue_id` both `ON DELETE CASCADE`, `practice_session_id` optional and `ON DELETE SET NULL` so a session going away never silently deletes a standalone-looking recording, `relative_file_path` unique, `format` fixed to `wav`, `duration_ms`/`device_descriptor`/`failure_detail` nullable, `status` one of `recording`/`ready`/`failed`) and `microphone_preference` (a single app-wide row remembering the last device chosen). Verified to upgrade cleanly from a Milestone 6 (v6) database with existing quiz data intact.
+  - `domain/services/recording_rules.py` (status-transition validity, managed-path construction) and `domain/services/comparison_sequence.py` (`ComparisonSequencer`, a pure state machine for the source-then-pause-then-take comparison sequence) — both framework-free, unit-tested directly.
+  - `infrastructure/media/recording.py`: `list_audio_input_devices()` and `RecordingController` (a narrow adapter around `QMediaCaptureSession`/`QAudioInput`/`QMediaRecorder`, always recording WAV), mirroring `PlaybackController`'s role for playback. `PlaybackController` gained `unload()` (see the real-microphone bug below).
+  - `application/services/recording_service.py`: ownership validation (a recording's cue must belong to its material; an optional practice session must belong to the same material — both derived/checked, never trusted from caller input), the single-active-recording rule (checked against the whole database, not just one window), `begin_recording`/`finish_recording`/`fail_recording` (a take is validated — non-empty, parses as WAV, positive duration — before ever being marked `ready`; an invalid or aborted capture is marked `failed` and its file removed, never left as a normal playable take), device resolution that never silently substitutes a missing saved device for a different one, single/cue-wide/material-wide deletion (a file that fails to delete leaves its database row intact rather than falsely reporting success), and `recover_interrupted_recordings` (run once at startup to clean up any row left `recording` by a crash or forced close).
+  - `ui/widgets/recording_panel.py` (new): the one recording UI — device selection, start/stop, the take list for one cue, take playback, source-vs-take comparison, single/cue-wide deletion — embedded identically into both `GuidedSessionWindow` Stage 4 and the new standalone `ui/windows/shadowing_practice_window.py`; neither builds its own recording system. `ui/windows/main_window.py`: new **Shadowing Practice** entry point; `remove_material` now also deletes a material's recording files before the database cascade removes their rows.
+  - Comparison sequencing plays the source cue once (reusing the host's existing `PlayerSession.replay_cue`, the same mechanism as the ordinary Replay Cue button), waits briefly, then plays the take on the panel's own separate `PlaybackController` — the two audio streams are never mixed.
+  - **67 new automated tests** (7 domain recording-rules, 6 domain comparison-sequence, 29 recording-service integration covering ownership/lifecycle/device-resolution/deletion/recovery, 1 new migration test, 9 new UI smoke covering MainWindow/ShadowingPracticeWindow/RecordingPanel/GuidedSessionWindow-Stage4-non-interference/material-removal-file-cleanup) on top of the prior 307 — **359 total, all passing**, including in a separate clean virtual environment outside the working tree.
+  - **Manual smoke test**: a script driving the real `ShadowingPracticeWindow`/`RecordingPanel` classes against a real Windows microphone (not a synthetic file) — device enumeration and preselection, record, stop, replay a take, run a full source-then-take comparison, close and reopen the window to confirm the take survives, and delete it — all passed after one real bug was found and fixed (below).
+  - **One real bug found and fixed during the real-microphone smoke test** (not reachable by any synthetic-file automated test): a stopped `QMediaPlayer` still holds its source file locked on Windows, so playing a take and then deleting that same take shortly after could fail with `file_deletion_failed` even though nothing was actually still playing. Fixed with `PlaybackController.unload()` (stops and clears the source, actually releasing the OS-level lock), called by `RecordingPanel` before every delete action, when a take finishes or errors, on cue-context switches, and from both host windows' `closeEvent`. A synthetic-file regression test was added afterward to lock in the fix in the automated suite.
+  - Confirmed zero PySide6 imports remain in `domain/` or `application/` — all Milestone 7 lifecycle/ownership/deletion/comparison logic is framework-free; only `ui/` and `infrastructure/media/` reference Qt.
 
 ### Manual smoke steps verified
 
@@ -99,15 +111,14 @@ Launch and open a valid material; confirm Milestone 3 playback still works; sele
 
 ## Planned Next Work
 
-- Milestone 7 — Shadowing and Local Recording (see `ROADMAP.md`)
+- Milestone 8 — Learning History and Analytics (see `ROADMAP.md`)
 
 ## Known Risks
 
-- Multimedia behavior can vary across operating systems and codec availability; only Windows has been verified.
+- Multimedia behavior can vary across operating systems and codec availability; only Windows has been verified — this now applies to microphone/audio-input capture as well as playback, and was verified against three real physical devices in one environment only.
 - Subtitle timing quality varies by source.
-- Large media files should not be copied or committed accidentally.
+- Large media files should not be copied or committed accidentally; the same applies to recording files, which are excluded from Git the same way source media already is.
 - Plain-text transcripts do not support reliable synchronized navigation without timing data.
-- Recording support introduces permissions, device-selection, and local-storage concerns (relevant starting Milestone 7 — no microphone access exists yet).
 - The duplicate-detection fingerprint (material import) samples only the start/end of large files, not a full-file hash — a deliberate performance tradeoff.
 - Loop/replay boundary detection depends on a fixed 50ms tolerance tuned against QtMultimedia's observed position-update cadence in this environment.
 - After any annotation/note/saved-item/keyword-capture/session-diagnosis Save, Update, or Delete action, the corresponding list widget loses its selection (the form clears); the user must reselect a row to continue editing it. A minor UX rough edge, not a correctness issue.
@@ -115,16 +126,19 @@ Launch and open a valid material; confirm Milestone 3 playback still works; sele
 - The transcript-reveal auto-resolution of Stages 1/2 (see Architecture) is a documented design decision to avoid a permanently-stuck stage, but it does mean a learner who reveals the transcript without deliberately finishing Stage 1/2 first gets an automatic skip rather than a prompt to go back.
 - Review Quiz always generates only the Review-Missed-Cue question type (never Dictation/Keyword-Recognition/Audio-Transcript-Choice), and Material Quiz never draws on session-scoped `SessionDiagnosisEvidence` directly — only material-level `Annotation` rows. This is a documented design decision (see Architecture), not an oversight: it resolves an ambiguity in how the milestone's four question types map onto its two quiz modes.
 - Quiz question generation targets are capped at one question per cue (Material Quiz) or one per qualifying annotation (Review Quiz) within a single attempt — a material can support more questions than one quiz attempt will ever contain; a learner wanting deeper coverage starts additional attempts.
+- If a recording file cannot be deleted during material removal (e.g. locked by another process at that exact moment), the material and its database records are still removed — the orphaned file remains on disk undetected. Deliberately not blocking material removal on this rare case; see Architecture.
+- Recording generation targets no format, quality, or compression options beyond fixed WAV — by design (see Architecture/Product Spec scope boundary), not an oversight.
 
 ## Unknown or Unverified
 
-- Behavior on macOS and Linux (only Windows has been available so far)
+- Behavior on macOS and Linux (only Windows has been available so far), including microphone/audio-input device enumeration and capture
 - Playback across the broader range of real-world codecs/containers beyond the one verified H.264/MP4 configuration and uncompressed WAV audio
+- Recording behavior with audio-input devices beyond the three real ones available in the one verified environment (e.g. USB devices that appear/disappear at runtime, exclusive-mode conflicts with other running applications)
 - Packaging method
 - Continuous-integration configuration
 - Behavior with very large media libraries, very large subtitle tracks, or a very large number of annotations/saved items/session records on one cue or material
-- Behavior with a very large number of prior sessions in Session History, or prior quiz attempts in Quiz History, for one material (no pagination implemented in either)
+- Behavior with a very large number of prior sessions in Session History, prior quiz attempts in Quiz History, or prior takes for one cue/material (no pagination implemented anywhere)
 
 ## Next Engineering Objective
 
-Begin Milestone 7 — Shadowing and Local Recording: cue-by-cue shadowing mode, optional microphone recording, local playback of learner recordings, manual source/learner audio comparison, recording retention and deletion controls, and clear microphone permission and privacy messages, built on the verified sentence navigation and local-storage boundaries from Milestones 3–6, per `ROADMAP.md`.
+Begin Milestone 8 — Learning History and Analytics: material and session completion history, practice time where reliably measurable, annotation-category trends, quiz performance trends, repeat-attempt comparisons, difficult materials and frequently recurring error categories, and filters by language/date range/material — reporting only metrics genuinely supported by the stored evidence from Milestones 3–7, per `ROADMAP.md`.

@@ -258,6 +258,32 @@ MIGRATIONS: list[tuple[int, str]] = [
         );
         """,
     ),
+    (
+        7,
+        """
+        CREATE TABLE recording (
+            id INTEGER PRIMARY KEY,
+            material_id INTEGER NOT NULL REFERENCES material(id) ON DELETE CASCADE,
+            subtitle_cue_id INTEGER NOT NULL REFERENCES subtitle_cue(id) ON DELETE CASCADE,
+            practice_session_id INTEGER REFERENCES practice_session(id) ON DELETE SET NULL,
+            relative_file_path TEXT NOT NULL UNIQUE,
+            format TEXT NOT NULL DEFAULT 'wav',
+            duration_ms INTEGER,
+            device_descriptor TEXT,
+            status TEXT NOT NULL DEFAULT 'recording',
+            failure_detail TEXT,
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+
+        CREATE TABLE microphone_preference (
+            id INTEGER PRIMARY KEY CHECK (id = 1),
+            device_id TEXT NOT NULL,
+            device_description TEXT NOT NULL,
+            updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        """,
+    ),
 ]
 
 
