@@ -391,15 +391,50 @@ def list_recording_evidence(
 
 
 def chart_quiz_accuracy_over_time(
-    conn: sqlite3.Connection, material_id: int | None, resolved_range: date_range_rules.ResolvedDateRange
+    conn: sqlite3.Connection,
+    material_id: int | None,
+    resolved_range: date_range_rules.ResolvedDateRange,
+    group_material_id: int | None = None,
+    quiz_mode: str | None = None,
 ) -> ChartData:
-    entries = list_quiz_history(conn, material_id, resolved_range)
-    entries_oldest_first = list(reversed(entries))
+    """One (material, quiz mode) trend at a time — attempts from different
+    materials or different quiz modes are never combined into a single
+    series (mirroring `list_quiz_comparisons`'s own grouping, which is the
+    exact data this reads: no separate query, so the chart and the Quiz
+    Comparison tree can never show different groupings of the same data).
+
+    `group_material_id`/`quiz_mode` select which group to chart; if neither
+    is given (or the requested group doesn't exist in scope), this falls
+    back to the first available group deterministically rather than ever
+    mixing groups together. Each point's label includes the attempt's
+    question count (`actual_count`) alongside its date, since different
+    attempts may have different sizes."""
+    groups = list_quiz_comparisons(conn, material_id, resolved_range)
+    if not groups:
+        return ChartData(title="Quiz attempt accuracy over time (%)", points=[])
+
+    selected_group = None
+    if group_material_id is not None or quiz_mode is not None:
+        selected_group = next(
+            (
+                g
+                for g in groups
+                if (group_material_id is None or g.material_id == group_material_id)
+                and (quiz_mode is None or g.quiz_mode == quiz_mode)
+            ),
+            None,
+        )
+    group = selected_group or groups[0]
+
     points = [
-        ChartPoint(label=f"{e.completed_at or e.started_at} ({e.material_title})", value=round((e.accuracy or 0.0) * 100, 1))
-        for e in entries_oldest_first
+        ChartPoint(
+            label=f"{e.completed_at or e.started_at} (n={e.actual_count})",
+            value=round((e.accuracy or 0.0) * 100, 1),
+        )
+        for e in group.entries
     ]
-    return ChartData(title="Quiz attempt accuracy over time (%)", points=points)
+    title = f"Quiz attempt accuracy over time (%) — {group.material_title} / {group.quiz_mode}"
+    return ChartData(title=title, points=points)
 
 
 def chart_diagnosis_category_frequency(

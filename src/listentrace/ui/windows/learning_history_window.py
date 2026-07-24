@@ -513,9 +513,18 @@ class LearningHistoryWindow(QMainWindow):
         self._quiz_history_list.itemDoubleClicked.connect(self._on_quiz_history_double_clicked)
         layout.addWidget(self._quiz_history_list, 1)
 
-        layout.addWidget(QLabel("Attempt Performance over time (accuracy %):"))
+        trend_row = QHBoxLayout()
+        trend_row.addWidget(QLabel("Attempt Performance trend — one material/mode group at a time:"))
+        self._quiz_trend_group_combo = QComboBox()
+        self._quiz_trend_group_combo.currentIndexChanged.connect(self._on_quiz_trend_group_changed)
+        trend_row.addWidget(self._quiz_trend_group_combo, 1)
+        layout.addLayout(trend_row)
+
         self._quiz_chart = SimpleBarChart()
         layout.addWidget(self._quiz_chart)
+        self._quiz_chart_table = QListWidget()
+        self._quiz_chart_table.setMaximumHeight(100)
+        layout.addWidget(self._quiz_chart_table)
 
         layout.addWidget(QLabel("Quiz Comparison — grouped by material and mode (never combined across either):"))
         self._quiz_comparison_tree = QTreeWidget()
@@ -546,17 +555,18 @@ class LearningHistoryWindow(QMainWindow):
             empty.setFlags(Qt.ItemFlag.NoItemFlags)
             self._quiz_history_list.addItem(empty)
 
-        chart_data = history_svc.chart_quiz_accuracy_over_time(conn, material_id, resolved_range)
-        self._quiz_chart.set_data(chart_data)
+        # Quiz Comparison and the trend chart below both derive from this one
+        # grouped-by-(material, mode) query — never two separately-fetched
+        # groupings that could drift apart.
+        self._quiz_comparison_groups = history_svc.list_quiz_comparisons(conn, material_id, resolved_range)
 
-        groups = history_svc.list_quiz_comparisons(conn, material_id, resolved_range)
         self._quiz_comparison_tree.clear()
-        for group in groups:
+        for group in self._quiz_comparison_groups:
             group_item = QTreeWidgetItem([f"{group.material_title} — {group.quiz_mode}", "", ""])
             for entry in group.entries:
                 child = QTreeWidgetItem(
                     [
-                        entry.completed_at or entry.started_at,
+                        f"{entry.completed_at or entry.started_at} (n={entry.actual_count})",
                         f"{entry.correct_count}/{entry.actual_count}",
                         _format_accuracy(entry.accuracy),
                     ]
@@ -564,6 +574,44 @@ class LearningHistoryWindow(QMainWindow):
                 group_item.addChild(child)
             self._quiz_comparison_tree.addTopLevelItem(group_item)
         self._quiz_comparison_tree.expandAll()
+
+        previous_key = self._quiz_trend_group_combo.currentData()
+        self._quiz_trend_group_combo.blockSignals(True)
+        self._quiz_trend_group_combo.clear()
+        select_index = 0
+        for index, group in enumerate(self._quiz_comparison_groups):
+            key = (group.material_id, group.quiz_mode)
+            self._quiz_trend_group_combo.addItem(f"{group.material_title} — {group.quiz_mode}", key)
+            if key == previous_key:
+                select_index = index
+        if self._quiz_comparison_groups:
+            self._quiz_trend_group_combo.setCurrentIndex(select_index)
+        self._quiz_trend_group_combo.blockSignals(False)
+
+        self._render_quiz_trend_chart(conn, material_id, resolved_range)
+
+    def _render_quiz_trend_chart(
+        self, conn: sqlite3.Connection, material_id: int | None, resolved_range: date_range_rules.ResolvedDateRange
+    ) -> None:
+        key = self._quiz_trend_group_combo.currentData()
+        group_material_id, quiz_mode = key if key is not None else (None, None)
+        chart_data = history_svc.chart_quiz_accuracy_over_time(
+            conn, material_id, resolved_range, group_material_id=group_material_id, quiz_mode=quiz_mode
+        )
+        self._quiz_chart.set_data(chart_data)
+        self._quiz_chart_table.clear()
+        for point in chart_data.points:
+            self._quiz_chart_table.addItem(f"{point.label}: {point.value}%")
+        if not chart_data.points:
+            empty = QListWidgetItem("No completed attempts in this material/mode group for the selected filters.")
+            empty.setFlags(Qt.ItemFlag.NoItemFlags)
+            self._quiz_chart_table.addItem(empty)
+
+    def _on_quiz_trend_group_changed(self, *_args) -> None:
+        resolved_range = self._resolve_current_range()
+        if resolved_range is None:
+            return
+        self._render_quiz_trend_chart(self._connection, self._selected_material_id(), resolved_range)
 
     def _on_quiz_history_double_clicked(self, item: QListWidgetItem) -> None:
         attempt_id = item.data(Qt.ItemDataRole.UserRole)

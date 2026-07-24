@@ -32,6 +32,50 @@ def _append_range(conditions: list[str], params: list, column: str, start_utc: s
         params.append(end_utc)
 
 
+# ---- combined activity feed (defined early: also reused by "materials
+# practiced" below, so the two can never drift apart on which events count
+# or which timestamp anchors each one) ----
+
+_ACTIVITY_UNION_SQL = """
+    SELECT 'session' AS activity_type,
+           COALESCE(ps.completed_at, ps.abandoned_at, ps.last_resumed_at) AS occurred_at,
+           ps.material_id AS material_id, m.title AS material_title,
+           ps.id AS ref_id, NULL AS subtitle_cue_id, NULL AS label_key,
+           ps.status AS status, NULL AS quiz_mode, NULL AS session_id
+    FROM practice_session ps JOIN material m ON m.id = ps.material_id
+
+    UNION ALL
+
+    SELECT 'quiz', COALESCE(qa.completed_at, qa.abandoned_at, qa.last_resumed_at),
+           qa.material_id, m.title, qa.id, NULL, NULL, qa.status, qa.quiz_mode, NULL
+    FROM quiz_attempt qa JOIN material m ON m.id = qa.material_id
+
+    UNION ALL
+
+    SELECT 'diagnosis', sde.created_at, ps.material_id, m.title,
+           sde.id, sde.subtitle_cue_id, sde.label_key, NULL, NULL, ps.id
+    FROM session_diagnosis_evidence sde
+    JOIN practice_session ps ON ps.id = sde.practice_session_id
+    JOIN material m ON m.id = ps.material_id
+
+    UNION ALL
+
+    SELECT 'shadowing', scp.last_practiced_at, ps.material_id, m.title,
+           ps.id, scp.subtitle_cue_id, NULL, scp.status, NULL, ps.id
+    FROM shadowing_cue_progress scp
+    JOIN practice_session ps ON ps.id = scp.practice_session_id
+    JOIN material m ON m.id = ps.material_id
+    WHERE scp.practice_count > 0
+
+    UNION ALL
+
+    SELECT 'recording', r.created_at, r.material_id, m.title,
+           r.id, r.subtitle_cue_id, NULL, r.status, NULL, r.practice_session_id
+    FROM recording r JOIN material m ON m.id = r.material_id
+    WHERE r.status = 'ready'
+"""
+
+
 # ---- materials ----
 
 
@@ -49,25 +93,25 @@ def count_materials_with_any_activity(
     start_utc: str | None = None,
     end_utc: str | None = None,
 ) -> int:
-    """"Materials practiced": distinct materials with at least one intensive
-    practice session, quiz attempt, or ready recording whose own anchor
-    timestamp (`started_at`/`started_at`/`created_at` respectively) falls in
-    [start_utc, end_utc). Passing `material_id` narrows this to a 0/1 check
-    for that one material (used by the drilldown view for consistency)."""
+    """"Materials practiced": distinct materials with at least one qualifying
+    piece of learning evidence — a session or quiz attempt (anchored on its
+    own `COALESCE(completed_at, abandoned_at, last_resumed_at)`), a session
+    diagnosis (`created_at`), explicit shadowing practice (`last_practiced_at`,
+    `practice_count > 0` only), or a retained recording (`created_at`,
+    `status = 'ready'` only) — inside [start_utc, end_utc). This reuses the
+    exact same event set and per-type date anchors as the combined Activity
+    feed (`_ACTIVITY_UNION_SQL`), so the two can never drift apart on what
+    counts as "practiced" or which timestamp anchors each event. Passing
+    `material_id` narrows this to a 0/1 check for that one material (used by
+    the drilldown view for consistency)."""
     conditions: list[str] = ["1 = 1"]
     params: list = []
     if material_id is not None:
         conditions.append("material_id = ?")
         params.append(material_id)
-    _append_range(conditions, params, "ts", start_utc, end_utc)
+    _append_range(conditions, params, "occurred_at", start_utc, end_utc)
     sql = f"""
-        SELECT COUNT(DISTINCT material_id) AS n FROM (
-            SELECT material_id, started_at AS ts FROM practice_session
-            UNION ALL
-            SELECT material_id, started_at AS ts FROM quiz_attempt
-            UNION ALL
-            SELECT material_id, created_at AS ts FROM recording WHERE status = 'ready'
-        )
+        SELECT COUNT(DISTINCT material_id) AS n FROM ({_ACTIVITY_UNION_SQL}) AS activity
         WHERE {" AND ".join(conditions)}
     """
     row = conn.execute(sql, params).fetchone()
@@ -488,45 +532,6 @@ def count_session_diagnosis_evidence(
 
 
 # ---- combined activity feed ----
-
-_ACTIVITY_UNION_SQL = """
-    SELECT 'session' AS activity_type,
-           COALESCE(ps.completed_at, ps.abandoned_at, ps.last_resumed_at) AS occurred_at,
-           ps.material_id AS material_id, m.title AS material_title,
-           ps.id AS ref_id, NULL AS subtitle_cue_id, NULL AS label_key,
-           ps.status AS status, NULL AS quiz_mode, NULL AS session_id
-    FROM practice_session ps JOIN material m ON m.id = ps.material_id
-
-    UNION ALL
-
-    SELECT 'quiz', COALESCE(qa.completed_at, qa.abandoned_at, qa.last_resumed_at),
-           qa.material_id, m.title, qa.id, NULL, NULL, qa.status, qa.quiz_mode, NULL
-    FROM quiz_attempt qa JOIN material m ON m.id = qa.material_id
-
-    UNION ALL
-
-    SELECT 'diagnosis', sde.created_at, ps.material_id, m.title,
-           sde.id, sde.subtitle_cue_id, sde.label_key, NULL, NULL, ps.id
-    FROM session_diagnosis_evidence sde
-    JOIN practice_session ps ON ps.id = sde.practice_session_id
-    JOIN material m ON m.id = ps.material_id
-
-    UNION ALL
-
-    SELECT 'shadowing', scp.last_practiced_at, ps.material_id, m.title,
-           ps.id, scp.subtitle_cue_id, NULL, scp.status, NULL, ps.id
-    FROM shadowing_cue_progress scp
-    JOIN practice_session ps ON ps.id = scp.practice_session_id
-    JOIN material m ON m.id = ps.material_id
-    WHERE scp.practice_count > 0
-
-    UNION ALL
-
-    SELECT 'recording', r.created_at, r.material_id, m.title,
-           r.id, r.subtitle_cue_id, NULL, r.status, NULL, r.practice_session_id
-    FROM recording r JOIN material m ON m.id = r.material_id
-    WHERE r.status = 'ready'
-"""
 
 
 def list_activity(

@@ -241,6 +241,48 @@ def test_activity_type_filter_hides_unchecked_types(qapp, tmp_path):
     window.close()
 
 
+def test_quiz_trend_group_selector_never_mixes_materials_or_modes(qapp, tmp_path):
+    connection = open_connection(tmp_path / "smoke.db")
+    migrate(connection)
+    material_a, cues_a = _make_material_with_cues(connection, tmp_path, title="A")
+    material_b, cues_b = _make_material_with_cues(connection, tmp_path, title="B")
+
+    def _make_completed_attempt(material_id, cue_id, correct, actual, quiz_mode="material"):
+        attempt = QuizAttempt(material_id=material_id, quiz_mode=quiz_mode, requested_count=actual)
+        question = QuizQuestion(
+            question_type="dictation",
+            subtitle_cue_id=cue_id,
+            source_cue_text="Bonjour",
+            prompt_payload="{}",
+            correct_answer_payload="{}",
+            scoring_config='{"rule": "normalized_text_exact", "version": 1}',
+        )
+        attempt_id, _ = quiz_repository.create_quiz_attempt_with_questions(connection, attempt, [question] * actual)
+        quiz_repository.finalize_quiz_score(connection, attempt_id, correct)
+        connection.commit()
+        return attempt_id
+
+    _make_completed_attempt(material_a, cues_a[0].id, 1, 4, quiz_mode="material")
+    _make_completed_attempt(material_a, cues_a[0].id, 3, 4, quiz_mode="review")
+    _make_completed_attempt(material_b, cues_b[0].id, 2, 4, quiz_mode="material")
+
+    window = LearningHistoryWindow(connection, tmp_path / "recordings")
+    # Three distinct (material, mode) groups were seeded; the combo must
+    # offer all three rather than silently collapsing any of them.
+    assert window._quiz_trend_group_combo.count() == 3
+
+    seen_point_counts = set()
+    for index in range(window._quiz_trend_group_combo.count()):
+        window._quiz_trend_group_combo.setCurrentIndex(index)
+        # Every group here has exactly one completed attempt, so a mixed
+        # series (more than one point) would indicate two groups were
+        # combined.
+        assert window._quiz_chart._data is not None
+        seen_point_counts.add(len(window._quiz_chart._data.points))
+    assert seen_point_counts == {1}
+    window.close()
+
+
 def test_quiz_history_double_click_opens_review_dialog(qapp, tmp_path, monkeypatch):
     connection = open_connection(tmp_path / "smoke.db")
     migrate(connection)

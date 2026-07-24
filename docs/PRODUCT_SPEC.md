@@ -253,9 +253,13 @@ or an ability score (see the Milestone 8 subsection below).
   `session_diagnosis_evidence` frequency/recurrence, kept in a visibly
   separate section from the material's *current*, editable `Annotation`
   state — the two counts are never added together), **Quizzes** (completed-
-  attempt history with per-question-type breakdown when available, plus
-  comparisons grouped strictly by material and quiz mode — never across
-  either), and **Shadowing & Recordings** (cumulative explicit practice
+  attempt history with per-question-type breakdown when available, an
+  accuracy-over-time trend chart for one selectable material-and-mode group
+  at a time with its question count shown per attempt, plus a comparison
+  view grouped strictly by material and quiz mode — the trend chart and the
+  comparison view read the same grouped data, so attempts from different
+  materials or modes are never combined into one series in either), and
+  **Shadowing & Recordings** (cumulative explicit practice
   counts and high-frequency cues; retained — `ready` status only — recording
   totals and durations; deleted recordings are excluded from every total).
 - A **Needs Attention** list gives each flagged material transparent,

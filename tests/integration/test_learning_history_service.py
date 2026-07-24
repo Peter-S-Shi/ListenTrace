@@ -72,8 +72,10 @@ def _touch_session_timestamp(conn, session_id, column, value):
     conn.commit()
 
 
-def _make_quiz_attempt(conn, material_id, status="completed", correct=3, actual=4, started_at=None, completed_at=None):
-    attempt = QuizAttempt(material_id=material_id, requested_count=actual)
+def _make_quiz_attempt(
+    conn, material_id, status="completed", correct=3, actual=4, started_at=None, completed_at=None, quiz_mode="material"
+):
+    attempt = QuizAttempt(material_id=material_id, quiz_mode=quiz_mode, requested_count=actual)
     question = QuizQuestion(
         question_type="dictation",
         subtitle_cue_id=1,
@@ -221,6 +223,75 @@ def test_all_time_includes_everything_regardless_of_timestamp(conn, all_time_ran
     assert overview.completed_sessions == 1
 
 
+# ---- materials practiced: date-anchor consistency with Activity ----
+
+
+def test_materials_practiced_counts_a_session_completed_inside_the_range_even_if_started_outside(
+    conn, recent_range
+):
+    material_id, _ = _make_material_with_cues(conn)
+    session_id = _make_session(conn, material_id, status="completed", started_at=_OLD_TIMESTAMP)
+    _touch_session_timestamp(conn, session_id, "completed_at", recent_range.start_utc)
+
+    overview = svc.get_overview(conn, None, recent_range)
+    assert overview.materials_practiced == 1
+
+
+def test_materials_practiced_counts_a_quiz_completed_inside_the_range_even_if_started_outside(conn, recent_range):
+    material_id, _ = _make_material_with_cues(conn)
+    _make_quiz_attempt(
+        conn,
+        material_id,
+        status="completed",
+        correct=1,
+        actual=4,
+        started_at=_OLD_TIMESTAMP,
+        completed_at=recent_range.start_utc,
+    )
+
+    overview = svc.get_overview(conn, None, recent_range)
+    assert overview.materials_practiced == 1
+
+
+def test_materials_practiced_counts_diagnosis_only_qualifying_activity(conn, recent_range):
+    material_id, cues = _make_material_with_cues(conn)
+    # The owning session itself is old/unqualifying on its own — only the
+    # diagnosis event's own created_at falls inside the range.
+    session_id = _make_session(conn, material_id, status="active", started_at=_OLD_TIMESTAMP)
+    _touch_session_timestamp(conn, session_id, "last_resumed_at", _OLD_TIMESTAMP)
+    _make_diagnosis(conn, session_id, cues[0].id, created_at=recent_range.start_utc)
+
+    overview = svc.get_overview(conn, None, recent_range)
+    assert overview.materials_practiced == 1
+
+
+def test_materials_practiced_counts_shadowing_only_qualifying_activity(conn, recent_range):
+    material_id, cues = _make_material_with_cues(conn)
+    session_id = _make_session(conn, material_id, status="active", started_at=_OLD_TIMESTAMP)
+    _touch_session_timestamp(conn, session_id, "last_resumed_at", _OLD_TIMESTAMP)
+    session_repository.ensure_shadowing_rows(conn, session_id, [c.id for c in cues])
+    session_repository.mark_shadowing_practiced(conn, session_id, cues[0].id)
+    conn.execute(
+        "UPDATE shadowing_cue_progress SET last_practiced_at = ? "
+        "WHERE practice_session_id = ? AND subtitle_cue_id = ?",
+        (recent_range.start_utc, session_id, cues[0].id),
+    )
+    conn.commit()
+
+    overview = svc.get_overview(conn, None, recent_range)
+    assert overview.materials_practiced == 1
+
+
+def test_materials_practiced_excludes_a_material_with_only_out_of_range_evidence(conn, recent_range):
+    material_id, cues = _make_material_with_cues(conn)
+    session_id = _make_session(conn, material_id, status="active", started_at=_OLD_TIMESTAMP)
+    _touch_session_timestamp(conn, session_id, "last_resumed_at", _OLD_TIMESTAMP)
+    _make_diagnosis(conn, session_id, cues[0].id, created_at=_OLD_TIMESTAMP)
+
+    overview = svc.get_overview(conn, None, recent_range)
+    assert overview.materials_practiced == 0
+
+
 # ---- material filtering ----
 
 
@@ -349,6 +420,96 @@ def test_quiz_comparisons_group_by_material_and_mode_only(conn, all_time_range):
     # oldest-first within a group
     accuracies = [e.accuracy for e in keyed[(material_a, "material")].entries]
     assert accuracies == pytest.approx([0.25, 0.5])
+
+
+# ---- quiz trend chart: grouped by material and mode, never mixed ----
+
+
+def test_quiz_trend_chart_separates_different_materials_into_different_groups(conn, all_time_range):
+    material_a, _ = _make_material_with_cues(conn, title="A")
+    material_b, _ = _make_material_with_cues(conn, title="B")
+    _make_quiz_attempt(conn, material_a, status="completed", correct=1, actual=4)
+    _make_quiz_attempt(conn, material_b, status="completed", correct=3, actual=4)
+
+    chart_a = svc.chart_quiz_accuracy_over_time(conn, None, all_time_range, group_material_id=material_a, quiz_mode="material")
+    chart_b = svc.chart_quiz_accuracy_over_time(conn, None, all_time_range, group_material_id=material_b, quiz_mode="material")
+
+    assert len(chart_a.points) == 1
+    assert len(chart_b.points) == 1
+    assert chart_a.points[0].value == pytest.approx(25.0)
+    assert chart_b.points[0].value == pytest.approx(75.0)
+    assert chart_a.title != chart_b.title
+
+
+def test_quiz_trend_chart_separates_different_quiz_modes_into_different_groups(conn, all_time_range):
+    material_id, cues = _make_material_with_cues(conn)
+    session_id = session_repository.create_practice_session(conn, material_id)
+    _make_diagnosis(conn, session_id, cues[0].id)
+    _make_quiz_attempt(conn, material_id, status="completed", correct=1, actual=4, quiz_mode="material")
+    _make_quiz_attempt(conn, material_id, status="completed", correct=3, actual=4, quiz_mode="review")
+
+    material_chart = svc.chart_quiz_accuracy_over_time(
+        conn, None, all_time_range, group_material_id=material_id, quiz_mode="material"
+    )
+    review_chart = svc.chart_quiz_accuracy_over_time(
+        conn, None, all_time_range, group_material_id=material_id, quiz_mode="review"
+    )
+
+    assert len(material_chart.points) == 1
+    assert len(review_chart.points) == 1
+    assert material_chart.points[0].value == pytest.approx(25.0)
+    assert review_chart.points[0].value == pytest.approx(75.0)
+
+
+def test_quiz_trend_chart_preserves_chronological_order_within_a_group(conn, all_time_range):
+    material_id, _ = _make_material_with_cues(conn)
+    _make_quiz_attempt(conn, material_id, status="completed", correct=1, actual=4, completed_at="2026-01-01 00:00:00")
+    _make_quiz_attempt(conn, material_id, status="completed", correct=2, actual=4, completed_at="2026-02-01 00:00:00")
+    _make_quiz_attempt(conn, material_id, status="completed", correct=3, actual=4, completed_at="2026-03-01 00:00:00")
+
+    chart = svc.chart_quiz_accuracy_over_time(
+        conn, None, all_time_range, group_material_id=material_id, quiz_mode="material"
+    )
+    values = [p.value for p in chart.points]
+    assert values == pytest.approx([25.0, 50.0, 75.0])
+
+
+def test_quiz_trend_chart_never_mixes_materials_or_modes_into_one_series(conn, all_time_range):
+    material_a, _ = _make_material_with_cues(conn, title="A")
+    material_b, _ = _make_material_with_cues(conn, title="B")
+    _make_quiz_attempt(conn, material_a, status="completed", correct=1, actual=4, quiz_mode="material")
+    _make_quiz_attempt(conn, material_a, status="completed", correct=1, actual=4, quiz_mode="review")
+    _make_quiz_attempt(conn, material_b, status="completed", correct=1, actual=4, quiz_mode="material")
+
+    # No selector at all still yields exactly one group's worth of points,
+    # never every attempt across every material/mode combined together.
+    chart = svc.chart_quiz_accuracy_over_time(conn, None, all_time_range)
+    assert len(chart.points) == 1
+
+    # Every point in every possible group individually also never exceeds
+    # that group's own attempt count.
+    for group in svc.list_quiz_comparisons(conn, None, all_time_range):
+        group_chart = svc.chart_quiz_accuracy_over_time(
+            conn, None, all_time_range, group_material_id=group.material_id, quiz_mode=group.quiz_mode
+        )
+        assert len(group_chart.points) == len(group.entries)
+
+
+def test_quiz_trend_chart_shows_question_count_alongside_each_attempt(conn, all_time_range):
+    material_id, _ = _make_material_with_cues(conn)
+    _make_quiz_attempt(conn, material_id, status="completed", correct=1, actual=4)
+    _make_quiz_attempt(conn, material_id, status="completed", correct=3, actual=10)
+
+    chart = svc.chart_quiz_accuracy_over_time(
+        conn, None, all_time_range, group_material_id=material_id, quiz_mode="material"
+    )
+    assert any("n=4" in p.label for p in chart.points)
+    assert any("n=10" in p.label for p in chart.points)
+
+
+def test_quiz_trend_chart_is_empty_when_no_completed_quizzes_exist(conn, all_time_range):
+    chart = svc.chart_quiz_accuracy_over_time(conn, None, all_time_range)
+    assert chart.points == []
 
 
 # ---- shadowing ----
