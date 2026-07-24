@@ -110,6 +110,92 @@ MIGRATIONS: list[tuple[int, str]] = [
             ('unknown_word_or_chunk', '#059669');
         """,
     ),
+    (
+        4,
+        """
+        CREATE TABLE practice_session (
+            id INTEGER PRIMARY KEY,
+            material_id INTEGER NOT NULL REFERENCES material(id) ON DELETE CASCADE,
+            mode TEXT NOT NULL DEFAULT 'intensive',
+            status TEXT NOT NULL DEFAULT 'active',
+            current_stage TEXT NOT NULL DEFAULT 'global_comprehension',
+            transcript_revealed_at TEXT,
+            started_at TEXT NOT NULL DEFAULT (datetime('now')),
+            updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+            last_resumed_at TEXT NOT NULL DEFAULT (datetime('now')),
+            completed_at TEXT,
+            abandoned_at TEXT
+        );
+
+        -- Enforces "at most one active intensive session per material" at the
+        -- database level, not just in application code.
+        CREATE UNIQUE INDEX idx_practice_session_one_active_per_material
+            ON practice_session(material_id)
+            WHERE status = 'active' AND mode = 'intensive';
+
+        CREATE TABLE session_stage_progress (
+            practice_session_id INTEGER NOT NULL REFERENCES practice_session(id) ON DELETE CASCADE,
+            stage_key TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'not_started',
+            outcome_key TEXT,
+            skip_note TEXT,
+            started_at TEXT,
+            completed_at TEXT,
+            skipped_at TEXT,
+            updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+            PRIMARY KEY (practice_session_id, stage_key)
+        );
+
+        CREATE TABLE stage_response (
+            id INTEGER PRIMARY KEY,
+            practice_session_id INTEGER NOT NULL REFERENCES practice_session(id) ON DELETE CASCADE,
+            stage_key TEXT NOT NULL,
+            prompt_key TEXT NOT NULL,
+            response_text TEXT NOT NULL DEFAULT '',
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+            UNIQUE (practice_session_id, stage_key, prompt_key)
+        );
+
+        CREATE TABLE keyword_capture (
+            id INTEGER PRIMARY KEY,
+            practice_session_id INTEGER NOT NULL REFERENCES practice_session(id) ON DELETE CASCADE,
+            capture_type TEXT NOT NULL,
+            text TEXT NOT NULL,
+            position INTEGER NOT NULL,
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+
+        CREATE TABLE session_diagnosis_evidence (
+            id INTEGER PRIMARY KEY,
+            practice_session_id INTEGER NOT NULL REFERENCES practice_session(id) ON DELETE CASCADE,
+            subtitle_cue_id INTEGER NOT NULL REFERENCES subtitle_cue(id) ON DELETE CASCADE,
+            annotation_id INTEGER REFERENCES annotation(id) ON DELETE SET NULL,
+            label_key TEXT NOT NULL,
+            selected_text TEXT NOT NULL,
+            selection_start INTEGER NOT NULL,
+            selection_end INTEGER NOT NULL,
+            heard_as TEXT,
+            note TEXT,
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+            UNIQUE (practice_session_id, subtitle_cue_id, label_key, selection_start, selection_end),
+            CHECK (selection_end >= selection_start)
+        );
+
+        CREATE TABLE shadowing_cue_progress (
+            practice_session_id INTEGER NOT NULL REFERENCES practice_session(id) ON DELETE CASCADE,
+            subtitle_cue_id INTEGER NOT NULL REFERENCES subtitle_cue(id) ON DELETE CASCADE,
+            status TEXT NOT NULL DEFAULT 'not_started',
+            practice_count INTEGER NOT NULL DEFAULT 0,
+            note TEXT,
+            last_practiced_at TEXT,
+            updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+            PRIMARY KEY (practice_session_id, subtitle_cue_id)
+        );
+        """,
+    ),
 ]
 
 

@@ -2,14 +2,14 @@
 
 This document defines the first domain direction. It is not a frozen database schema.
 
-**Status (through Milestone 4)**: `Material`, `SubtitleTrack`, `SubtitleCue`, `Annotation`, `CueNote`, `SavedLanguageItem`, and `AnnotationLabelPreference` are implemented as actual SQLite tables (schema version 3). Migration 2 added `Material.normalized_path`; migration 3 (Milestone 4, additive, no data loss) added the four learning-evidence tables — see their sections below for the field lists actually implemented, which differ slightly from this document's original design sketch (in particular: `Annotation` and `SavedLanguageItem` are independent of any practice session in Milestone 4; `CueNote` was not in the original sketch at all). `PracticeSession`, `StageResponse`, `KeywordCapture`, `QuizSession`, `QuizItemResult`, and `RecordingReference` remain design direction only and will be added as migrations in the milestones that need them — Milestone 5 is expected to add an optional `practice_session_id` to `Annotation` via a further additive migration rather than redesigning the table.
+**Status (through Milestone 5)**: `Material`, `SubtitleTrack`, `SubtitleCue`, `Annotation`, `CueNote`, `SavedLanguageItem`, `AnnotationLabelPreference`, `PracticeSession`, `SessionStageProgress`, `StageResponse`, `KeywordCapture`, `SessionDiagnosisEvidence`, and `ShadowingCueProgress` are implemented as actual SQLite tables (schema version 4). Migration 2 added `Material.normalized_path`; migration 3 (Milestone 4) added the four learning-evidence tables; migration 4 (Milestone 5, additive, no data loss) added the six guided-session tables — see their sections below for the field lists actually implemented, which differ from this document's original design sketch in one deliberate way: `Annotation` did **not** gain a `practice_session_id` column. Instead, a session's diagnosis evidence is its own table (`SessionDiagnosisEvidence`) that optionally *links to* an `Annotation` row rather than living inside it — see that section for why. `QuizSession`, `QuizItemResult`, and `RecordingReference` remain design direction only and will be added as migrations in the milestones that need them.
 
 ## Entity Overview
 
 ```text
 Material
   1 --- many SubtitleTracks
-  1 --- many PracticeSessions        (design direction only, not yet implemented)
+  1 --- many PracticeSessions        (implemented, Milestone 5)
   1 --- many SavedLanguageItems       (implemented, Milestone 4)
 
 SubtitleTrack
@@ -19,11 +19,20 @@ SubtitleCue
   1 --- many Annotations              (implemented, Milestone 4 — independent of PracticeSession)
   1 --- 0..1 CueNote                  (implemented, Milestone 4)
   1 --- many SavedLanguageItems       (implemented, Milestone 4)
+  1 --- many SessionDiagnosisEvidence (implemented, Milestone 5)
+  1 --- many ShadowingCueProgress     (implemented, Milestone 5, one row per session/cue)
 
-PracticeSession                       (design direction only, not yet implemented)
+PracticeSession                       (implemented, Milestone 5)
+  1 --- 5   SessionStageProgress      (exactly one row per stage key, created with the session)
   1 --- many StageResponses
-  1 --- many QuizSessions
-  1 --- many RecordingReferences
+  1 --- many KeywordCaptures
+  1 --- many SessionDiagnosisEvidence
+  1 --- many ShadowingCueProgress
+  1 --- many QuizSessions             (design direction only, not yet implemented)
+  1 --- many RecordingReferences      (design direction only, not yet implemented)
+
+Annotation
+  0..1 --- many SessionDiagnosisEvidence  (optional link, `ON DELETE SET NULL` — see below)
 ```
 
 ## Material
@@ -90,67 +99,110 @@ Constraints:
 
 ## PracticeSession
 
-One guided or shorter practice attempt.
+One guided intensive-listening attempt. **Implemented (migration 4).**
 
-Suggested fields:
+Implemented fields:
 
 - `id`
-- `material_id`
-- `mode`
+- `material_id` (FK → `material.id`, `ON DELETE CASCADE`)
+- `mode` (only `intensive` so far; `speed` is future/Milestone 10 direction, not implemented)
 - `status`
 - `current_stage`
+- `transcript_revealed_at` (`NULL` until Stage 3 is first entered; set at most once — see Constraints)
 - `started_at`
-- `completed_at`
+- `updated_at`
 - `last_resumed_at`
+- `completed_at`
+- `abandoned_at`
 
-Initial status values:
+Status values (`domain/enums/session_status.py`):
 
 - `active`
 - `completed`
 - `abandoned`
 
-Initial mode values:
+Allowed transitions (`domain/services/session_rules.py`): `active -> completed` and `active -> abandoned` only — a completed or abandoned session can never return to `active`, and `completed`/`abandoned` never transition to each other.
 
-- `intensive`
-- future `speed`
+Constraints actually enforced:
+
+- A partial unique index, `idx_practice_session_one_active_per_material` on `(material_id) WHERE status = 'active' AND mode = 'intensive'`, blocks a second concurrently-active intensive session for the same material at the database level (reinforcing the `practice_session_service.start_session` application-level check, which raises a typed `ActiveSessionExistsError`).
+- `transcript_revealed_at` is set via `SET transcript_revealed_at = COALESCE(transcript_revealed_at, datetime('now'))` — idempotent, so re-entering Stage 3 in the same session never resets it.
+
+## SessionStageProgress
+
+Per-stage status within one `PracticeSession`. **Implemented (migration 4), not present in the original design sketch.** Exactly five rows (one per stage key) are created atomically with the session itself.
+
+Implemented fields:
+
+- `practice_session_id` (FK → `practice_session.id`, `ON DELETE CASCADE`; composite primary key with `stage_key`)
+- `stage_key`
+- `status`
+- `outcome_key` (currently only ever `no_notable_difficulty`, Stage 3's explicit "nothing to report" action — distinct from both evidence-based completion and skipping)
+- `skip_note` (optional, never required)
+- `started_at` / `completed_at` / `skipped_at`
+- `updated_at`
+
+Stage keys (`domain/enums/stage_key.py`, in fixed order):
+
+- `global_comprehension`
+- `keyword_capture`
+- `transcript_diagnosis`
+- `shadowing`
+- `final_summary`
+
+Stage status values and allowed transitions (`domain/services/session_rules.py`): `not_started -> in_progress -> {completed, skipped}`, and `not_started -> skipped` directly. A terminal (`completed`/`skipped`) stage never transitions further within the same session.
+
+Per-stage completion eligibility (evidence-based, checked before allowing a `completed` transition — see `application/services/practice_session_service.py::complete_stage`):
+
+- Stage 1 (global comprehension): at least one prompt response is non-whitespace.
+- Stage 2 (keyword capture): at least one capture exists.
+- Stage 3 (transcript diagnosis): at least one `SessionDiagnosisEvidence` row exists, or `outcome_key = 'no_notable_difficulty'`.
+- Stage 4 (shadowing): every `ShadowingCueProgress` row for the session has a status other than `not_started`.
+- Stage 5 (final summary): the `summary` response is non-whitespace.
+
+If none of the above holds, the stage must be explicitly skipped rather than completed.
+
+**Transcript-reveal auto-resolution**: entering Stage 3 for the first time (`transcript_revealed_at` still `NULL`) both reveals the transcript and, for Stages 1 and 2 specifically, resolves whichever of them is not already `completed`/`skipped` — completing it if it already has qualifying evidence, otherwise skipping it with an automatic `skip_note`. This prevents a session from getting permanently stuck unable to reach `session_can_complete` because a transcript-locked stage was left `not_started`/`in_progress` forever.
 
 ## StageResponse
 
-Stores learner input for a session stage.
+Stores learner input for a session stage. **Implemented (migration 4).** Used for both the Stage 1 comprehension prompts and the Stage 5 final summary (a single generic table, not a Stage-1-specific one).
 
-Suggested fields:
+Implemented fields:
 
 - `id`
-- `practice_session_id`
+- `practice_session_id` (FK → `practice_session.id`, `ON DELETE CASCADE`)
 - `stage_key`
 - `prompt_key`
 - `response_text`
 - `created_at`
 - `updated_at`
 
-Example prompt keys:
+Constraint actually enforced: `UNIQUE (practice_session_id, stage_key, prompt_key)` — one response per session/stage/prompt, written via `INSERT ... ON CONFLICT DO UPDATE` upsert.
 
-- `who_is_speaking`
-- `where`
-- `intent`
-- `result`
-- `final_summary`
+Stage 1 prompt keys: `who_is_speaking`, `where`, `intent`, `result`. Stage 5 prompt key: `summary`.
 
 ## KeywordCapture
 
-A learner-entered word or fragment captured before transcript comparison.
+A learner-entered word or fragment captured before transcript comparison. **Implemented (migration 4).**
 
-Suggested fields:
+Implemented fields:
 
 - `id`
-- `practice_session_id`
+- `practice_session_id` (FK → `practice_session.id`, `ON DELETE CASCADE`)
+- `capture_type`
 - `text`
-- `position`
+- `position` (learner-controlled display order, reassigned on every reorder via `session_repository.reorder_keyword_captures`)
 - `created_at`
+- `updated_at`
+
+Capture types (`domain/enums/keyword_capture_type.py`): `keyword`, `name_or_place`, `number`, `phrase`, `uncertain_fragment`.
+
+Rule: read-only once the transcript is revealed for the same session as any other Stage 1/2 evidence (enforced centrally in `practice_session_service`, not in the UI).
 
 ## Annotation
 
-Semantic diagnosis attached to a cue or selected text range. **Implemented (migration 3).** Milestone 4 annotations have no `practice_session_id` — they are independent material/cue records by design, so Milestone 5 can add an optional association via a further additive migration rather than a redesign.
+Semantic diagnosis attached to a cue or selected text range. **Implemented (migration 3).** `Annotation` still has no `practice_session_id` column and never will: Milestone 5 deliberately did *not* add a session association here (see `SessionDiagnosisEvidence` below for why) — `Annotation` remains an independent, material-level record regardless of which sessions have referenced it.
 
 Implemented fields:
 
@@ -176,6 +228,48 @@ Initial label keys:
 - `connected_reduced_speech`
 - `misheard`
 - `unknown_word_or_chunk`
+
+## SessionDiagnosisEvidence
+
+A guided-session snapshot of one Stage 3 diagnosis action. **Implemented (migration 4), not present in the original design sketch.**
+
+Why a separate table instead of a `practice_session_id` column on `Annotation`: the Milestone 4 `Annotation` uniqueness constraint is `UNIQUE (subtitle_cue_id, label_key, selection_start, selection_end)` — one row per exact cue/label/range, full stop. If a second guided-session attempt on the same material diagnosed the exact same word again, adding a session column to `Annotation` would force a choice between violating that constraint or silently reusing/overwriting the first session's row (losing session-specific history). A dedicated table sidesteps this entirely: `SessionDiagnosisEvidence` has its own `UNIQUE (practice_session_id, subtitle_cue_id, label_key, selection_start, selection_end)`, so the same diagnosis can recur once per session indefinitely, while an *optional* link back to a shared `Annotation` row still lets material-level diagnosis tools (the Milestone 4 workspace) see it.
+
+Implemented fields:
+
+- `id`
+- `practice_session_id` (FK → `practice_session.id`, `ON DELETE CASCADE`)
+- `subtitle_cue_id` (FK → `subtitle_cue.id`, `ON DELETE CASCADE`)
+- `annotation_id` (FK → `annotation.id`, `ON DELETE SET NULL` — nullable; a snapshot survives its linked annotation being deleted)
+- `label_key`
+- `selected_text`
+- `selection_start` / `selection_end` (same canonical offset semantics as `Annotation`)
+- `heard_as`
+- `note`
+- `created_at`
+- `updated_at`
+
+Constraints actually enforced: `UNIQUE (practice_session_id, subtitle_cue_id, label_key, selection_start, selection_end)`; `CHECK (selection_end >= selection_start)`.
+
+Find-or-create linkage (`practice_session_service.record_session_diagnosis`): validates using the same domain rules as `annotation_service` (label validity, range bounds, Misheard-requires-`heard_as`), then looks for an existing `Annotation` with the exact same cue/label/range — reusing its id without overwriting any of its fields if found, or creating one if not — and always creates a new, independent `SessionDiagnosisEvidence` row. Editing (`update_session_diagnosis`) or deleting (`delete_session_diagnosis`) a snapshot touches only that row; the linked `Annotation`, if any, is never mutated or cascaded.
+
+## ShadowingCueProgress
+
+Per-cue Stage 4 practice state within one `PracticeSession`. **Implemented (migration 4), not present in the original design sketch.**
+
+Implemented fields:
+
+- `practice_session_id` (FK → `practice_session.id`, `ON DELETE CASCADE`; composite primary key with `subtitle_cue_id`)
+- `subtitle_cue_id` (FK → `subtitle_cue.id`, `ON DELETE CASCADE`)
+- `status`
+- `practice_count` (incremented only by an explicit "Mark Practiced" action — playback alone is never treated as proof of practice)
+- `note` (optional, per-cue)
+- `last_practiced_at`
+- `updated_at`
+
+Status values (`domain/enums/shadowing_status.py`): `not_started`, `practiced`, `skipped`.
+
+Rows are created eagerly, one per cue, the first time Stage 4 is entered (`session_repository.ensure_shadowing_rows`, `INSERT OR IGNORE` — safe to call again on every re-entry). Stage 4 is eligible to complete only once every row for the session has a status other than `not_started`; "Skip Remaining Cues" bulk-resolves every still-`not_started` row.
 
 ## CueNote
 
@@ -284,4 +378,4 @@ Analytics should be derived from reliable session, annotation, quiz, and review 
 - Source media, subtitle files, recordings, databases, and exports are local user data.
 - Database migrations must be additive and tested.
 - Display colors never replace semantic label keys.
-- Migrations 1→2→3 have each been additive only (no table rewritten or dropped) and are each covered by an automated upgrade test starting from the prior version's schema with real data present.
+- Migrations 1→2→3→4 have each been additive only (no table rewritten or dropped) and are each covered by an automated upgrade test starting from the prior version's schema with real data present.

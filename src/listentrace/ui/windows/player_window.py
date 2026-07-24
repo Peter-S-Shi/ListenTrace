@@ -3,7 +3,7 @@ from __future__ import annotations
 import sqlite3
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QColor, QIcon, QKeyEvent, QPixmap, QTextCharFormat, QTextCursor
+from PySide6.QtGui import QColor, QIcon, QKeyEvent, QPixmap, QTextCursor
 from PySide6.QtMultimediaWidgets import QVideoWidget
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -44,6 +44,7 @@ from listentrace.domain.enums.annotation_label import AnnotationLabel
 from listentrace.domain.enums.saved_item_type import SavedItemType
 from listentrace.domain.services.text_range import whole_cue_range
 from listentrace.infrastructure.media.playback import PlaybackController
+from listentrace.ui.annotation_highlighting import apply_range_highlighting
 from listentrace.ui.text_offset_conversion import (
     SurrogatePairOffsetError,
     codepoint_index_to_qt_offset,
@@ -636,49 +637,9 @@ class PlayerWindow(QMainWindow):
         self._clear_annotation_form()
 
     def _apply_annotation_highlighting(self, cue_text: str, annotations) -> None:
-        document = self._editing_transcript_view.document()
-        clear_cursor = QTextCursor(document)
-        clear_cursor.select(QTextCursor.SelectionType.Document)
-        clear_cursor.setCharFormat(QTextCharFormat())
-
-        if not annotations or not self._session.transcript_visible:
-            return
-
-        text_length = len(cue_text)
-        coverage: list[list[str]] = [[] for _ in range(text_length)]
-        for annotation in annotations:
-            start = max(annotation.selection_start, 0)
-            end = min(annotation.selection_end, text_length)
-            for i in range(start, end):
-                coverage[i].append(annotation.label_key)
-
-        colors = label_preference_service.get_label_preferences(self._connection)
-
-        i = 0
-        while i < text_length:
-            labels_here = coverage[i]
-            if not labels_here:
-                i += 1
-                continue
-            j = i
-            while j < text_length and coverage[j] == labels_here:
-                j += 1
-
-            fmt = QTextCharFormat()
-            if len(labels_here) == 1:
-                fmt.setBackground(QColor(colors.get(labels_here[0], "#CCCCCC")))
-            else:
-                fmt.setBackground(_OVERLAP_HIGHLIGHT)
-
-            # i/j are codepoint indices (matching annotation.selection_start/end);
-            # convert to Qt UTF-16 offsets before positioning the highlight cursor.
-            highlight_cursor = QTextCursor(document)
-            highlight_cursor.setPosition(codepoint_index_to_qt_offset(cue_text, i))
-            highlight_cursor.setPosition(
-                codepoint_index_to_qt_offset(cue_text, j), QTextCursor.MoveMode.KeepAnchor
-            )
-            highlight_cursor.setCharFormat(fmt)
-            i = j
+        effective = annotations if self._session.transcript_visible else []
+        colors = label_preference_service.get_label_preferences(self._connection) if effective else {}
+        apply_range_highlighting(self._editing_transcript_view, cue_text, effective, colors, _OVERLAP_HIGHLIGHT)
 
     def _clear_annotation_form(self) -> None:
         for checkbox in self._label_checkboxes.values():

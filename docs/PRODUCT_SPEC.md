@@ -99,11 +99,23 @@ Use cue-level playback:
 5. replay source or learner audio;
 6. continue.
 
-Automatic evaluation is not required initially.
+Automatic evaluation is not required initially. Recording and learner-audio playback are Milestone 7's job — Milestone 5 tracks practiced/skipped status and a practice count per cue, driven only by explicit learner action (never inferred from playback alone), with no microphone access at all.
 
 ### Stage 5 — Final Recall
 
 Hide the transcript. Ask the learner to summarize the material in two or three target-language sentences.
+
+### Confirmed Guided Session Behavior (Milestone 5)
+
+The five-stage flow above is now a real, resumable guided session — built on the Milestone 3 player and Milestone 4 transcript-workspace tools rather than duplicating them.
+
+- **One active intensive session per material.** Starting a new one while another is active offers Resume, Abandon and Start New, or Cancel — never a silent second session or a silent overwrite. Completed and abandoned sessions remain as permanent, read-only history, browsable per material.
+- **Not a rigid exam.** Every stage can be explicitly skipped, with an optional (never required) reason. Back navigation revisits earlier stages without undoing their recorded status — reviewing a completed Stage 1 does not reopen it for editing.
+- **The transcript-reveal boundary is a one-way door, confirmed up front.** Entering Stage 3 for the first time shows a clear warning that Stages 1 and 2 are about to become permanent, read-only evidence for this session, before it happens. After that point, their answers/captures remain visible for reference but cannot be edited in that session.
+- **Stage 3 reuses the Milestone 4 diagnosis tools exactly** — same five semantic labels, same Misheard-requires-an-explanation rule, same Unicode-safe text selection. A diagnosis recorded during a session is repeatable: doing the same diagnosis again in a *later* session on the same material is allowed (each session keeps its own evidence), while an identical diagnosis cannot be recorded twice within the *same* session.
+- **Shadowing tracks explicit action, not playback time.** A cue only becomes "practiced" when the learner presses Mark Practiced, and the count only increases on repeated explicit presses. Skip Remaining Cues resolves everything left over in one confirmed action.
+- **A playback problem never blocks the session.** If the underlying media fails to play, only the playback-dependent buttons (play/pause, replay, loop) are disabled — every stage's text-based evidence, navigation, and session-completion path stay fully usable.
+- **Nothing here modifies the source subtitle or media files** — session records are ListenTrace's own, deleted independently of (and never deleting) the imported files.
 
 ## Player Requirements
 

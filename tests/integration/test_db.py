@@ -39,7 +39,7 @@ def test_migrate_is_idempotent(conn):
     version_before = current_version(conn)
     migrate(conn)  # second call must not raise or duplicate schema
     version_after = current_version(conn)
-    assert version_before == version_after == 3
+    assert version_before == version_after == 4
 
 
 def test_foreign_keys_are_enforced(conn):
@@ -98,7 +98,7 @@ def test_migration_upgrades_a_milestone1_v1_database(tmp_path):
 
     final_version = migrate(connection)
 
-    assert final_version == 3
+    assert final_version == 4
     columns = {row["name"] for row in connection.execute("PRAGMA table_info(material)")}
     assert "normalized_path" in columns
     tables = {
@@ -106,6 +106,8 @@ def test_migration_upgrades_a_milestone1_v1_database(tmp_path):
         for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
     }
     assert {"annotation", "cue_note", "saved_language_item", "annotation_label_preference"} <= tables
+    assert {"practice_session", "session_stage_progress", "stage_response"} <= tables
+    assert {"keyword_capture", "session_diagnosis_evidence", "shadowing_cue_progress"} <= tables
 
     stored = get_material(connection, material_id)
     assert stored is not None
@@ -138,12 +140,14 @@ def test_migration_upgrades_a_milestone2_v2_database(tmp_path):
 
     final_version = migrate(connection)
 
-    assert final_version == 3
+    assert final_version == 4
     tables = {
         row["name"]
         for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
     }
     assert {"annotation", "cue_note", "saved_language_item", "annotation_label_preference"} <= tables
+    assert {"practice_session", "session_stage_progress", "stage_response"} <= tables
+    assert {"keyword_capture", "session_diagnosis_evidence", "shadowing_cue_progress"} <= tables
 
     # Existing material/track/cue data must remain intact after the upgrade.
     stored = get_material(connection, material_id)
@@ -158,5 +162,60 @@ def test_migration_upgrades_a_milestone2_v2_database(tmp_path):
         for row in connection.execute("SELECT label_key, color FROM annotation_label_preference")
     }
     assert len(prefs) == 5
+
+    connection.close()
+
+
+def test_migration_upgrades_a_milestone4_v3_database_with_existing_data_intact(tmp_path):
+    connection = open_connection(tmp_path / "v3.db")
+    for target_version, sql in MIGRATIONS:
+        if target_version > 3:
+            break
+        connection.executescript(sql)
+    connection.execute("PRAGMA user_version = 3")
+    connection.commit()
+    assert current_version(connection) == 3
+
+    material_id = insert_material(
+        connection, Material(title="M4 Lesson", media_path="C:/media/m4.mp4")
+    )
+    track = SubtitleTrack(
+        material_id=material_id,
+        format="srt",
+        source_path="C:/media/m4.srt",
+        cues=[SubtitleCue(cue_index=1, start_ms=0, end_ms=1000, text="Bonjour")],
+    )
+    track_id = insert_subtitle_track(connection, track)
+    cue_id = get_cues_for_track(connection, track_id)[0].id
+
+    connection.execute(
+        "INSERT INTO annotation (subtitle_cue_id, label_key, selected_text, selection_start, selection_end) "
+        "VALUES (?, 'keyword', 'Bonjour', 0, 7)",
+        (cue_id,),
+    )
+    connection.commit()
+
+    final_version = migrate(connection)
+
+    assert final_version == 4
+    tables = {
+        row["name"]
+        for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
+    }
+    assert {"practice_session", "session_stage_progress", "stage_response"} <= tables
+    assert {"keyword_capture", "session_diagnosis_evidence", "shadowing_cue_progress"} <= tables
+
+    # Existing Milestone 1-4 data must survive the upgrade untouched.
+    stored = get_material(connection, material_id)
+    assert stored is not None
+    assert stored.title == "M4 Lesson"
+    cues = get_cues_for_track(connection, track_id)
+    assert len(cues) == 1
+    assert cues[0].text == "Bonjour"
+    annotation_row = connection.execute(
+        "SELECT label_key, selected_text FROM annotation WHERE subtitle_cue_id = ?", (cue_id,)
+    ).fetchone()
+    assert annotation_row["label_key"] == "keyword"
+    assert annotation_row["selected_text"] == "Bonjour"
 
     connection.close()

@@ -18,13 +18,16 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from listentrace.application.errors import MaterialNotFoundError, PlayerOpenError
+from listentrace.application.errors import ActiveSessionExistsError, MaterialNotFoundError, PlayerOpenError
 from listentrace.application.services import material_library_service as library
+from listentrace.application.services import practice_session_service
 from listentrace.application.services.player_loading_service import load_material_for_player
 from listentrace.domain.enums.material_status import MaterialStatus
 from listentrace.infrastructure.db.migrations import current_version
+from listentrace.ui.windows.guided_session_window import GuidedSessionWindow
 from listentrace.ui.windows.import_dialog import ImportDialog
 from listentrace.ui.windows.player_window import PlayerWindow
+from listentrace.ui.windows.session_history_dialog import SessionHistoryDialog
 
 
 class MainWindow(QMainWindow):
@@ -37,6 +40,7 @@ class MainWindow(QMainWindow):
         self._db_path = db_path
         self._showing_archived = False
         self._player_window: PlayerWindow | None = None
+        self._guided_session_window: GuidedSessionWindow | None = None
 
         central = QWidget(self)
         outer_layout = QVBoxLayout(central)
@@ -58,10 +62,19 @@ class MainWindow(QMainWindow):
         self._import_button.clicked.connect(self._on_import_clicked)
         self._open_player_button = QPushButton("Open Player")
         self._open_player_button.clicked.connect(self._on_open_player_clicked)
+        self._start_intensive_button = QPushButton("Start Intensive Practice")
+        self._start_intensive_button.clicked.connect(self._on_start_intensive_clicked)
+        self._resume_intensive_button = QPushButton("Resume Intensive Practice")
+        self._resume_intensive_button.clicked.connect(self._on_resume_intensive_clicked)
+        self._session_history_button = QPushButton("Session History")
+        self._session_history_button.clicked.connect(self._on_session_history_clicked)
         self._toggle_archived_button = QPushButton("Show Archived")
         self._toggle_archived_button.clicked.connect(self._on_toggle_archived)
         list_buttons_row.addWidget(self._import_button)
         list_buttons_row.addWidget(self._open_player_button)
+        list_buttons_row.addWidget(self._start_intensive_button)
+        list_buttons_row.addWidget(self._resume_intensive_button)
+        list_buttons_row.addWidget(self._session_history_button)
         list_buttons_row.addWidget(self._toggle_archived_button)
         list_column.addLayout(list_buttons_row)
 
@@ -181,6 +194,17 @@ class MainWindow(QMainWindow):
         self._archive_restore_button.setEnabled(enabled)
         self._remove_button.setEnabled(enabled)
         self._open_player_button.setEnabled(enabled and not self._showing_archived)
+        self._start_intensive_button.setEnabled(enabled and not self._showing_archived)
+        self._session_history_button.setEnabled(enabled and not self._showing_archived)
+        self._update_resume_button_state()
+
+    def _update_resume_button_state(self) -> None:
+        material_id = self._selected_material_id()
+        if material_id is None or self._showing_archived:
+            self._resume_intensive_button.setEnabled(False)
+            return
+        active = practice_session_service.find_active_session(self._connection, material_id)
+        self._resume_intensive_button.setEnabled(active is not None)
 
     def _on_import_clicked(self) -> None:
         dialog = ImportDialog(self._connection, self)
@@ -208,6 +232,72 @@ class MainWindow(QMainWindow):
 
         self._player_window = PlayerWindow(load_result, self._connection, self)
         self._player_window.show()
+
+    def _on_start_intensive_clicked(self) -> None:
+        material_id = self._selected_material_id()
+        if material_id is None or self._showing_archived:
+            return
+
+        active = practice_session_service.find_active_session(self._connection, material_id)
+        if active is not None:
+            answer = QMessageBox.question(
+                self,
+                "Active Session Exists",
+                "This material already has an active intensive practice session.\n\n"
+                "Yes = Resume it\nNo = Abandon it and start a new one\nCancel = do nothing",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No | QMessageBox.StandardButton.Cancel,
+                QMessageBox.StandardButton.Yes,
+            )
+            if answer == QMessageBox.StandardButton.Yes:
+                self._open_guided_session(material_id, active.id)
+            elif answer == QMessageBox.StandardButton.No:
+                practice_session_service.abandon_session(self._connection, active.id)
+                new_session = practice_session_service.start_session(self._connection, material_id)
+                self._open_guided_session(material_id, new_session.id)
+            self._update_resume_button_state()
+            return
+
+        try:
+            session = practice_session_service.start_session(self._connection, material_id)
+        except ActiveSessionExistsError:
+            # A session was created concurrently between the check above and here;
+            # fall back to whatever is now active rather than erroring out.
+            active = practice_session_service.find_active_session(self._connection, material_id)
+            if active is not None:
+                self._open_guided_session(material_id, active.id)
+            self._update_resume_button_state()
+            return
+        self._open_guided_session(material_id, session.id)
+        self._update_resume_button_state()
+
+    def _on_resume_intensive_clicked(self) -> None:
+        material_id = self._selected_material_id()
+        if material_id is None or self._showing_archived:
+            return
+        active = practice_session_service.find_active_session(self._connection, material_id)
+        if active is None:
+            self.show_error("No active intensive session to resume.")
+            return
+        self._open_guided_session(material_id, active.id)
+
+    def _on_session_history_clicked(self) -> None:
+        material_id = self._selected_material_id()
+        if material_id is None:
+            return
+        detail = library.get_material_detail(self._connection, material_id)
+        dialog = SessionHistoryDialog(self._connection, material_id, detail.title, self)
+        if dialog.exec() == QDialog.DialogCode.Accepted and dialog.selected_session_id is not None:
+            self._open_guided_session(material_id, dialog.selected_session_id)
+        self._update_resume_button_state()
+
+    def _open_guided_session(self, material_id: int, session_id: int) -> None:
+        try:
+            load_result = load_material_for_player(self._connection, material_id)
+        except PlayerOpenError as exc:
+            QMessageBox.warning(self, "Cannot Open Guided Session", str(exc))
+            return
+        self._guided_session_window = GuidedSessionWindow(self._connection, load_result, session_id, self)
+        self._guided_session_window.show()
 
     def _on_toggle_archived(self) -> None:
         self._showing_archived = not self._showing_archived

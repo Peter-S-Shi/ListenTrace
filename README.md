@@ -67,7 +67,9 @@ Run the automated tests:
 
 ## Development Status
 
-Milestones 1–4 are implemented and verified. Users can import a local media file plus an SRT/WebVTT subtitle into a library, view details, rename, archive/restore, and remove records, then open a synchronized player: play/pause/seek, active-cue tracking, previous/next-cue navigation, replay-once, single-cue and continuous-range looping, transcript show/hide, volume/mute, and keyboard shortcuts. The player now includes an integrated transcript workspace: select an editing cue (independent of whatever cue is currently playing), select a text range, and save one or more semantic labels (keyword, known-but-not-heard, connected/reduced speech, misheard, unknown word/chunk) as annotations; keep a free-form note per cue; and save reusable word/phrase/chunk/sentence-pattern language items with source context. Duplicate handling, atomic writes, and no modification of source files apply throughout.
+Milestones 1–5 are implemented and verified. Users can import a local media file plus an SRT/WebVTT subtitle into a library, view details, rename, archive/restore, and remove records, then open a synchronized player: play/pause/seek, active-cue tracking, previous/next-cue navigation, replay-once, single-cue and continuous-range looping, transcript show/hide, volume/mute, and keyboard shortcuts. The player includes an integrated transcript workspace: select an editing cue (independent of whatever cue is currently playing), select a text range, and save one or more semantic labels (keyword, known-but-not-heard, connected/reduced speech, misheard, unknown word/chunk) as annotations; keep a free-form note per cue; and save reusable word/phrase/chunk/sentence-pattern language items with source context.
+
+The library also offers a guided, resumable intensive-listening session (Start/Resume Intensive Practice, plus a Session History view) alongside the standalone player: five sequential stages — global comprehension, keyword/fragment capture, transcript comparison and error diagnosis, sentence-level shadowing, and a transcript-free final summary — each with its own persisted status (not started/in progress/completed/skipped) and explicit Skip Stage support so the workflow never becomes a rigid exam. At most one intensive session is active per material at a time; completed or abandoned sessions remain as read-only history. Revealing the transcript for Stage 3 locks Stages 1 and 2 as read-only evidence for that session. Stage 3 diagnosis reuses the exact same semantic-label/highlighting/Unicode-offset logic as the standalone workspace, recording a repeatable per-session snapshot that optionally links to (without ever overwriting) a shared material-level annotation. Duplicate handling, atomic writes, and no modification of source files apply throughout.
 
 See:
 
@@ -84,43 +86,53 @@ src/listentrace/
   application/
     dto/              # ImportSuccess/ImportNeedsConfirmation, MaterialSummary/MaterialDetail,
                        # PlayerLoadResult, LoopMode/PlayerTick, SavedItemSuccess/NeedsConfirmation,
-                       # CueWorkspace
+                       # CueWorkspace, PracticeSessionState
     services/         # material_import_service, material_library_service,
                        # player_loading_service, player_session (pure, no Qt),
                        # annotation_service, cue_note_service, saved_language_item_service,
-                       # label_preference_service, cue_workspace_service
+                       # label_preference_service, cue_workspace_service, practice_session_service
   domain/
-    enums/            # MaterialStatus, AnnotationLabel, SavedItemType
-    models/           # Material, SubtitleTrack, SubtitleCue, Annotation, CueNote, SavedLanguageItem
+    enums/            # MaterialStatus, AnnotationLabel, SavedItemType, SessionStatus, StageStatus,
+                       # StageKey, KeywordCaptureType, StageOutcome, ShadowingStatus
+    models/           # Material, SubtitleTrack, SubtitleCue, Annotation, CueNote, SavedLanguageItem,
+                       # PracticeSession, SessionStageProgress, StageResponse, KeywordCapture,
+                       # SessionDiagnosisEvidence, ShadowingCueProgress
     services/         # CueIndex (active-cue/navigation rules), text_range (canonical selection
-                       # offsets) — both pure, no Qt
+                       # offsets), session_rules (session/stage lifecycle + completion eligibility)
+                       # — all pure, no Qt
   infrastructure/
-    db/               # SQLite connection, migrations, repository + learning_repository functions
+    db/               # SQLite connection, migrations, repository + learning_repository +
+                       # session_repository functions
     subtitles/        # SRT/WebVTT parsers, timecode and text normalization
     media/            # PlaybackController adapter around QtMultimedia; file validation/fingerprinting
     appdata.py         # cross-platform app-data directory resolution
     logging_setup.py   # rotating file + console logging
   ui/
+    annotation_highlighting.py  # shared transcript-highlight painting (used by PlayerWindow and
+                                 # GuidedSessionWindow — not duplicated)
+    text_offset_conversion.py   # shared Qt UTF-16 <-> Python code-point offset conversion
     app.py            # application entry point
     windows/          # MainWindow (material library), ImportDialog, PlayerWindow
-                       # (with integrated transcript workspace), LabelColorDialog
+                       # (with integrated transcript workspace), LabelColorDialog,
+                       # GuidedSessionWindow (five-stage guided session), SessionHistoryDialog
 tests/
-  unit/               # subtitle parsing, CueIndex, PlayerSession, text_range
+  unit/               # subtitle parsing, CueIndex, PlayerSession, text_range, session_rules
   integration/        # database/migrations, import, library, player, player workspace,
-                       # annotations, cue notes, saved language items, label preferences, UI smoke
+                       # annotations, cue notes, saved language items, label preferences,
+                       # practice_session_service, guided session window, UI smoke
   fixtures/
 docs/
 ```
 
 ## Current Limitations
 
-- No guided five-stage practice session, blind-listening keyword capture, quizzes, shadowing, or recording yet (planned for Milestone 5+).
+- No quizzes, shadowing audio recording, or progress analytics yet (planned for Milestone 6+); Milestone 5's shadowing stage tracks practiced/skipped status and count but never records or plays back the learner's own voice.
 - Only one primary subtitle track per material is managed through the UI, though the schema supports more.
 - Plain-text (non-timed) transcript import is not supported.
 - Player loop/replay timing uses a small internal tolerance (50ms) appropriate for QtMultimedia's position-update cadence; it is not frame-exact.
-- Canonical text-selection offsets are Python code-point based; text requiring UTF-16 surrogate pairs (some emoji) is not verified to round-trip correctly.
+- Canonical text-selection offsets are Python code-point based; text requiring UTF-16 surrogate pairs (some emoji) is verified to round-trip correctly in both the standalone workspace and the guided session's Stage 3 diagnosis panel.
 - Real-file, multi-codec playback and audio/video-device behavior are only verified with a synthesized WAV and one locally generated H.264/MP4 clip, on Windows so far.
-- After saving/updating/deleting an annotation or saved item, the corresponding list loses its selection (the form clears) — the user reselects a row to continue editing it.
+- After saving/updating/deleting an annotation, saved item, keyword capture, or session diagnosis, the corresponding list loses its selection (the form clears) — the user reselects a row to continue editing it.
 - Text-only transcripts cannot provide reliable sentence seeking unless timing data is added.
 - Speech recognition, pronunciation scoring, automatic translation, subtitle generation, dictionary lookups, and cloud synchronization are outside the first release.
 - Users are responsible for using media and transcript material they are legally permitted to use.
