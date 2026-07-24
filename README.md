@@ -67,7 +67,7 @@ Run the automated tests:
 
 ## Development Status
 
-Milestones 1–3 are implemented and verified. Users can import a local media file plus an SRT/WebVTT subtitle into a library, view details, rename, archive/restore, and remove records, then open a synchronized player: play/pause/seek, active-cue tracking, previous/next-cue navigation, replay-once, single-cue and continuous-range looping, transcript show/hide, volume/mute, and keyboard shortcuts — with atomic import, duplicate handling, and no modification of source files.
+Milestones 1–4 are implemented and verified. Users can import a local media file plus an SRT/WebVTT subtitle into a library, view details, rename, archive/restore, and remove records, then open a synchronized player: play/pause/seek, active-cue tracking, previous/next-cue navigation, replay-once, single-cue and continuous-range looping, transcript show/hide, volume/mute, and keyboard shortcuts. The player now includes an integrated transcript workspace: select an editing cue (independent of whatever cue is currently playing), select a text range, and save one or more semantic labels (keyword, known-but-not-heard, connected/reduced speech, misheard, unknown word/chunk) as annotations; keep a free-form note per cue; and save reusable word/phrase/chunk/sentence-pattern language items with source context. Duplicate handling, atomic writes, and no modification of source files apply throughout.
 
 See:
 
@@ -83,15 +83,19 @@ See:
 src/listentrace/
   application/
     dto/              # ImportSuccess/ImportNeedsConfirmation, MaterialSummary/MaterialDetail,
-                       # PlayerLoadResult, LoopMode/PlayerTick
+                       # PlayerLoadResult, LoopMode/PlayerTick, SavedItemSuccess/NeedsConfirmation,
+                       # CueWorkspace
     services/         # material_import_service, material_library_service,
-                       # player_loading_service, player_session (pure, no Qt)
+                       # player_loading_service, player_session (pure, no Qt),
+                       # annotation_service, cue_note_service, saved_language_item_service,
+                       # label_preference_service, cue_workspace_service
   domain/
-    enums/            # MaterialStatus
-    models/           # Material, SubtitleTrack, SubtitleCue
-    services/         # CueIndex (active-cue/navigation rules, pure, no Qt)
+    enums/            # MaterialStatus, AnnotationLabel, SavedItemType
+    models/           # Material, SubtitleTrack, SubtitleCue, Annotation, CueNote, SavedLanguageItem
+    services/         # CueIndex (active-cue/navigation rules), text_range (canonical selection
+                       # offsets) — both pure, no Qt
   infrastructure/
-    db/               # SQLite connection, migrations, repository functions
+    db/               # SQLite connection, migrations, repository + learning_repository functions
     subtitles/        # SRT/WebVTT parsers, timecode and text normalization
     media/            # PlaybackController adapter around QtMultimedia; file validation/fingerprinting
     appdata.py         # cross-platform app-data directory resolution
@@ -99,22 +103,26 @@ src/listentrace/
   ui/
     app.py            # application entry point
     windows/          # MainWindow (material library), ImportDialog, PlayerWindow
+                       # (with integrated transcript workspace), LabelColorDialog
 tests/
-  unit/               # subtitle parsing, CueIndex, PlayerSession
-  integration/        # database, migrations, media playback, import, library, player, UI smoke tests
+  unit/               # subtitle parsing, CueIndex, PlayerSession, text_range
+  integration/        # database/migrations, import, library, player, player workspace,
+                       # annotations, cue notes, saved language items, label preferences, UI smoke
   fixtures/
 docs/
 ```
 
 ## Current Limitations
 
-- No transcript-annotation workspace, quizzes, shadowing, or recording yet (planned for later milestones).
+- No guided five-stage practice session, blind-listening keyword capture, quizzes, shadowing, or recording yet (planned for Milestone 5+).
 - Only one primary subtitle track per material is managed through the UI, though the schema supports more.
 - Plain-text (non-timed) transcript import is not supported.
 - Player loop/replay timing uses a small internal tolerance (50ms) appropriate for QtMultimedia's position-update cadence; it is not frame-exact.
-- Real-file, multi-codec playback and audio/video-device behavior are only verified with synthesized WAV test fixtures and on Windows so far.
+- Canonical text-selection offsets are Python code-point based; text requiring UTF-16 surrogate pairs (some emoji) is not verified to round-trip correctly.
+- Real-file, multi-codec playback and audio/video-device behavior are only verified with a synthesized WAV and one locally generated H.264/MP4 clip, on Windows so far.
+- After saving/updating/deleting an annotation or saved item, the corresponding list loses its selection (the form clears) — the user reselects a row to continue editing it.
 - Text-only transcripts cannot provide reliable sentence seeking unless timing data is added.
-- Speech recognition, pronunciation scoring, automatic translation, subtitle generation, and cloud synchronization are outside the first release.
+- Speech recognition, pronunciation scoring, automatic translation, subtitle generation, dictionary lookups, and cloud synchronization are outside the first release.
 - Users are responsible for using media and transcript material they are legally permitted to use.
 
 ## Privacy

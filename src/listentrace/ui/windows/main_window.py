@@ -206,7 +206,7 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Cannot Open Player", str(exc))
             return
 
-        self._player_window = PlayerWindow(load_result, self)
+        self._player_window = PlayerWindow(load_result, self._connection, self)
         self._player_window.show()
 
     def _on_toggle_archived(self) -> None:

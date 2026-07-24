@@ -10,6 +10,7 @@ class SubtitleCue:
     end_ms: int
     text: str
     normalized_text: str | None = None
+    id: int | None = None
 
     def __post_init__(self) -> None:
         if self.end_ms < self.start_ms:

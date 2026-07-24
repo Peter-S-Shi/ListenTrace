@@ -127,6 +127,18 @@ Timing failures must not silently attach notes to the wrong cue.
 - Hiding the transcript only hides the cue text; active-cue tracking, navigation, replay, and looping keep working underneath.
 - A valid file extension is not treated as proof that the media is actually playable — an unplayable or corrupted file produces a controlled error and disables playback controls rather than crashing.
 
+### Confirmed Transcript Workspace Behavior (Milestone 4)
+
+The five semantic labels described in Stage 3 above, plus Cue Notes and Saved Language Items, are usable now as standalone learning-evidence tools inside the player — independent of any material/session. The guided five-stage flow that sequences them (Stages 1–5) is Milestone 5's job; Milestone 4 only builds the tools themselves.
+
+- **Editing cue vs. active cue**: the cue you are annotating ("editing cue") is a separate, learner-controlled selection from whichever cue is currently playing ("active cue"). Playback moving into a new cue never changes what you're editing.
+- **One Save, several labels**: selecting a whole cue or a text range within it and checking multiple labels creates all of them together in one action, sharing the same range. The same range may carry as many of the five labels as apply; different labels never merge into one record.
+- **Misheard requires an explanation**: choosing "Misheard" requires filling in what the learner thought they heard before it can be saved. Other labels don't require this field.
+- **Cue Note vs. Annotation Note**: a Cue Note is one free-form note for the whole cue. An Annotation Note is optional and belongs to one specific semantic annotation. They are never the same field.
+- **Saved Language Items** (word / phrase / chunk / sentence pattern) capture the selected text plus its source material, source cue, and full cue context automatically; the context is editable afterward. Saving the identical item twice (same material, cue, range, type) is blocked. Saving the same text found elsewhere (a different cue or material) asks for confirmation rather than silently creating a duplicate or merging records.
+- **Label colors are global and presentation-only**: changing a label's color affects every material and every existing annotation with that label, but never changes what the label means or which annotations exist.
+- **Nothing here modifies the source subtitle or media files** — annotations, notes, and saved items are ListenTrace's own records, deleted independently of (and never deleting) the imported files.
+
 ## Vocabulary and Chunk Capture
 
 Users may save selected text as:

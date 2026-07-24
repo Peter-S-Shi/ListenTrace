@@ -8,7 +8,7 @@ ListenTrace is a local-first desktop application for transcript-guided foreign-l
 
 ## Repository Verification
 
-The remote repository exists, is private, and uses `main` as its default branch. It contains the initial documentation commit, the Milestone 1 application-foundation commit, the Milestone 2 material-library commit, and the Milestone 3 synchronized-player commit; no pull requests; no continuous-integration configuration.
+The remote repository exists, is private, and uses `main` as its default branch. It contains the initial documentation commit, the Milestone 1 application-foundation commit, the Milestone 2 material-library commit, the Milestone 3 synchronized-player commit (plus its acceptance-correction follow-up), and the Milestone 4 transcript-workspace commit; no pull requests; no continuous-integration configuration.
 
 ## Current Engineering State
 
@@ -17,43 +17,47 @@ The remote repository exists, is private, and uses `main` as its default branch.
 | Product concept | Defined |
 | Product workflow | Defined at roadmap level |
 | Public engineering documentation | Committed and pushed to `main` |
-| Application code | Implemented (foundation + material library + synchronized player) |
-| Desktop shell | Material library + player window, both manually verified end-to-end |
-| Database schema | Schema version 2 (unchanged in Milestone 3 — no new migration was needed) |
+| Application code | Implemented (foundation + material library + synchronized player + transcript workspace) |
+| Desktop shell | Material library + player window (with integrated transcript workspace), manually verified end-to-end |
+| Database schema | Schema version 3: adds `annotation`, `cue_note`, `saved_language_item`, `annotation_label_preference` (additive; Milestone 1/2 tables unchanged) |
 | Media/subtitle import | Implemented and tested (Milestone 2, unchanged) |
-| Material library | Implemented and tested (Milestone 2), now also opens the player |
-| Synchronized player | Implemented and tested: play/pause/seek, active-cue sync (gaps/overlaps handled), previous/next-cue navigation, replay-once, single-cue loop, continuous-range loop with cancellation, transcript show/hide, volume/mute, audio placeholder and video surface, keyboard shortcuts, controlled errors for missing/invalid media |
+| Material library | Implemented and tested (Milestone 2), opens the player (Milestone 3) |
+| Synchronized player | Implemented and tested (Milestone 3 + acceptance-correction pass, unchanged this milestone) |
+| Transcript workspace | Implemented and tested: multi-label annotations on whole-cue or partial text ranges, Misheard/`heard_as` validation, per-cue Cue Notes (empty-save = delete), Saved Language Items (word/phrase/chunk/sentence_pattern) with exact-duplicate rejection and same-text-elsewhere confirmation, global per-label colors, editing cue kept independent of the active playback cue |
 | Subtitle parsing | Implemented and tested (Milestone 1, unchanged) |
-| Automated tests | 73 tests passing (6 database/migrations, 8 import, 8 library, 3 media playback, 7 subtitle parsing, 8 cue index, 9 player session, 5 player loading, 13 player window, 6 UI smoke) |
+| Automated tests | 136 tests passing (7 database/migrations, 8 import, 8 library, 3 media playback, 7 subtitle parsing, 8 cue index, 9 player session, 5 player loading, 13 player window, 6 UI smoke, 7 text range, 19 annotations, 6 cue notes, 13 saved language items, 5 label preferences, 12 player-workspace UI integration) |
 | Build and packaging | Not started |
 | Continuous integration | Not configured |
 
 ## Current Milestone
 
-**Milestone 3 — Synchronized Player**
+**Milestone 4 — Transcript Workspace and Listening Diagnosis**
 
 Status: **Completed**
 
 ## Completed
 
-- Milestone 1 — Application Foundation (see history; unchanged)
-- Milestone 2 — Material Library and Import Validation (see history; unchanged)
-- Milestone 3 — Synchronized Player:
-  - `domain/services/cue_index.py`: pure, framework-free active-cue lookup (bisect-based) implementing the confirmed rule `start_ms <= position_ms < end_ms`, with deterministic tie-breaking toward the latest-started cue on overlaps, and original-order previous/next navigation
-  - `application/services/player_session.py`: pure state machine (no Qt dependency) for replay-once, single-cue loop, continuous-range loop, and cancellation, returning side-effect instructions (`PlayerTick`) rather than driving playback directly — fully unit-testable without a Qt event loop; documented 50ms loop-boundary tolerance appropriate for QtMultimedia's position-update cadence, with a seek-pending guard to prevent repeated boundary seeks
-  - `application/services/player_loading_service.py`: loads a material's ordered cues for the player, blocking archived materials and missing media/subtitle files with typed `PlayerOpenError` categories
-  - `infrastructure/media/playback.py` extended: video-output attachment, mute, and `InvalidMedia` status surfaced through the existing `playback_error` signal (closes the Milestone 2 gap where a valid extension was treated as proof of playability)
-  - `ui/windows/player_window.py`: full player UI — seek bar, transport controls, previous/next/replay/loop-cue/loop-range buttons, audio placeholder or video surface depending on `media_kind`, cue list with contiguous-only (`ContiguousSelection`) range selection, transcript show/hide, volume/mute, keyboard shortcuts (Space, Left/Right, Ctrl+Left/Right, R, L, T, M, Escape) with letter-shortcut suppression while a text-entry control has focus, and a controlled error/status area
-  - Library integration: double-click or "Open Player" opens an active material; both are disabled while viewing the archived list; opening the player never mutates material metadata
-  - **Acceptance-correction pass** (post-review): (1) added `PlayerWindow._set_playback_controls_enabled`, a single helper disabling every playback-dependent control (play/pause, seek slider, previous/next cue, replay cue, loop cue, loop selection, volume, mute) on a playback error, while transcript toggle and Return to Library stay usable; keyboard shortcuts for those same actions are now gated behind the same `_playback_usable` flag (T and Escape remain exempt); (2) switched the cue list from `ExtendedSelection` to `ContiguousSelection` so Loop Selection can only ever target a genuinely contiguous cue range — no silent expansion of a non-contiguous selection; (3) ran a manual real-video smoke test with a locally generated, non-copyrighted H.264/MP4 test-pattern clip (not committed) confirming actual decode, visible video output, play/pause/seek, and correct subtitle sync — see "Completed" below
-  - 38 new automated tests total for this milestone (8 cue index, 9 player session, 5 player loading, 13 player window, 3 additional UI smoke) on top of Milestone 2's 35, all passing — 73 total, including in a clean virtual environment outside the working tree
-  - Manual 14-step Windows smoke workflow (original, synthesized-audio pass) run end-to-end: launch, open audio material, confirm no autoplay, play/pause/seek, active-cue sync, previous/next navigation, replay-cue pause at end, single-cue loop, continuous-range loop, transcript hide/show during playback, all keyboard shortcuts, video-surface creation (fake video bytes), damaged-media controlled failure, and a clean return to the library with the database and all four source files (audio, subtitle, video, broken media) intact
-  - Additional manual real-video smoke test (acceptance-correction pass): imported a real, locally generated 3-second H.264/MP4 test-pattern clip (ffmpeg `testsrc`, not committed to Git) plus a matching SRT. Verified: `MediaStatus.LoadedMedia` with correct 3000ms duration, a visible `QVideoWidget`, play advancing position and pause holding it, seek landing exactly on the requested position, active-cue resolution correct at two different positions, and a clean close with the video/subtitle files and database row count unaffected
-  - Confirmed zero PySide6 imports remain in `domain/` or `application/` — the player-session/cue-index coordination logic is fully framework-free; only `ui/` and `infrastructure/media/` reference Qt
+- Milestones 1–3 (see history; unchanged except where the Milestone 3 acceptance-correction pass is noted)
+- Milestone 4 — Transcript Workspace and Listening Diagnosis:
+  - Schema version 3 (additive migration, no data loss): `annotation` (with a unique `(subtitle_cue_id, label_key, selection_start, selection_end)` constraint), `cue_note` (one row per cue via `subtitle_cue_id` as primary key), `saved_language_item` (with a unique `(material_id, subtitle_cue_id, item_type, selection_start, selection_end, normalized_text)` constraint), and `annotation_label_preference` (seeded with default colors for all 5 labels). Verified to upgrade cleanly from both a Milestone-1 (v1) and a Milestone-2 (v2) database with existing data intact.
+  - `domain/services/text_range.py`: pure, framework-free canonical selection-offset validation (`validate_selection`, `whole_cue_range`) — zero-based, end-exclusive, Python code-point offsets (matches Qt's `QTextCursor` offsets for all Basic-Multilingual-Plane text; documented as untested for UTF-16-surrogate-pair characters)
+  - `application/services/annotation_service.py`: atomic multi-label annotation creation (one Save action can create several `Annotation` rows sharing one cue+range, all-or-nothing), validates label keys, enforces "Misheard requires `heard_as`", rejects duplicate label+range, allows different labels to share a range; `update_annotation`/`delete_annotation`/`list_annotations_for_cue`
+  - `application/services/cue_note_service.py`: single Cue Note per cue via upsert; saving an empty/whitespace-only note is treated as delete-intent, not a stored empty string
+  - `application/services/saved_language_item_service.py`: validates item type and selection range, derives canonical text from the cue substring (not a separately-trusted string), rejects exact duplicates, and returns a typed `SavedItemNeedsConfirmation` when the same normalized text already exists elsewhere (a different cue/material) — the caller must explicitly confirm before it is created
+  - `application/services/label_preference_service.py`: validates label key and a 6-digit hex color before persisting; editing a color never touches any stored `Annotation.label_key`
+  - `application/services/cue_workspace_service.py`: loads a cue's text, annotations, Cue Note, and saved items together for the UI
+  - `ui/windows/player_window.py` extended with an integrated transcript workspace (not a separate window): the cue list's `currentItem` now represents an independently-controlled **editing cue**, decoupled from the **active playback cue** (which is shown only via a background-color highlight, never by moving selection) — playback progress can no longer steal focus from the cue being edited. Adds a selectable read-only transcript view for the editing cue, 5 label checkboxes + conditional `heard_as` + annotation note + Save/Update/Delete, an annotation list with per-character highlight in the transcript (single-label color, neutral gray for overlaps), a Cue Note editor, a Saved Language Item form (type/meaning/note/context, context prefilled from the full cue and editable) with its own list, and a "Label Colors..." button opening `ui/windows/label_color_dialog.py`. Hiding the transcript hides the whole workspace panel *and* clears the transcript view's text (defense in depth, not just visual hiding).
+  - 63 new automated tests (19 annotations, 6 cue notes, 13 saved language items, 5 label preferences, 7 text-range, 12 player-workspace UI integration, 1 additional v2→v3 migration test) on top of the prior 73 — 136 total, all passing, including in a clean virtual environment outside the working tree
+  - Manual 15-step Windows smoke workflow run end-to-end (see below); all steps passed, and closing/reopening the app confirmed annotations, saved items, and the Cue Note all persisted correctly
+  - Confirmed zero PySide6 imports remain in `domain/` or `application/` — all Milestone 4 validation/duplicate/canonical-offset logic is framework-free; only `ui/` and `infrastructure/media/` reference Qt
+
+### Manual smoke steps verified
+
+Launch and open a valid material; confirm Milestone 3 playback still works; select an editing cue while a different cue becomes active through playback and confirm the editing cue does not move; select part of a cue and save one label; select a range and save multiple labels atomically; attempt a Misheard annotation without `heard_as` (rejected) then with it (succeeds); edit and delete an annotation; create/edit/delete a Cue Note (empty save deletes it); save all four Saved Language Item types with prefilled editable context; trigger exact-duplicate rejection and the same-text-elsewhere confirmation flow; change a global label color and confirm annotation label/text are unaffected; hide/show the transcript and confirm hidden cue text is not exposed; close and reopen the app and confirm annotations/notes/saved items persisted; remove a material and confirm all four learning-evidence tables cascade to zero rows while the original media and subtitle files remain on disk.
 
 ## Planned Next Work
 
-- Milestone 4 — Transcript Workspace and Listening Diagnosis (see `ROADMAP.md`)
+- Milestone 5 — Guided Intensive Listening (see `ROADMAP.md`)
 
 ## Known Risks
 
@@ -62,17 +66,20 @@ Status: **Completed**
 - Large media files should not be copied or committed accidentally.
 - Plain-text transcripts do not support reliable synchronized navigation without timing data.
 - Recording support introduces permissions, device-selection, and local-storage concerns.
-- The duplicate-detection fingerprint samples only the start/end of large files, not a full-file hash — a deliberate performance tradeoff.
-- Loop/replay boundary detection depends on a fixed 50ms tolerance tuned against QtMultimedia's observed position-update cadence in this environment; a much slower or faster-updating backend could need retuning.
+- The duplicate-detection fingerprint (material import) samples only the start/end of large files, not a full-file hash — a deliberate performance tradeoff.
+- Loop/replay boundary detection depends on a fixed 50ms tolerance tuned against QtMultimedia's observed position-update cadence in this environment.
+- Canonical text-selection offsets are Python code-point based; characters requiring UTF-16 surrogate pairs (some emoji) are not verified to round-trip correctly against Qt's `QTextCursor` offsets.
+- After any annotation/note/saved-item Save, Update, or Delete action, the corresponding list widget loses its selection (the form clears); the user must reselect a row to continue editing it. A minor UX rough edge, not a correctness issue.
 
 ## Unknown or Unverified
 
 - Behavior on macOS and Linux (only Windows has been available so far)
-- Playback across the broader range of real-world codecs/containers: only one real codec configuration has been manually verified (H.264 video in an MP4 container, generated locally via ffmpeg's `testsrc`) and uncompressed WAV for audio; compressed audio formats (MP3/AAC/etc.) and other video codecs/containers remain unverified
+- Playback across the broader range of real-world codecs/containers beyond the one verified H.264/MP4 configuration and uncompressed WAV audio
 - Packaging method
 - Continuous-integration configuration
-- Behavior with very large media libraries or very large subtitle tracks (thousands of cues)
+- Behavior with very large media libraries, very large subtitle tracks, or a very large number of annotations/saved items on one cue
+- Selection-offset correctness for text containing UTF-16 surrogate-pair characters
 
 ## Next Engineering Objective
 
-Begin Milestone 4 — Transcript Workspace and Listening Diagnosis: semantic annotation labels, mishearing records, cue notes, and keyword/chunk capture, built on the verified Milestone 3 player and cue synchronization, per `ROADMAP.md`.
+Begin Milestone 5 — Guided Intensive Listening: the five-stage guided practice session (global comprehension, blind-listening keyword capture, transcript diagnosis reusing Milestone 4's annotation tools, shadowing, final summary), built on the verified Milestone 3 player and Milestone 4 transcript workspace, per `ROADMAP.md`.

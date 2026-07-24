@@ -12,7 +12,17 @@ from listentrace.application.dto.player_load import PlayerLoadResult
 from listentrace.application.dto.player_state import LoopMode
 from listentrace.domain.models.material import Material
 from listentrace.domain.models.subtitle import SubtitleCue
+from listentrace.infrastructure.db.connection import open_connection
+from listentrace.infrastructure.db.migrations import migrate
 from listentrace.ui.windows.player_window import PlayerWindow, _is_text_entry_widget
+
+
+@pytest.fixture()
+def conn(tmp_path):
+    connection = open_connection(tmp_path / "workspace.db")
+    migrate(connection)
+    yield connection
+    connection.close()
 
 
 def _run_event_loop(app, timeout_ms: int) -> None:
@@ -44,11 +54,11 @@ def test_is_text_entry_widget_helper(qapp):
     assert _is_text_entry_widget(None) is False
 
 
-def test_player_window_audio_mode_does_not_autoplay(qapp, tmp_path):
+def test_player_window_audio_mode_does_not_autoplay(qapp, conn, tmp_path):
     wav_path = tmp_path / "lesson.wav"
     _make_wav(wav_path)
 
-    window = PlayerWindow(_two_cue_result(wav_path))
+    window = PlayerWindow(_two_cue_result(wav_path), conn)
     _run_event_loop(qapp, 1500)
 
     assert window._audio_placeholder is not None
@@ -60,11 +70,11 @@ def test_player_window_audio_mode_does_not_autoplay(qapp, tmp_path):
     window.close()
 
 
-def test_player_window_video_mode_creates_video_surface(qapp, tmp_path):
+def test_player_window_video_mode_creates_video_surface(qapp, conn, tmp_path):
     wav_path = tmp_path / "lesson.wav"
     _make_wav(wav_path)
 
-    window = PlayerWindow(_two_cue_result(wav_path, media_kind="video"))
+    window = PlayerWindow(_two_cue_result(wav_path, media_kind="video"), conn)
 
     assert window._video_widget is not None
     assert window._audio_placeholder is None
@@ -72,11 +82,11 @@ def test_player_window_video_mode_creates_video_surface(qapp, tmp_path):
     window.close()
 
 
-def test_player_window_play_pause_toggle(qapp, tmp_path):
+def test_player_window_play_pause_toggle(qapp, conn, tmp_path):
     wav_path = tmp_path / "lesson.wav"
     _make_wav(wav_path)
 
-    window = PlayerWindow(_two_cue_result(wav_path))
+    window = PlayerWindow(_two_cue_result(wav_path), conn)
     window._on_play_pause_clicked()
     _run_event_loop(qapp, 500)
     assert window._playback.is_playing is True
@@ -89,11 +99,11 @@ def test_player_window_play_pause_toggle(qapp, tmp_path):
     window.close()
 
 
-def test_player_window_invalid_media_disables_all_playback_dependent_controls(qapp, tmp_path):
+def test_player_window_invalid_media_disables_all_playback_dependent_controls(qapp, conn, tmp_path):
     bad_path = tmp_path / "bad.mp3"
     bad_path.write_bytes(b"not a real mp3 file, just garbage bytes" * 20)
 
-    window = PlayerWindow(_two_cue_result(bad_path))
+    window = PlayerWindow(_two_cue_result(bad_path), conn)
     _run_event_loop(qapp, 2000)
 
     assert "Playback error" in window._status_label.text()
@@ -120,11 +130,11 @@ def test_player_window_invalid_media_disables_all_playback_dependent_controls(qa
     window.close()
 
 
-def test_player_window_keyboard_shortcuts_suppressed_after_playback_error(qapp, tmp_path):
+def test_player_window_keyboard_shortcuts_suppressed_after_playback_error(qapp, conn, tmp_path):
     bad_path = tmp_path / "bad.mp3"
     bad_path.write_bytes(b"not a real mp3 file, just garbage bytes" * 20)
 
-    window = PlayerWindow(_two_cue_result(bad_path))
+    window = PlayerWindow(_two_cue_result(bad_path), conn)
     _run_event_loop(qapp, 2000)
     assert window._playback_usable is False
 
@@ -143,11 +153,11 @@ def test_player_window_keyboard_shortcuts_suppressed_after_playback_error(qapp, 
     window.close()
 
 
-def test_player_window_cue_list_uses_contiguous_selection_mode(qapp, tmp_path):
+def test_player_window_cue_list_uses_contiguous_selection_mode(qapp, conn, tmp_path):
     wav_path = tmp_path / "lesson.wav"
     _make_wav(wav_path)
 
-    window = PlayerWindow(_two_cue_result(wav_path))
+    window = PlayerWindow(_two_cue_result(wav_path), conn)
     assert (
         window._cue_list.selectionMode()
         == QAbstractItemView.SelectionMode.ContiguousSelection
@@ -156,11 +166,11 @@ def test_player_window_cue_list_uses_contiguous_selection_mode(qapp, tmp_path):
     window.close()
 
 
-def test_player_window_replay_cue_pauses_at_cue_end(qapp, tmp_path):
+def test_player_window_replay_cue_pauses_at_cue_end(qapp, conn, tmp_path):
     wav_path = tmp_path / "lesson.wav"
     _make_wav(wav_path)
 
-    window = PlayerWindow(_two_cue_result(wav_path))
+    window = PlayerWindow(_two_cue_result(wav_path), conn)
     window._cue_list.setCurrentRow(0)  # cue 0: 0-500ms
     window._on_replay_cue()
 
@@ -172,11 +182,11 @@ def test_player_window_replay_cue_pauses_at_cue_end(qapp, tmp_path):
     window.close()
 
 
-def test_player_window_loop_cue_returns_to_start(qapp, tmp_path):
+def test_player_window_loop_cue_returns_to_start(qapp, conn, tmp_path):
     wav_path = tmp_path / "lesson.wav"
     _make_wav(wav_path)
 
-    window = PlayerWindow(_two_cue_result(wav_path))
+    window = PlayerWindow(_two_cue_result(wav_path), conn)
     window._cue_list.setCurrentRow(0)  # cue 0: 0-500ms
     window._on_loop_cue_clicked()
 
@@ -190,11 +200,11 @@ def test_player_window_loop_cue_returns_to_start(qapp, tmp_path):
     window.close()
 
 
-def test_player_window_loop_range_returns_to_first_cue_start(qapp, tmp_path):
+def test_player_window_loop_range_returns_to_first_cue_start(qapp, conn, tmp_path):
     wav_path = tmp_path / "lesson.wav"
     _make_wav(wav_path)
 
-    window = PlayerWindow(_two_cue_result(wav_path))
+    window = PlayerWindow(_two_cue_result(wav_path), conn)
     window._cue_list.item(0).setSelected(True)
     window._cue_list.item(1).setSelected(True)
     window._on_loop_range_clicked()
@@ -210,11 +220,11 @@ def test_player_window_loop_range_returns_to_first_cue_start(qapp, tmp_path):
     window.close()
 
 
-def test_player_window_cancel_loop_stops_boundary_seeks(qapp, tmp_path):
+def test_player_window_cancel_loop_stops_boundary_seeks(qapp, conn, tmp_path):
     wav_path = tmp_path / "lesson.wav"
     _make_wav(wav_path)
 
-    window = PlayerWindow(_two_cue_result(wav_path))
+    window = PlayerWindow(_two_cue_result(wav_path), conn)
     window._cue_list.setCurrentRow(0)
     window._on_loop_cue_clicked()
     window._session.cancel_loop()
@@ -224,11 +234,11 @@ def test_player_window_cancel_loop_stops_boundary_seeks(qapp, tmp_path):
     window.close()
 
 
-def test_player_window_toggle_transcript_keeps_active_cue_tracking(qapp, tmp_path):
+def test_player_window_toggle_transcript_keeps_active_cue_tracking(qapp, conn, tmp_path):
     wav_path = tmp_path / "lesson.wav"
     _make_wav(wav_path)
 
-    window = PlayerWindow(_two_cue_result(wav_path))
+    window = PlayerWindow(_two_cue_result(wav_path), conn)
     window._on_toggle_transcript()
 
     assert window._session.transcript_visible is False
@@ -240,11 +250,11 @@ def test_player_window_toggle_transcript_keeps_active_cue_tracking(qapp, tmp_pat
     window.close()
 
 
-def test_player_window_mute_toggle(qapp, tmp_path):
+def test_player_window_mute_toggle(qapp, conn, tmp_path):
     wav_path = tmp_path / "lesson.wav"
     _make_wav(wav_path)
 
-    window = PlayerWindow(_two_cue_result(wav_path))
+    window = PlayerWindow(_two_cue_result(wav_path), conn)
     assert window._playback.is_muted is False
 
     window._on_toggle_mute()

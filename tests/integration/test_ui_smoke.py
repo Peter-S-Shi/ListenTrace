@@ -26,7 +26,7 @@ def test_main_window_starts_with_initialized_database(qapp, tmp_path):
     window = MainWindow(connection, db_path)
 
     assert window.windowTitle() == "ListenTrace"
-    assert "Schema version: 2" in window._status_label.text()
+    assert "Schema version: 3" in window._status_label.text()
 
     window.close()
 

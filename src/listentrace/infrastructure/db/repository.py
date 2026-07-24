@@ -94,21 +94,30 @@ def get_cue_count(conn: sqlite3.Connection, subtitle_track_id: int) -> int:
     return int(row[0])
 
 
+def _row_to_cue(row: sqlite3.Row) -> SubtitleCue:
+    return SubtitleCue(
+        id=row["id"],
+        cue_index=row["cue_index"],
+        start_ms=row["start_ms"],
+        end_ms=row["end_ms"],
+        text=row["text"],
+        normalized_text=row["normalized_text"],
+    )
+
+
 def get_cues_for_track(conn: sqlite3.Connection, subtitle_track_id: int) -> list[SubtitleCue]:
     rows = conn.execute(
         "SELECT * FROM subtitle_cue WHERE subtitle_track_id = ? ORDER BY cue_index",
         (subtitle_track_id,),
     ).fetchall()
-    return [
-        SubtitleCue(
-            cue_index=row["cue_index"],
-            start_ms=row["start_ms"],
-            end_ms=row["end_ms"],
-            text=row["text"],
-            normalized_text=row["normalized_text"],
-        )
-        for row in rows
-    ]
+    return [_row_to_cue(row) for row in rows]
+
+
+def get_cue_by_id(conn: sqlite3.Connection, subtitle_cue_id: int) -> SubtitleCue | None:
+    row = conn.execute(
+        "SELECT * FROM subtitle_cue WHERE id = ?", (subtitle_cue_id,)
+    ).fetchone()
+    return _row_to_cue(row) if row is not None else None
 
 
 def create_material_package(

@@ -10,6 +10,7 @@ from listentrace.infrastructure.db.connection import open_connection
 from listentrace.infrastructure.db.migrations import MIGRATIONS, current_version, migrate
 from listentrace.infrastructure.db.repository import (
     get_cue_count,
+    get_cues_for_track,
     get_material,
     insert_material,
     insert_subtitle_track,
@@ -38,7 +39,7 @@ def test_migrate_is_idempotent(conn):
     version_before = current_version(conn)
     migrate(conn)  # second call must not raise or duplicate schema
     version_after = current_version(conn)
-    assert version_before == version_after == 2
+    assert version_before == version_after == 3
 
 
 def test_foreign_keys_are_enforced(conn):
@@ -97,13 +98,65 @@ def test_migration_upgrades_a_milestone1_v1_database(tmp_path):
 
     final_version = migrate(connection)
 
-    assert final_version == 2
+    assert final_version == 3
     columns = {row["name"] for row in connection.execute("PRAGMA table_info(material)")}
     assert "normalized_path" in columns
+    tables = {
+        row["name"]
+        for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
+    }
+    assert {"annotation", "cue_note", "saved_language_item", "annotation_label_preference"} <= tables
 
     stored = get_material(connection, material_id)
     assert stored is not None
     assert stored.title == "Pre-existing"
     assert stored.normalized_path is None
+
+    connection.close()
+
+
+def test_migration_upgrades_a_milestone2_v2_database(tmp_path):
+    connection = open_connection(tmp_path / "v2.db")
+    connection.executescript(dict(MIGRATIONS)[1])
+    connection.executescript(dict(MIGRATIONS)[2])
+    connection.execute("PRAGMA user_version = 2")
+    connection.commit()
+    assert current_version(connection) == 2
+
+    # Populate a v2-shaped material + subtitle track + cues, to prove the v3
+    # migration doesn't disturb pre-existing Milestone 1/2 data.
+    material_id = insert_material(
+        connection, Material(title="Existing Lesson", media_path="C:/media/existing.mp4")
+    )
+    track = SubtitleTrack(
+        material_id=material_id,
+        format="srt",
+        source_path="C:/media/existing.srt",
+        cues=[SubtitleCue(cue_index=1, start_ms=0, end_ms=1000, text="Bonjour")],
+    )
+    track_id = insert_subtitle_track(connection, track)
+
+    final_version = migrate(connection)
+
+    assert final_version == 3
+    tables = {
+        row["name"]
+        for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
+    }
+    assert {"annotation", "cue_note", "saved_language_item", "annotation_label_preference"} <= tables
+
+    # Existing material/track/cue data must remain intact after the upgrade.
+    stored = get_material(connection, material_id)
+    assert stored is not None
+    assert stored.title == "Existing Lesson"
+    cues = get_cues_for_track(connection, track_id)
+    assert len(cues) == 1
+    assert cues[0].text == "Bonjour"
+
+    prefs = {
+        row["label_key"]: row["color"]
+        for row in connection.execute("SELECT label_key, color FROM annotation_label_preference")
+    }
+    assert len(prefs) == 5
 
     connection.close()

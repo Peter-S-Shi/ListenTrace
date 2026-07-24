@@ -53,6 +53,63 @@ MIGRATIONS: list[tuple[int, str]] = [
         CREATE UNIQUE INDEX idx_material_normalized_path ON material(normalized_path);
         """,
     ),
+    (
+        3,
+        """
+        CREATE TABLE annotation (
+            id INTEGER PRIMARY KEY,
+            subtitle_cue_id INTEGER NOT NULL REFERENCES subtitle_cue(id) ON DELETE CASCADE,
+            label_key TEXT NOT NULL,
+            selected_text TEXT NOT NULL,
+            selection_start INTEGER NOT NULL,
+            selection_end INTEGER NOT NULL,
+            heard_as TEXT,
+            note TEXT,
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+            UNIQUE (subtitle_cue_id, label_key, selection_start, selection_end),
+            CHECK (selection_end >= selection_start)
+        );
+
+        CREATE TABLE cue_note (
+            subtitle_cue_id INTEGER PRIMARY KEY REFERENCES subtitle_cue(id) ON DELETE CASCADE,
+            note_text TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+
+        CREATE TABLE saved_language_item (
+            id INTEGER PRIMARY KEY,
+            material_id INTEGER NOT NULL REFERENCES material(id) ON DELETE CASCADE,
+            subtitle_cue_id INTEGER NOT NULL REFERENCES subtitle_cue(id) ON DELETE CASCADE,
+            item_type TEXT NOT NULL,
+            text TEXT NOT NULL,
+            normalized_text TEXT NOT NULL,
+            selection_start INTEGER NOT NULL,
+            selection_end INTEGER NOT NULL,
+            meaning TEXT,
+            note TEXT,
+            context_text TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+            UNIQUE (material_id, subtitle_cue_id, item_type, selection_start, selection_end, normalized_text),
+            CHECK (selection_end >= selection_start)
+        );
+
+        CREATE TABLE annotation_label_preference (
+            label_key TEXT PRIMARY KEY,
+            color TEXT NOT NULL,
+            updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+
+        INSERT INTO annotation_label_preference (label_key, color) VALUES
+            ('keyword', '#2563EB'),
+            ('known_not_heard', '#D97706'),
+            ('connected_reduced_speech', '#7C3AED'),
+            ('misheard', '#DC2626'),
+            ('unknown_word_or_chunk', '#059669');
+        """,
+    ),
 ]
 
 

@@ -2,22 +2,26 @@
 
 This document defines the first domain direction. It is not a frozen database schema.
 
-**Status (through Milestone 2)**: `Material`, `SubtitleTrack`, and `SubtitleCue` are implemented as actual SQLite tables (schema version 2), matching the field lists below except that not all optional fields are populated by application logic yet. Migration 2 added `Material.normalized_path` (see below) on top of Milestone 1's migration 1. `PracticeSession`, `StageResponse`, `KeywordCapture`, `Annotation`, `SavedLanguageItem`, `QuizSession`, `QuizItemResult`, and `RecordingReference` remain design direction only and will be added as migrations in the milestones that need them.
+**Status (through Milestone 4)**: `Material`, `SubtitleTrack`, `SubtitleCue`, `Annotation`, `CueNote`, `SavedLanguageItem`, and `AnnotationLabelPreference` are implemented as actual SQLite tables (schema version 3). Migration 2 added `Material.normalized_path`; migration 3 (Milestone 4, additive, no data loss) added the four learning-evidence tables — see their sections below for the field lists actually implemented, which differ slightly from this document's original design sketch (in particular: `Annotation` and `SavedLanguageItem` are independent of any practice session in Milestone 4; `CueNote` was not in the original sketch at all). `PracticeSession`, `StageResponse`, `KeywordCapture`, `QuizSession`, `QuizItemResult`, and `RecordingReference` remain design direction only and will be added as migrations in the milestones that need them — Milestone 5 is expected to add an optional `practice_session_id` to `Annotation` via a further additive migration rather than redesigning the table.
 
 ## Entity Overview
 
 ```text
 Material
   1 --- many SubtitleTracks
-  1 --- many PracticeSessions
-  1 --- many SavedLanguageItems
+  1 --- many PracticeSessions        (design direction only, not yet implemented)
+  1 --- many SavedLanguageItems       (implemented, Milestone 4)
 
 SubtitleTrack
   1 --- many SubtitleCues
 
-PracticeSession
+SubtitleCue
+  1 --- many Annotations              (implemented, Milestone 4 — independent of PracticeSession)
+  1 --- 0..1 CueNote                  (implemented, Milestone 4)
+  1 --- many SavedLanguageItems       (implemented, Milestone 4)
+
+PracticeSession                       (design direction only, not yet implemented)
   1 --- many StageResponses
-  1 --- many Annotations
   1 --- many QuizSessions
   1 --- many RecordingReferences
 ```
@@ -146,21 +150,22 @@ Suggested fields:
 
 ## Annotation
 
-Semantic diagnosis attached to a cue or selected text range.
+Semantic diagnosis attached to a cue or selected text range. **Implemented (migration 3).** Milestone 4 annotations have no `practice_session_id` — they are independent material/cue records by design, so Milestone 5 can add an optional association via a further additive migration rather than a redesign.
 
-Suggested fields:
+Implemented fields:
 
 - `id`
-- `practice_session_id`
-- `subtitle_cue_id`
+- `subtitle_cue_id` (FK → `subtitle_cue.id`, `ON DELETE CASCADE`)
 - `label_key`
 - `selected_text`
-- `selection_start`
+- `selection_start` (zero-based, end-exclusive offset into the cue's `text`, in Python/Unicode-code-point units — see `domain/services/text_range.py`)
 - `selection_end`
-- `heard_as`
+- `heard_as` (only ever populated when `label_key = 'misheard'`; `NULL` for every other label, even when several labels are saved together in one action)
 - `note`
 - `created_at`
 - `updated_at`
+
+Constraints actually enforced: `UNIQUE (subtitle_cue_id, label_key, selection_start, selection_end)` (blocks the exact-duplicate case at the database level, reinforcing the application-layer check); `CHECK (selection_end >= selection_start)`.
 
 Initial label keys:
 
@@ -170,24 +175,53 @@ Initial label keys:
 - `misheard`
 - `unknown_word_or_chunk`
 
-## SavedLanguageItem
+## CueNote
 
-User-managed vocabulary item or chunk.
+One free-form note per subtitle cue, distinct from an Annotation's per-annotation `note`. **Implemented (migration 3), not present in earlier drafts of this document.**
 
-Suggested fields:
+Implemented fields:
 
-- `id`
-- `material_id`
-- `subtitle_cue_id`
-- `item_type`
-- `text`
-- `meaning`
-- `note`
-- `context_text`
+- `subtitle_cue_id` (primary key and FK → `subtitle_cue.id`, `ON DELETE CASCADE` — the primary-key choice itself enforces "at most one note per cue")
+- `note_text` (never stored empty — see below)
 - `created_at`
 - `updated_at`
 
+Rule: saving an empty/whitespace-only note is treated as delete-intent by `cue_note_service.save_cue_note` — the row is removed rather than persisted with empty text, so "cue has no note" and "cue has an empty-string note" are never both possible states.
+
+## SavedLanguageItem
+
+User-managed vocabulary item or chunk. **Implemented (migration 3).**
+
+Implemented fields:
+
+- `id`
+- `material_id` (FK → `material.id`, `ON DELETE CASCADE`)
+- `subtitle_cue_id` (FK → `subtitle_cue.id`, `ON DELETE CASCADE`)
+- `item_type` (`word` / `phrase` / `chunk` / `sentence_pattern`)
+- `text` (derived from the cue substring at the stored range, not a separately-trusted string)
+- `normalized_text` (same normalization as subtitle cues — strips simple tags, collapses whitespace; used for duplicate/"same text elsewhere" lookups)
+- `selection_start` / `selection_end` (same canonical offset semantics as Annotation)
+- `meaning`
+- `note`
+- `context_text` (prefilled from the full cue text at save time, then freely user-editable and stored as typed)
+- `created_at`
+- `updated_at`
+
+Constraint actually enforced: `UNIQUE (material_id, subtitle_cue_id, item_type, selection_start, selection_end, normalized_text)` — the exact-duplicate rule reinforced at the database level. A different cue/material with the same `normalized_text` is not blocked by this constraint; the application layer (`saved_language_item_service`) detects it and requires explicit confirmation before creating a second record.
+
 The application does not claim dictionary authority. The user edits and owns these fields.
+
+## AnnotationLabelPreference
+
+Global, material-independent presentation preference — not a per-annotation field. **Implemented (migration 3), seeded with defaults for all 5 labels at migration time.**
+
+Implemented fields:
+
+- `label_key` (primary key; one of the 5 stable label keys)
+- `color` (6-digit hex string, validated by `label_preference_service`)
+- `updated_at`
+
+Rule: this table stores *only* the color preference. Label semantics/meaning are defined by the domain layer (`AnnotationLabel` enum), never by this table — changing a color must never be able to change what a stored `Annotation.label_key` means.
 
 ## QuizSession
 
@@ -244,3 +278,4 @@ Analytics should be derived from reliable session, annotation, quiz, and review 
 - Source media, subtitle files, recordings, databases, and exports are local user data.
 - Database migrations must be additive and tested.
 - Display colors never replace semantic label keys.
+- Migrations 1→2→3 have each been additive only (no table rewritten or dropped) and are each covered by an automated upgrade test starting from the prior version's schema with real data present.

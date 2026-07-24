@@ -1,17 +1,22 @@
 from __future__ import annotations
 
+import sqlite3
+
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QKeyEvent
+from PySide6.QtGui import QColor, QKeyEvent, QTextCharFormat, QTextCursor
 from PySide6.QtMultimediaWidgets import QVideoWidget
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QApplication,
+    QCheckBox,
+    QComboBox,
     QHBoxLayout,
     QLabel,
     QLineEdit,
     QListWidget,
     QListWidgetItem,
     QMainWindow,
+    QMessageBox,
     QPlainTextEdit,
     QPushButton,
     QSlider,
@@ -22,10 +27,28 @@ from PySide6.QtWidgets import (
 
 from listentrace.application.dto.player_load import PlayerLoadResult
 from listentrace.application.dto.player_state import LoopMode
+from listentrace.application.dto.saved_item_results import SavedItemNeedsConfirmation
+from listentrace.application.errors import (
+    AnnotationNotFoundError,
+    AnnotationValidationError,
+    CueNotFoundError,
+    SavedItemNotFoundError,
+    SavedItemValidationError,
+)
+from listentrace.application.services import annotation_service, cue_note_service
+from listentrace.application.services import cue_workspace_service as workspace_service
+from listentrace.application.services import label_preference_service
+from listentrace.application.services import saved_language_item_service as item_service
 from listentrace.application.services.player_session import PlayerSession
+from listentrace.domain.enums.annotation_label import AnnotationLabel
+from listentrace.domain.enums.saved_item_type import SavedItemType
+from listentrace.domain.services.text_range import whole_cue_range
 from listentrace.infrastructure.media.playback import PlaybackController
+from listentrace.ui.windows.label_color_dialog import LabelColorDialog
 
 _SEEK_STEP_MS = 5000
+_ACTIVE_CUE_HIGHLIGHT = QColor("#FFF3CD")
+_OVERLAP_HIGHLIGHT = QColor("#D0D0D0")
 
 
 def _is_text_entry_widget(widget: object) -> bool:
@@ -39,17 +62,24 @@ def _format_time(ms: int) -> str:
 
 
 class PlayerWindow(QMainWindow):
-    def __init__(self, load_result: PlayerLoadResult, parent: QWidget | None = None) -> None:
+    def __init__(
+        self,
+        load_result: PlayerLoadResult,
+        connection: sqlite3.Connection,
+        parent: QWidget | None = None,
+    ) -> None:
         super().__init__(parent)
         material = load_result.material
         self.setWindowTitle(f"ListenTrace — {material.title}")
-        self.resize(760, 600)
+        self.resize(900, 720)
 
         self._material = material
+        self._connection = connection
         self._session = PlayerSession(load_result.cues)
         self._playback = PlaybackController(self)
         self._seeking_via_slider = False
         self._playback_usable = True
+        self._editing_cue_index: int | None = None
 
         central = QWidget(self)
         layout = QVBoxLayout(central)
@@ -101,6 +131,8 @@ class PlayerWindow(QMainWindow):
         self._transcript_button.clicked.connect(self._on_toggle_transcript)
         self._mute_button = QPushButton("Mute")
         self._mute_button.clicked.connect(self._on_toggle_mute)
+        self._label_colors_button = QPushButton("Label Colors...")
+        self._label_colors_button.clicked.connect(self._on_open_label_colors)
         for button in (
             self._play_pause_button,
             self._previous_button,
@@ -110,6 +142,7 @@ class PlayerWindow(QMainWindow):
             self._loop_range_button,
             self._transcript_button,
             self._mute_button,
+            self._label_colors_button,
         ):
             transport_row.addWidget(button)
         layout.addLayout(transport_row)
@@ -128,12 +161,21 @@ class PlayerWindow(QMainWindow):
         for cue in self._session.cues:
             label = f"[{_format_time(cue.start_ms)}-{_format_time(cue.end_ms)}] {cue.text}"
             self._cue_list.addItem(QListWidgetItem(label))
+        self._cue_list.currentItemChanged.connect(self._on_editing_cue_changed)
         layout.addWidget(self._cue_list, 1)
+
+        self._workspace_panel = self._build_workspace_panel()
+        layout.addWidget(self._workspace_panel)
 
         self._status_label = QLabel("")
         self._status_label.setStyleSheet("color: red;")
         self._status_label.setWordWrap(True)
         layout.addWidget(self._status_label)
+
+        self._workspace_status_label = QLabel("")
+        self._workspace_status_label.setStyleSheet("color: red;")
+        self._workspace_status_label.setWordWrap(True)
+        layout.addWidget(self._workspace_status_label)
 
         return_button = QPushButton("Return to Library")
         return_button.clicked.connect(self.close)
@@ -149,6 +191,137 @@ class PlayerWindow(QMainWindow):
         self._playback.set_volume(self._volume_slider.value() / 100)
         self._playback.load(material.media_path)
         # No autoplay: playback stays paused at 0 until the user presses Play.
+
+        self._set_workspace_form_enabled(False)
+
+    # ---- workspace panel construction ----
+
+    def _build_workspace_panel(self) -> QWidget:
+        panel = QWidget()
+        panel_layout = QHBoxLayout(panel)
+        panel_layout.setContentsMargins(0, 0, 0, 0)
+
+        annotation_column = QVBoxLayout()
+        annotation_column.addWidget(QLabel("Editing cue transcript (select text to annotate):"))
+
+        self._editing_transcript_view = QTextEdit()
+        self._editing_transcript_view.setReadOnly(True)
+        self._editing_transcript_view.setMaximumHeight(80)
+        self._editing_transcript_view.cursorPositionChanged.connect(
+            self._on_transcript_cursor_moved
+        )
+        annotation_column.addWidget(self._editing_transcript_view)
+
+        label_row = QHBoxLayout()
+        self._label_checkboxes: dict[str, QCheckBox] = {}
+        for label in AnnotationLabel:
+            checkbox = QCheckBox(label.value.replace("_", " "))
+            checkbox.stateChanged.connect(self._on_label_checkbox_changed)
+            self._label_checkboxes[label.value] = checkbox
+            label_row.addWidget(checkbox)
+        annotation_column.addLayout(label_row)
+
+        heard_as_row = QHBoxLayout()
+        heard_as_row.addWidget(QLabel("Heard as:"))
+        self._heard_as_edit = QLineEdit()
+        self._heard_as_edit.setEnabled(False)
+        heard_as_row.addWidget(self._heard_as_edit)
+        annotation_column.addLayout(heard_as_row)
+
+        note_row = QHBoxLayout()
+        note_row.addWidget(QLabel("Annotation note:"))
+        self._annotation_note_edit = QLineEdit()
+        note_row.addWidget(self._annotation_note_edit)
+        annotation_column.addLayout(note_row)
+
+        annotation_buttons_row = QHBoxLayout()
+        self._save_annotation_button = QPushButton("Save Annotation")
+        self._save_annotation_button.clicked.connect(self._on_save_annotation_clicked)
+        self._update_annotation_button = QPushButton("Update")
+        self._update_annotation_button.clicked.connect(self._on_update_annotation_clicked)
+        self._update_annotation_button.setEnabled(False)
+        self._delete_annotation_button = QPushButton("Delete")
+        self._delete_annotation_button.clicked.connect(self._on_delete_annotation_clicked)
+        self._delete_annotation_button.setEnabled(False)
+        annotation_buttons_row.addWidget(self._save_annotation_button)
+        annotation_buttons_row.addWidget(self._update_annotation_button)
+        annotation_buttons_row.addWidget(self._delete_annotation_button)
+        annotation_column.addLayout(annotation_buttons_row)
+
+        annotation_column.addWidget(QLabel("Annotations on this cue:"))
+        self._annotation_list = QListWidget()
+        self._annotation_list.setMaximumHeight(100)
+        self._annotation_list.currentItemChanged.connect(self._on_annotation_selected)
+        annotation_column.addWidget(self._annotation_list)
+
+        annotation_column.addWidget(QLabel("Cue Note:"))
+        self._cue_note_edit = QTextEdit()
+        self._cue_note_edit.setMaximumHeight(60)
+        annotation_column.addWidget(self._cue_note_edit)
+        note_buttons_row = QHBoxLayout()
+        self._save_note_button = QPushButton("Save Note")
+        self._save_note_button.clicked.connect(self._on_save_note_clicked)
+        self._delete_note_button = QPushButton("Delete Note")
+        self._delete_note_button.clicked.connect(self._on_delete_note_clicked)
+        note_buttons_row.addWidget(self._save_note_button)
+        note_buttons_row.addWidget(self._delete_note_button)
+        annotation_column.addLayout(note_buttons_row)
+
+        panel_layout.addLayout(annotation_column, 1)
+
+        item_column = QVBoxLayout()
+        item_column.addWidget(QLabel("Save Language Item"))
+
+        item_type_row = QHBoxLayout()
+        item_type_row.addWidget(QLabel("Type:"))
+        self._item_type_combo = QComboBox()
+        for item_type in SavedItemType:
+            self._item_type_combo.addItem(item_type.value.replace("_", " "), item_type.value)
+        item_type_row.addWidget(self._item_type_combo)
+        item_column.addLayout(item_type_row)
+
+        meaning_row = QHBoxLayout()
+        meaning_row.addWidget(QLabel("Meaning:"))
+        self._item_meaning_edit = QLineEdit()
+        meaning_row.addWidget(self._item_meaning_edit)
+        item_column.addLayout(meaning_row)
+
+        item_note_row = QHBoxLayout()
+        item_note_row.addWidget(QLabel("Note:"))
+        self._item_note_edit = QLineEdit()
+        item_note_row.addWidget(self._item_note_edit)
+        item_column.addLayout(item_note_row)
+
+        item_column.addWidget(QLabel("Context (editable):"))
+        self._item_context_edit = QTextEdit()
+        self._item_context_edit.setMaximumHeight(60)
+        item_column.addWidget(self._item_context_edit)
+
+        item_buttons_row = QHBoxLayout()
+        self._save_item_button = QPushButton("Save Item")
+        self._save_item_button.clicked.connect(self._on_save_item_clicked)
+        self._update_item_button = QPushButton("Update")
+        self._update_item_button.clicked.connect(self._on_update_item_clicked)
+        self._update_item_button.setEnabled(False)
+        self._delete_item_button = QPushButton("Delete")
+        self._delete_item_button.clicked.connect(self._on_delete_item_clicked)
+        self._delete_item_button.setEnabled(False)
+        item_buttons_row.addWidget(self._save_item_button)
+        item_buttons_row.addWidget(self._update_item_button)
+        item_buttons_row.addWidget(self._delete_item_button)
+        item_column.addLayout(item_buttons_row)
+
+        item_column.addWidget(QLabel("Saved items on this cue:"))
+        self._saved_items_list = QListWidget()
+        self._saved_items_list.setMaximumHeight(100)
+        self._saved_items_list.currentItemChanged.connect(self._on_saved_item_selected)
+        item_column.addWidget(self._saved_items_list)
+
+        panel_layout.addLayout(item_column, 1)
+
+        return panel
+
+    # ---- transport handlers (Milestone 3, unchanged behavior) ----
 
     def _on_play_pause_clicked(self) -> None:
         if self._playback.is_playing:
@@ -185,11 +358,17 @@ class PlayerWindow(QMainWindow):
             self._audio_placeholder.setText(f"{self._material.title}\n{text}")
 
     def _update_active_cue_highlight(self) -> None:
+        """Highlight the currently-playing cue via background color only.
+
+        This must never change the list's current/selected item — that represents the
+        learner's independently-controlled editing cue (Milestone 4 requirement).
+        """
         active_index = self._session.active_cue_index
-        if active_index is None:
-            return
-        if len(self._cue_list.selectedItems()) <= 1:
-            self._cue_list.setCurrentRow(active_index)
+        for i in range(self._cue_list.count()):
+            item = self._cue_list.item(i)
+            if item is None:
+                continue
+            item.setBackground(_ACTIVE_CUE_HIGHLIGHT if i == active_index else QColor(0, 0, 0, 0))
 
     def _on_slider_pressed(self) -> None:
         self._seeking_via_slider = True
@@ -247,9 +426,22 @@ class PlayerWindow(QMainWindow):
     def _on_toggle_transcript(self) -> None:
         self._session.transcript_visible = not self._session.transcript_visible
         self._cue_list.setVisible(self._session.transcript_visible)
+        self._workspace_panel.setVisible(self._session.transcript_visible)
         self._transcript_button.setText(
             "Show Transcript" if not self._session.transcript_visible else "Hide Transcript"
         )
+
+        # Defense in depth: clear the transcript text itself (not just hide the
+        # panel) so hidden cue text is never left sitting in a widget's content.
+        cue = self._current_editing_cue()
+        if self._session.transcript_visible:
+            if cue is not None:
+                self._editing_transcript_view.setPlainText(cue.text)
+                self._apply_annotation_highlighting(
+                    cue.text, getattr(self, "_current_annotations", [])
+                )
+        else:
+            self._editing_transcript_view.setPlainText("")
 
     def _on_toggle_mute(self) -> None:
         muted = not self._playback.is_muted
@@ -269,8 +461,9 @@ class PlayerWindow(QMainWindow):
     def _set_playback_controls_enabled(self, enabled: bool) -> None:
         """Enable/disable every control that depends on usable playback.
 
-        Transcript visibility and Return to Library are intentionally excluded:
-        they remain usable even when the underlying media cannot be played.
+        Transcript visibility, the transcript workspace, and Return to Library are
+        intentionally excluded: they remain usable even when the underlying media
+        cannot be played.
         """
         self._playback_usable = enabled
         for widget in (
@@ -288,6 +481,9 @@ class PlayerWindow(QMainWindow):
 
     def _show_status(self, message: str) -> None:
         self._status_label.setText(message)
+
+    def _show_workspace_status(self, message: str) -> None:
+        self._workspace_status_label.setText(message)
 
     def _on_loop_toggle_shortcut(self) -> None:
         if self._session.loop_mode is not LoopMode.NONE:
@@ -341,3 +537,387 @@ class PlayerWindow(QMainWindow):
         self._session.cancel_loop()
         self._playback.stop()
         super().closeEvent(event)
+
+    # ---- Milestone 4: editing cue / transcript workspace ----
+
+    def _current_editing_cue(self):
+        if self._editing_cue_index is None:
+            return None
+        return self._session.cues[self._editing_cue_index]
+
+    def _on_editing_cue_changed(self, current: QListWidgetItem, previous: QListWidgetItem) -> None:
+        if current is None:
+            self._editing_cue_index = None
+            self._set_workspace_form_enabled(False)
+            return
+        self._editing_cue_index = self._cue_list.row(current)
+        self._set_workspace_form_enabled(True)
+        self._refresh_editing_cue_panels()
+
+    def _set_workspace_form_enabled(self, enabled: bool) -> None:
+        for widget in (
+            self._save_annotation_button,
+            self._save_note_button,
+            self._delete_note_button,
+            self._save_item_button,
+        ):
+            widget.setEnabled(enabled)
+        if not enabled:
+            self._update_annotation_button.setEnabled(False)
+            self._delete_annotation_button.setEnabled(False)
+            self._update_item_button.setEnabled(False)
+            self._delete_item_button.setEnabled(False)
+
+    def _refresh_editing_cue_panels(self) -> None:
+        cue = self._current_editing_cue()
+        if cue is None or cue.id is None:
+            return
+
+        self._show_workspace_status("")
+
+        if self._session.transcript_visible:
+            self._editing_transcript_view.setPlainText(cue.text)
+        else:
+            self._editing_transcript_view.setPlainText("")
+
+        try:
+            workspace = workspace_service.load_cue_workspace(self._connection, cue.id)
+        except CueNotFoundError:
+            return
+
+        self._current_annotations = workspace.annotations
+        self._apply_annotation_highlighting(cue.text, workspace.annotations)
+
+        self._annotation_list.blockSignals(True)
+        self._annotation_list.clear()
+        for annotation in workspace.annotations:
+            heard_as_suffix = f" (heard as: {annotation.heard_as})" if annotation.heard_as else ""
+            item = QListWidgetItem(f"[{annotation.label_key}] {annotation.selected_text}{heard_as_suffix}")
+            item.setData(Qt.ItemDataRole.UserRole, annotation.id)
+            self._annotation_list.addItem(item)
+        self._annotation_list.blockSignals(False)
+
+        self._cue_note_edit.blockSignals(True)
+        self._cue_note_edit.setPlainText(workspace.cue_note.note_text if workspace.cue_note else "")
+        self._cue_note_edit.blockSignals(False)
+
+        self._item_context_edit.setPlainText(cue.text)
+
+        self._saved_items_list.blockSignals(True)
+        self._saved_items_list.clear()
+        for item_row in workspace.saved_items:
+            list_item = QListWidgetItem(f"[{item_row.item_type}] {item_row.text}")
+            list_item.setData(Qt.ItemDataRole.UserRole, item_row.id)
+            self._saved_items_list.addItem(list_item)
+        self._saved_items_list.blockSignals(False)
+
+        self._clear_annotation_form()
+
+    def _apply_annotation_highlighting(self, cue_text: str, annotations) -> None:
+        document = self._editing_transcript_view.document()
+        clear_cursor = QTextCursor(document)
+        clear_cursor.select(QTextCursor.SelectionType.Document)
+        clear_cursor.setCharFormat(QTextCharFormat())
+
+        if not annotations or not self._session.transcript_visible:
+            return
+
+        text_length = len(cue_text)
+        coverage: list[list[str]] = [[] for _ in range(text_length)]
+        for annotation in annotations:
+            start = max(annotation.selection_start, 0)
+            end = min(annotation.selection_end, text_length)
+            for i in range(start, end):
+                coverage[i].append(annotation.label_key)
+
+        colors = label_preference_service.get_label_preferences(self._connection)
+
+        i = 0
+        while i < text_length:
+            labels_here = coverage[i]
+            if not labels_here:
+                i += 1
+                continue
+            j = i
+            while j < text_length and coverage[j] == labels_here:
+                j += 1
+
+            fmt = QTextCharFormat()
+            if len(labels_here) == 1:
+                fmt.setBackground(QColor(colors.get(labels_here[0], "#CCCCCC")))
+            else:
+                fmt.setBackground(_OVERLAP_HIGHLIGHT)
+
+            highlight_cursor = QTextCursor(document)
+            highlight_cursor.setPosition(i)
+            highlight_cursor.setPosition(j, QTextCursor.MoveMode.KeepAnchor)
+            highlight_cursor.setCharFormat(fmt)
+            i = j
+
+    def _clear_annotation_form(self) -> None:
+        for checkbox in self._label_checkboxes.values():
+            checkbox.blockSignals(True)
+            checkbox.setChecked(False)
+            checkbox.blockSignals(False)
+        self._heard_as_edit.clear()
+        self._heard_as_edit.setEnabled(False)
+        self._annotation_note_edit.clear()
+        self._editing_annotation_id: int | None = None
+        self._update_annotation_button.setEnabled(False)
+        self._delete_annotation_button.setEnabled(False)
+
+    def _on_label_checkbox_changed(self, _state: int) -> None:
+        misheard_checked = self._label_checkboxes[AnnotationLabel.MISHEARD.value].isChecked()
+        self._heard_as_edit.setEnabled(misheard_checked)
+
+    def _current_selection_range(self, cue_text: str) -> tuple[int, int]:
+        cursor = self._editing_transcript_view.textCursor()
+        start, end = cursor.selectionStart(), cursor.selectionEnd()
+        if start == end:
+            return whole_cue_range(cue_text)
+        return start, end
+
+    def _on_transcript_cursor_moved(self) -> None:
+        cue = self._current_editing_cue()
+        if cue is None or not getattr(self, "_current_annotations", None):
+            return
+        position = self._editing_transcript_view.textCursor().position()
+        for annotation in self._current_annotations:
+            if annotation.selection_start <= position < annotation.selection_end:
+                for i in range(self._annotation_list.count()):
+                    item = self._annotation_list.item(i)
+                    if item is not None and item.data(Qt.ItemDataRole.UserRole) == annotation.id:
+                        self._annotation_list.setCurrentItem(item)
+                        return
+                break
+
+    def _on_save_annotation_clicked(self) -> None:
+        cue = self._current_editing_cue()
+        if cue is None or cue.id is None:
+            self._show_workspace_status("Select an editing cue first.")
+            return
+
+        start, end = self._current_selection_range(cue.text)
+        label_keys = [key for key, checkbox in self._label_checkboxes.items() if checkbox.isChecked()]
+        heard_as = self._heard_as_edit.text()
+        note = self._annotation_note_edit.text()
+
+        try:
+            annotation_service.create_annotations(
+                self._connection, cue.id, start, end, label_keys, heard_as=heard_as, note=note
+            )
+        except (CueNotFoundError, AnnotationValidationError) as exc:
+            self._show_workspace_status(str(exc))
+            return
+
+        self._refresh_editing_cue_panels()
+
+    def _on_annotation_selected(self, current: QListWidgetItem, previous: QListWidgetItem) -> None:
+        if current is None:
+            self._editing_annotation_id = None
+            self._update_annotation_button.setEnabled(False)
+            self._delete_annotation_button.setEnabled(False)
+            return
+
+        annotation_id = current.data(Qt.ItemDataRole.UserRole)
+        self._editing_annotation_id = annotation_id
+        self._update_annotation_button.setEnabled(True)
+        self._delete_annotation_button.setEnabled(True)
+
+        annotation = next(
+            (a for a in getattr(self, "_current_annotations", []) if a.id == annotation_id), None
+        )
+        if annotation is None:
+            return
+
+        for key, checkbox in self._label_checkboxes.items():
+            checkbox.blockSignals(True)
+            checkbox.setChecked(key == annotation.label_key)
+            checkbox.blockSignals(False)
+        self._heard_as_edit.setEnabled(annotation.label_key == AnnotationLabel.MISHEARD.value)
+        self._heard_as_edit.setText(annotation.heard_as or "")
+        self._annotation_note_edit.setText(annotation.note or "")
+
+        cursor = self._editing_transcript_view.textCursor()
+        cursor.setPosition(annotation.selection_start)
+        cursor.setPosition(annotation.selection_end, QTextCursor.MoveMode.KeepAnchor)
+        self._editing_transcript_view.setTextCursor(cursor)
+
+    def _on_update_annotation_clicked(self) -> None:
+        if self._editing_annotation_id is None:
+            return
+        heard_as = self._heard_as_edit.text()
+        note = self._annotation_note_edit.text()
+        try:
+            annotation_service.update_annotation(
+                self._connection, self._editing_annotation_id, heard_as=heard_as, note=note
+            )
+        except (AnnotationNotFoundError, AnnotationValidationError) as exc:
+            self._show_workspace_status(str(exc))
+            return
+        self._refresh_editing_cue_panels()
+
+    def _on_delete_annotation_clicked(self) -> None:
+        if self._editing_annotation_id is None:
+            return
+        answer = QMessageBox.question(
+            self,
+            "Delete Annotation",
+            "Delete this annotation? This cannot be undone.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        try:
+            annotation_service.delete_annotation(self._connection, self._editing_annotation_id)
+        except AnnotationNotFoundError as exc:
+            self._show_workspace_status(str(exc))
+        self._refresh_editing_cue_panels()
+
+    def _on_save_note_clicked(self) -> None:
+        cue = self._current_editing_cue()
+        if cue is None or cue.id is None:
+            return
+        try:
+            cue_note_service.save_cue_note(self._connection, cue.id, self._cue_note_edit.toPlainText())
+        except CueNotFoundError as exc:
+            self._show_workspace_status(str(exc))
+            return
+        self._refresh_editing_cue_panels()
+
+    def _on_delete_note_clicked(self) -> None:
+        cue = self._current_editing_cue()
+        if cue is None or cue.id is None:
+            return
+        answer = QMessageBox.question(
+            self,
+            "Delete Cue Note",
+            "Delete the note for this cue?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        cue_note_service.delete_cue_note(self._connection, cue.id)
+        self._refresh_editing_cue_panels()
+
+    def _on_save_item_clicked(self) -> None:
+        cue = self._current_editing_cue()
+        if cue is None or cue.id is None:
+            self._show_workspace_status("Select an editing cue first.")
+            return
+
+        start, end = self._current_selection_range(cue.text)
+        item_type = self._item_type_combo.currentData()
+        meaning = self._item_meaning_edit.text()
+        note = self._item_note_edit.text()
+        context_text = self._item_context_edit.toPlainText()
+
+        try:
+            result = item_service.save_language_item(
+                self._connection,
+                self._material.id,
+                cue.id,
+                item_type,
+                start,
+                end,
+                meaning=meaning,
+                note=note,
+                context_text=context_text,
+            )
+        except (CueNotFoundError, SavedItemValidationError) as exc:
+            self._show_workspace_status(str(exc))
+            return
+
+        if isinstance(result, SavedItemNeedsConfirmation):
+            answer = QMessageBox.question(
+                self,
+                "Possible Duplicate",
+                f"'{result.normalized_text}' was already saved elsewhere "
+                f"(context: {result.existing_context_text}).\n\nSave this as a separate item anyway?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            )
+            if answer != QMessageBox.StandardButton.Yes:
+                return
+            try:
+                result = item_service.save_language_item(
+                    self._connection,
+                    self._material.id,
+                    cue.id,
+                    item_type,
+                    start,
+                    end,
+                    meaning=meaning,
+                    note=note,
+                    context_text=context_text,
+                    confirm_duplicate_text_elsewhere=True,
+                )
+            except SavedItemValidationError as exc:
+                self._show_workspace_status(str(exc))
+                return
+
+        self._refresh_editing_cue_panels()
+
+    def _on_saved_item_selected(self, current: QListWidgetItem, previous: QListWidgetItem) -> None:
+        if current is None:
+            self._editing_item_id = None
+            self._update_item_button.setEnabled(False)
+            self._delete_item_button.setEnabled(False)
+            return
+
+        item_id = current.data(Qt.ItemDataRole.UserRole)
+        self._editing_item_id = item_id
+        self._update_item_button.setEnabled(True)
+        self._delete_item_button.setEnabled(True)
+
+        cue = self._current_editing_cue()
+        if cue is None or cue.id is None:
+            return
+        for saved_item in item_service.list_saved_items_for_cue(self._connection, cue.id):
+            if saved_item.id == item_id:
+                self._item_meaning_edit.setText(saved_item.meaning or "")
+                self._item_note_edit.setText(saved_item.note or "")
+                self._item_context_edit.setPlainText(saved_item.context_text)
+                index = self._item_type_combo.findData(saved_item.item_type)
+                if index >= 0:
+                    self._item_type_combo.setCurrentIndex(index)
+                break
+
+    def _on_update_item_clicked(self) -> None:
+        if self._editing_item_id is None:
+            return
+        try:
+            item_service.update_saved_language_item(
+                self._connection,
+                self._editing_item_id,
+                meaning=self._item_meaning_edit.text(),
+                note=self._item_note_edit.text(),
+                context_text=self._item_context_edit.toPlainText(),
+            )
+        except SavedItemNotFoundError as exc:
+            self._show_workspace_status(str(exc))
+            return
+        self._refresh_editing_cue_panels()
+
+    def _on_delete_item_clicked(self) -> None:
+        if self._editing_item_id is None:
+            return
+        answer = QMessageBox.question(
+            self,
+            "Delete Saved Item",
+            "Delete this saved language item?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        try:
+            item_service.delete_saved_language_item(self._connection, self._editing_item_id)
+        except SavedItemNotFoundError as exc:
+            self._show_workspace_status(str(exc))
+        self._refresh_editing_cue_panels()
+
+    def _on_open_label_colors(self) -> None:
+        dialog = LabelColorDialog(self._connection, self)
+        dialog.exec()
+        cue = self._current_editing_cue()
+        if cue is not None:
+            self._apply_annotation_highlighting(cue.text, getattr(self, "_current_annotations", []))
