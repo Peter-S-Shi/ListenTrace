@@ -49,6 +49,7 @@ class PlayerWindow(QMainWindow):
         self._session = PlayerSession(load_result.cues)
         self._playback = PlaybackController(self)
         self._seeking_via_slider = False
+        self._playback_usable = True
 
         central = QWidget(self)
         layout = QVBoxLayout(central)
@@ -123,7 +124,7 @@ class PlayerWindow(QMainWindow):
         layout.addLayout(volume_row)
 
         self._cue_list = QListWidget()
-        self._cue_list.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
+        self._cue_list.setSelectionMode(QAbstractItemView.SelectionMode.ContiguousSelection)
         for cue in self._session.cues:
             label = f"[{_format_time(cue.start_ms)}-{_format_time(cue.end_ms)}] {cue.text}"
             self._cue_list.addItem(QListWidgetItem(label))
@@ -263,7 +264,27 @@ class PlayerWindow(QMainWindow):
 
     def _on_playback_error(self, message: str) -> None:
         self._show_status(f"Playback error: {message}")
-        self._play_pause_button.setEnabled(False)
+        self._set_playback_controls_enabled(False)
+
+    def _set_playback_controls_enabled(self, enabled: bool) -> None:
+        """Enable/disable every control that depends on usable playback.
+
+        Transcript visibility and Return to Library are intentionally excluded:
+        they remain usable even when the underlying media cannot be played.
+        """
+        self._playback_usable = enabled
+        for widget in (
+            self._play_pause_button,
+            self._seek_slider,
+            self._previous_button,
+            self._next_button,
+            self._replay_button,
+            self._loop_cue_button,
+            self._loop_range_button,
+            self._volume_slider,
+            self._mute_button,
+        ):
+            widget.setEnabled(enabled)
 
     def _show_status(self, message: str) -> None:
         self._status_label.setText(message)
@@ -289,7 +310,15 @@ class PlayerWindow(QMainWindow):
         key = event.key()
         modifiers = event.modifiers()
 
-        if key == Qt.Key.Key_Space:
+        # Transcript visibility and loop cancellation stay usable even when playback
+        # itself is broken; every other shortcut depends on usable playback.
+        if key == Qt.Key.Key_T and letter_shortcuts_active:
+            self._on_toggle_transcript()
+        elif key == Qt.Key.Key_Escape:
+            self._session.cancel_loop()
+        elif not self._playback_usable:
+            super().keyPressEvent(event)
+        elif key == Qt.Key.Key_Space:
             self._on_play_pause_clicked()
         elif key == Qt.Key.Key_Left and modifiers & Qt.KeyboardModifier.ControlModifier:
             self._on_previous_cue()
@@ -303,12 +332,8 @@ class PlayerWindow(QMainWindow):
             self._on_replay_cue()
         elif key == Qt.Key.Key_L and letter_shortcuts_active:
             self._on_loop_toggle_shortcut()
-        elif key == Qt.Key.Key_T and letter_shortcuts_active:
-            self._on_toggle_transcript()
         elif key == Qt.Key.Key_M and letter_shortcuts_active:
             self._on_toggle_mute()
-        elif key == Qt.Key.Key_Escape:
-            self._session.cancel_loop()
         else:
             super().keyPressEvent(event)
 

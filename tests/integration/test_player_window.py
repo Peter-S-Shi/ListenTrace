@@ -4,8 +4,9 @@ import struct
 import wave
 
 import pytest
-from PySide6.QtCore import QEventLoop, QTimer
-from PySide6.QtWidgets import QLineEdit, QPushButton
+from PySide6.QtCore import QEventLoop, Qt, QTimer
+from PySide6.QtGui import QKeyEvent
+from PySide6.QtWidgets import QAbstractItemView, QLineEdit, QPushButton
 
 from listentrace.application.dto.player_load import PlayerLoadResult
 from listentrace.application.dto.player_state import LoopMode
@@ -88,7 +89,7 @@ def test_player_window_play_pause_toggle(qapp, tmp_path):
     window.close()
 
 
-def test_player_window_invalid_media_produces_controlled_error(qapp, tmp_path):
+def test_player_window_invalid_media_disables_all_playback_dependent_controls(qapp, tmp_path):
     bad_path = tmp_path / "bad.mp3"
     bad_path.write_bytes(b"not a real mp3 file, just garbage bytes" * 20)
 
@@ -96,7 +97,61 @@ def test_player_window_invalid_media_produces_controlled_error(qapp, tmp_path):
     _run_event_loop(qapp, 2000)
 
     assert "Playback error" in window._status_label.text()
-    assert window._play_pause_button.isEnabled() is False
+    assert window._playback_usable is False
+
+    for widget in (
+        window._play_pause_button,
+        window._seek_slider,
+        window._previous_button,
+        window._next_button,
+        window._replay_button,
+        window._loop_cue_button,
+        window._loop_range_button,
+        window._volume_slider,
+        window._mute_button,
+    ):
+        assert widget.isEnabled() is False, f"{widget} should be disabled after a playback error"
+
+    # Transcript visibility and returning to the library must remain usable.
+    assert window._transcript_button.isEnabled() is True
+    window._on_toggle_transcript()
+    assert window._session.transcript_visible is False
+
+    window.close()
+
+
+def test_player_window_keyboard_shortcuts_suppressed_after_playback_error(qapp, tmp_path):
+    bad_path = tmp_path / "bad.mp3"
+    bad_path.write_bytes(b"not a real mp3 file, just garbage bytes" * 20)
+
+    window = PlayerWindow(_two_cue_result(bad_path))
+    _run_event_loop(qapp, 2000)
+    assert window._playback_usable is False
+
+    # Space must not attempt to resume playback once it has been marked unusable.
+    was_playing = window._playback.is_playing
+    space_event = QKeyEvent(QKeyEvent.Type.KeyPress, Qt.Key.Key_Space, Qt.KeyboardModifier.NoModifier)
+    window.keyPressEvent(space_event)
+    assert window._playback.is_playing == was_playing  # unchanged
+
+    # Escape and T must still work even though playback is unusable.
+    window.keyPressEvent(
+        QKeyEvent(QKeyEvent.Type.KeyPress, Qt.Key.Key_T, Qt.KeyboardModifier.NoModifier)
+    )
+    assert window._session.transcript_visible is False
+
+    window.close()
+
+
+def test_player_window_cue_list_uses_contiguous_selection_mode(qapp, tmp_path):
+    wav_path = tmp_path / "lesson.wav"
+    _make_wav(wav_path)
+
+    window = PlayerWindow(_two_cue_result(wav_path))
+    assert (
+        window._cue_list.selectionMode()
+        == QAbstractItemView.SelectionMode.ContiguousSelection
+    )
 
     window.close()
 
