@@ -20,6 +20,21 @@ Milestone 8" section for the full set of decisions (date-anchor consistency,
 the shadowing-practice-count date-filter approximation, chart/table parity,
 and the Needs Attention rule set in `domain/services/needs_attention_rules.py`).
 
+## Structured Export (Milestone 9)
+
+Milestone 9 (Structured Export and External Evaluation) also added no new
+tables and required no migration (schema remains version 8). It reads the
+same authoritative tables as Learning History — plus two narrow additions in
+`infrastructure/db/export_repository.py` (`list_materials_for_export`, which
+exposes `material.created_at`, not otherwise surfaced on the domain `Material`
+model; and `list_cue_notes_for_material`) — and assembles them into one
+in-memory `ExportBundle` (`application/dto/export.py`), never a persisted
+row. Generated exports, clipboard content, and evaluation-template text are
+never written back to the database; `export_version` (currently `1`) is a
+field on the export contract itself, tracked independently of `PRAGMA
+user_version`. See `ARCHITECTURE.md`'s "Resolved in Milestone 9" section for
+the privacy-redaction model and the preview/save-equivalence guarantee.
+
 ## Entity Overview
 
 ```text

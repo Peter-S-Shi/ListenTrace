@@ -305,6 +305,16 @@ Requirements:
 - support Markdown and JSON;
 - provide a reusable evaluation instruction template.
 
+### Confirmed Export Behavior (Milestone 9)
+
+- **Export Learning Evidence** opens from the global Learning History window (also preselecting whichever material is currently selected, when opened that way). Scope is **All Materials**, **One Material**, or **Selected Materials**; date range uses the same five presets and local-time boundary rules as Learning History (Last 7/30/90 Days, Custom Range, All Time), applied consistently to the preview, the Markdown, and the JSON.
+- Eleven independently-selectable evidence categories (material metadata, session summaries, stage responses, session diagnosis history, current material annotations, quiz attempts, quiz questions and answers, shadowing evidence, retained recording metadata, learner notes and summaries, vocabulary and saved chunks) and six independently-selectable privacy fields (transcript excerpts, learner notes, mishearing text, vocabulary meanings, source labels, local file names). Turning a category off omits that whole section; turning a privacy field off redacts that one value in place (`[redacted]`) without removing the record it belongs to. Defaults favor summaries over the two most verbose raw-text categories (stage responses, quiz questions and answers) and include every privacy field except local file names.
+- Absolute local paths, original media/subtitle/recording paths, and raw audio are never included in any export, under any selection — the exporter never reads a path field into the export tree in the first place, rather than filtering one out afterward.
+- A preview (Markdown, JSON, and a separate reusable evaluation-instruction template) is generated on demand and shown before anything is saved or copied; the exact same generated text is what gets saved (atomically, with an explicit overwrite confirmation) or copied to the clipboard — never regenerated in between, so preview and saved output can never disagree.
+- The JSON export carries a stable `export_version` (currently `1`), tracked independently of the database schema version (unchanged at 8 — this milestone required no migration).
+- Quiz question/answer exports read only each attempt's immutable generation-time snapshot, never live cue or annotation text, so an export remains accurate even after the source material is later edited. Incomplete (active or abandoned) quiz attempts are excluded from export the same way they are excluded from Learning History's own averages. Session diagnosis history and current material annotations are exported under separate keys and are never merged or added together.
+- No network request occurs anywhere in the export flow; no account, API key, cloud upload, scheduled export, or embedded AI submission exists.
+
 ## Copyright and Source Policy
 
 ListenTrace does not download protected streaming content or circumvent access controls.

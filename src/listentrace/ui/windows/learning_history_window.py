@@ -35,6 +35,7 @@ from listentrace.application.services import practice_session_service
 from listentrace.application.services.player_loading_service import load_material_for_player
 from listentrace.domain.services import date_range as date_range_rules
 from listentrace.ui.widgets.simple_bar_chart import SimpleBarChart
+from listentrace.ui.windows.export_dialog import ExportDialog
 from listentrace.ui.windows.guided_session_window import GuidedSessionWindow
 from listentrace.ui.windows.player_window import PlayerWindow, _format_time
 from listentrace.ui.windows.quiz_review_dialog import QuizReviewDialog
@@ -119,6 +120,9 @@ class LearningHistoryWindow(QMainWindow):
         self._apply_button = QPushButton("Apply")
         self._apply_button.clicked.connect(self._on_reload_clicked)
         filter_row.addWidget(self._apply_button)
+        self._export_button = QPushButton("Export Learning Evidence...")
+        self._export_button.clicked.connect(self._on_export_clicked)
+        filter_row.addWidget(self._export_button)
         outer_layout.addLayout(filter_row)
 
         self._error_label = QLabel("")
@@ -755,4 +759,8 @@ class LearningHistoryWindow(QMainWindow):
 
     def _open_quiz_review(self, attempt_id: int) -> None:
         dialog = QuizReviewDialog(self._connection, attempt_id, self)
+        dialog.exec()
+
+    def _on_export_clicked(self) -> None:
+        dialog = ExportDialog(self._connection, self, initial_material_id=self._selected_material_id())
         dialog.exec()
