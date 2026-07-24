@@ -25,7 +25,7 @@ The remote repository exists, is private, and uses `main` as its default branch.
 | Synchronized player | Implemented and tested (Milestone 3 + acceptance-correction pass, unchanged this milestone) |
 | Transcript workspace | Implemented and tested: multi-label annotations on whole-cue or partial text ranges, Misheard/`heard_as` validation, per-cue Cue Notes (empty-save = delete), Saved Language Items (word/phrase/chunk/sentence_pattern) with exact-duplicate rejection and same-text-elsewhere confirmation, global per-label colors, editing cue kept independent of the active playback cue |
 | Subtitle parsing | Implemented and tested (Milestone 1, unchanged) |
-| Automated tests | 162 tests passing (7 database/migrations, 8 import, 8 library, 3 media playback, 7 subtitle parsing, 8 cue index, 9 player session, 5 player loading, 13 player window, 6 UI smoke, 7 text range, 7 text-offset conversion, 25 annotations, 6 cue notes, 19 saved language items, 5 label preferences, 19 player-workspace UI integration) |
+| Automated tests | 163 tests passing (7 database/migrations, 8 import, 8 library, 3 media playback, 7 subtitle parsing, 8 cue index, 9 player session, 5 player loading, 13 player window, 6 UI smoke, 7 text range, 7 text-offset conversion, 25 annotations, 6 cue notes, 19 saved language items, 5 label preferences, 20 player-workspace UI integration) |
 | Build and packaging | Not started |
 | Continuous integration | Not configured |
 
@@ -55,6 +55,7 @@ Status: **Completed**
   - 26 new automated tests for this pass (7 text-offset conversion, 6 annotation edit/duplicate-exclusion/label-integrity, 6 saved-item material-derivation/type-edit, 7 player-workspace UI: 2 non-BMP round-trip, 2 annotation full-edit, 1 saved-item locked-source edit, 2 badge/overlap) on top of the prior 136 — 162 total, all passing, including in a clean virtual environment outside the working tree
   - Manual smoke test covering non-BMP selection round-trip, full annotation edit (label+range+heard_as together), saved-item type edit with source locked, badge color refresh, persistence after app restart, and Milestone 3 playback regression — all passed
   - Confirmed zero PySide6 imports remain in `domain/` or `application/` — all Milestone 4 validation/duplicate/canonical-offset logic is framework-free; only `ui/` and `infrastructure/media/` reference Qt
+- Post-Milestone-4 follow-up: a targeted annotation-presentation refresh (`player_window.py`) now runs after the Label Colors dialog closes — it reloads label-color preferences, reapplies transcript highlighting, and updates every existing annotation-list badge in place, without the disruptive full workspace reload that previously cleared the editing cue, the selected annotation, and any unsaved form contents on a color change. 1 new automated test — 163 total, passing including in a clean virtual environment.
 
 ### Manual smoke steps verified
 
