@@ -16,6 +16,7 @@ class QuizReviewItem:
     position: int
     question_type: str
     subtitle_cue_id: int
+    source_cue_text: str
     prompt: dict[str, Any]
     correct_answer: dict[str, Any]
     raw_answer_text: str | None

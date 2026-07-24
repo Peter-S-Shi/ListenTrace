@@ -39,7 +39,7 @@ def test_migrate_is_idempotent(conn):
     version_before = current_version(conn)
     migrate(conn)  # second call must not raise or duplicate schema
     version_after = current_version(conn)
-    assert version_before == version_after == 5
+    assert version_before == version_after == 6
 
 
 def test_foreign_keys_are_enforced(conn):
@@ -98,7 +98,7 @@ def test_migration_upgrades_a_milestone1_v1_database(tmp_path):
 
     final_version = migrate(connection)
 
-    assert final_version == 5
+    assert final_version == 6
     columns = {row["name"] for row in connection.execute("PRAGMA table_info(material)")}
     assert "normalized_path" in columns
     tables = {
@@ -109,6 +109,8 @@ def test_migration_upgrades_a_milestone1_v1_database(tmp_path):
     assert {"practice_session", "session_stage_progress", "stage_response"} <= tables
     assert {"keyword_capture", "session_diagnosis_evidence", "shadowing_cue_progress"} <= tables
     assert {"quiz_attempt", "quiz_question", "quiz_answer"} <= tables
+    quiz_question_columns = {row["name"] for row in connection.execute("PRAGMA table_info(quiz_question)")}
+    assert "source_cue_text" in quiz_question_columns
 
     stored = get_material(connection, material_id)
     assert stored is not None
@@ -141,7 +143,7 @@ def test_migration_upgrades_a_milestone2_v2_database(tmp_path):
 
     final_version = migrate(connection)
 
-    assert final_version == 5
+    assert final_version == 6
     tables = {
         row["name"]
         for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
@@ -199,7 +201,7 @@ def test_migration_upgrades_a_milestone4_v3_database_with_existing_data_intact(t
 
     final_version = migrate(connection)
 
-    assert final_version == 5
+    assert final_version == 6
     tables = {
         row["name"]
         for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
@@ -257,7 +259,7 @@ def test_migration_upgrades_a_milestone5_v4_database_with_existing_data_intact(t
 
     final_version = migrate(connection)
 
-    assert final_version == 5
+    assert final_version == 6
     tables = {
         row["name"]
         for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
@@ -275,5 +277,55 @@ def test_migration_upgrades_a_milestone5_v4_database_with_existing_data_intact(t
     ).fetchone()
     assert session_row["material_id"] == material_id
     assert session_row["status"] == "active"
+
+    connection.close()
+
+
+def test_migration_upgrades_a_milestone6_v5_database_backfills_source_cue_text(tmp_path):
+    """A quiz_question row created under schema v5 (before source_cue_text
+    existed) must be backfilled from the live subtitle_cue text it was
+    generated from, not left null or empty."""
+    connection = open_connection(tmp_path / "v5.db")
+    for target_version, sql in MIGRATIONS:
+        if target_version > 5:
+            break
+        connection.executescript(sql)
+    connection.execute("PRAGMA user_version = 5")
+    connection.commit()
+    assert current_version(connection) == 5
+
+    material_id = insert_material(connection, Material(title="M6 Lesson", media_path="C:/media/m6.mp4"))
+    track = SubtitleTrack(
+        material_id=material_id,
+        format="srt",
+        source_path="C:/media/m6.srt",
+        cues=[SubtitleCue(cue_index=1, start_ms=0, end_ms=1000, text="Bonjour tout le monde")],
+    )
+    track_id = insert_subtitle_track(connection, track)
+    cue_id = get_cues_for_track(connection, track_id)[0].id
+
+    cursor = connection.execute(
+        "INSERT INTO quiz_attempt (material_id, seed, requested_count, actual_count) VALUES (?, 1, 1, 1)",
+        (material_id,),
+    )
+    attempt_id = int(cursor.lastrowid)
+    connection.execute(
+        """
+        INSERT INTO quiz_question (
+            quiz_attempt_id, position, question_type, subtitle_cue_id,
+            prompt_payload, correct_answer_payload, scoring_config
+        ) VALUES (?, 0, 'dictation', ?, '{}', '{}', '{}')
+        """,
+        (attempt_id, cue_id),
+    )
+    connection.commit()
+
+    final_version = migrate(connection)
+
+    assert final_version == 6
+    backfilled = connection.execute(
+        "SELECT source_cue_text FROM quiz_question WHERE quiz_attempt_id = ?", (attempt_id,)
+    ).fetchone()
+    assert backfilled["source_cue_text"] == "Bonjour tout le monde"
 
     connection.close()

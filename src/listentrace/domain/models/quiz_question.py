@@ -7,6 +7,10 @@ from dataclasses import dataclass
 class QuizQuestion:
     question_type: str
     subtitle_cue_id: int
+    # The source cue's text at generation time, captured as part of the immutable
+    # snapshot so a later edit to the live `SubtitleCue` never changes what a
+    # standing quiz question shows or how its review renders.
+    source_cue_text: str
     prompt_payload: str
     correct_answer_payload: str
     scoring_config: str

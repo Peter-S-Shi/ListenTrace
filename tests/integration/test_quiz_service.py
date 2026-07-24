@@ -164,6 +164,18 @@ def test_dictation_full_cue_answer_is_hidden_from_prompt_payload(conn):
     assert found_full_mode
 
 
+def _find_question_of_type(conn, material_id, question_type, seed_range=range(60)):
+    """Same rng-search rationale as `_find_dictation_question`, generalized to
+    any question type — which type lands where is seed-dependent, so tests
+    that need a specific type search for it rather than assuming a fixed seed."""
+    for seed in seed_range:
+        attempt = svc.create_material_quiz(conn, material_id, requested_count=8, seed=seed)
+        for question in svc.load_quiz_state(conn, attempt.id).questions:
+            if question.question_type == question_type:
+                return attempt, question
+    raise AssertionError(f"no {question_type!r} question found across seeds")
+
+
 def _find_dictation_question(conn, material_id, cue_predicate=None, seed_range=range(60)):
     """Generate quizzes across several seeds until a dictation-type question
     (optionally on a cue matching `cue_predicate`) is produced. Which question
@@ -493,3 +505,129 @@ def test_build_quiz_review_shows_answer_correct_answer_type_and_source_cue(conn)
     assert item.question_type == "dictation"
     assert item.subtitle_cue_id == question.subtitle_cue_id
     assert item.explanation
+
+
+# ---- Acceptance correction: source-cue-text snapshot ----
+
+
+def test_question_source_cue_text_is_captured_at_generation_time(conn):
+    material_id, cues = _make_material_with_cues(conn)
+    attempt, question = _find_dictation_question(conn, material_id)
+    cue = next(c for c in cues if c.id == question.subtitle_cue_id)
+    assert question.source_cue_text == cue.text
+
+
+def test_consolidated_review_source_cue_text_is_unaffected_by_a_later_live_cue_edit(conn):
+    material_id, _ = _make_material_with_cues(conn)
+    attempt, question = _find_dictation_question(conn, material_id)
+    original_text = question.source_cue_text
+    correct = json.loads(question.correct_answer_payload)
+    svc.save_quiz_answer(conn, attempt.id, question.id, raw_answer_text=correct["answer_text"])
+    svc.submit_quiz(conn, attempt.id)
+
+    # Simulate the live subtitle cue changing after the quiz already exists.
+    conn.execute("UPDATE subtitle_cue SET text = ? WHERE id = ?", ("Completely different text", question.subtitle_cue_id))
+    conn.commit()
+
+    review = svc.build_quiz_review(conn, attempt.id)
+    item = next(i for i in review.items if i.question_id == question.id)
+    assert item.source_cue_text == original_text
+    assert item.source_cue_text != "Completely different text"
+
+
+# ---- Acceptance correction: Review Quiz dedup by tested evidence ----
+
+
+def test_review_quiz_dedupes_same_range_tagged_with_several_labels_keeping_highest_priority(conn):
+    material_id, cues = _make_material_with_cues(conn)
+    cue_id = _cue_id_by_text(cues, _RICH_CUE_TEXTS[0])
+    # The same range carries two labels at once (allowed since Milestone 4) —
+    # both describe identical tested evidence, so only one review question
+    # should ever be generated for it, using the higher-priority label.
+    annotation_service.create_annotations(
+        conn, cue_id, 0, 7, ["connected_reduced_speech", "misheard"], heard_as="Bonjoure"
+    )
+
+    attempt = svc.create_review_quiz(conn, material_id, requested_count=5, seed=1)
+    questions = svc.load_quiz_state(conn, attempt.id).questions
+    assert len(questions) == 1
+    prompt = json.loads(questions[0].prompt_payload)
+    assert prompt["label_key"] == "misheard"
+
+
+def test_review_quiz_dedup_keeps_distinct_evidence_on_different_cues(conn):
+    material_id, cues = _make_material_with_cues(conn)
+    cue_a = _cue_id_by_text(cues, _RICH_CUE_TEXTS[0])
+    cue_b = _cue_id_by_text(cues, _RICH_CUE_TEXTS[1])
+    annotation_service.create_annotations(conn, cue_a, 0, 7, ["misheard"], heard_as="x")
+    annotation_service.create_annotations(conn, cue_b, 0, 7, ["known_not_heard"])
+
+    attempt = svc.create_review_quiz(conn, material_id, requested_count=5, seed=1)
+    questions = svc.load_quiz_state(conn, attempt.id).questions
+    assert len(questions) == 2
+
+
+# ---- Acceptance correction: scoring_config authoritative + answer-shape validation ----
+
+
+def test_submit_quiz_rejects_an_unsupported_scoring_rule_atomically(conn):
+    material_id, _ = _make_material_with_cues(conn)
+    attempt = svc.create_material_quiz(conn, material_id, requested_count=3, seed=1)
+    questions = svc.load_quiz_state(conn, attempt.id).questions
+    for question in questions:
+        correct = json.loads(question.correct_answer_payload)
+        if question.question_type in ("dictation", "review_missed"):
+            svc.save_quiz_answer(conn, attempt.id, question.id, raw_answer_text=correct["answer_text"])
+        else:
+            svc.save_quiz_answer(conn, attempt.id, question.id, selected_choice_index=correct["correct_choice_index"])
+
+    # Simulate a future/unknown scoring rule landing on one question's snapshot.
+    conn.execute(
+        "UPDATE quiz_question SET scoring_config = ? WHERE id = ?",
+        (json.dumps({"rule": "semantic_similarity", "version": 1}), questions[0].id),
+    )
+    conn.commit()
+
+    with pytest.raises(QuizValidationError) as exc_info:
+        svc.submit_quiz(conn, attempt.id)
+    assert exc_info.value.category == "unsupported_scoring_rule"
+
+    # Nothing was scored and the attempt is still active — a bad rule on one
+    # question must not silently score the rest.
+    attempt_after = svc.get_quiz_attempt(conn, attempt.id)
+    assert attempt_after.status == "active"
+    assert attempt_after.correct_count is None
+    state = svc.load_quiz_state(conn, attempt.id)
+    assert all(answer.is_correct is None for answer in state.answers.values())
+
+
+def test_save_quiz_answer_rejects_a_choice_index_on_a_text_question(conn):
+    material_id, _ = _make_material_with_cues(conn)
+    attempt, question = _find_dictation_question(conn, material_id)
+    with pytest.raises(QuizValidationError) as exc_info:
+        svc.save_quiz_answer(conn, attempt.id, question.id, selected_choice_index=0)
+    assert exc_info.value.category == "invalid_answer_shape"
+
+
+def test_save_quiz_answer_rejects_text_on_a_choice_question(conn):
+    material_id, _ = _make_material_with_cues(conn)
+    attempt, question = _find_question_of_type(conn, material_id, QuestionType.AUDIO_TRANSCRIPT_CHOICE.value)
+    with pytest.raises(QuizValidationError) as exc_info:
+        svc.save_quiz_answer(conn, attempt.id, question.id, raw_answer_text="some text")
+    assert exc_info.value.category == "invalid_answer_shape"
+
+
+def test_save_quiz_answer_rejects_an_out_of_range_choice_index(conn):
+    material_id, _ = _make_material_with_cues(conn)
+    attempt, question = _find_question_of_type(conn, material_id, QuestionType.AUDIO_TRANSCRIPT_CHOICE.value)
+    with pytest.raises(QuizValidationError) as exc_info:
+        svc.save_quiz_answer(conn, attempt.id, question.id, selected_choice_index=999)
+    assert exc_info.value.category == "invalid_answer_shape"
+
+
+def test_save_quiz_answer_accepts_a_valid_in_range_choice_index(conn):
+    material_id, _ = _make_material_with_cues(conn)
+    attempt, question = _find_question_of_type(conn, material_id, QuestionType.AUDIO_TRANSCRIPT_CHOICE.value)
+    svc.save_quiz_answer(conn, attempt.id, question.id, selected_choice_index=0)
+    state = svc.load_quiz_state(conn, attempt.id)
+    assert state.answers[question.id].selected_choice_index == 0

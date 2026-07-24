@@ -34,6 +34,7 @@ def _row_to_quiz_question(row: sqlite3.Row) -> QuizQuestion:
         position=row["position"],
         question_type=row["question_type"],
         subtitle_cue_id=row["subtitle_cue_id"],
+        source_cue_text=row["source_cue_text"],
         source_annotation_id=row["source_annotation_id"],
         source_saved_item_id=row["source_saved_item_id"],
         source_keyword_capture_id=row["source_keyword_capture_id"],
@@ -81,16 +82,17 @@ def create_quiz_attempt_with_questions(
             q_cursor = conn.execute(
                 """
                 INSERT INTO quiz_question (
-                    quiz_attempt_id, position, question_type, subtitle_cue_id,
+                    quiz_attempt_id, position, question_type, subtitle_cue_id, source_cue_text,
                     source_annotation_id, source_saved_item_id, source_keyword_capture_id,
                     prompt_payload, correct_answer_payload, scoring_config
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     attempt_id,
                     position,
                     question.question_type,
                     question.subtitle_cue_id,
+                    question.source_cue_text,
                     question.source_annotation_id,
                     question.source_saved_item_id,
                     question.source_keyword_capture_id,

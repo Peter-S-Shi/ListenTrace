@@ -246,6 +246,18 @@ MIGRATIONS: list[tuple[int, str]] = [
         );
         """,
     ),
+    (
+        6,
+        """
+        ALTER TABLE quiz_question ADD COLUMN source_cue_text TEXT NOT NULL DEFAULT '';
+
+        UPDATE quiz_question
+        SET source_cue_text = COALESCE(
+            (SELECT text FROM subtitle_cue WHERE subtitle_cue.id = quiz_question.subtitle_cue_id),
+            ''
+        );
+        """,
+    ),
 ]
 
 

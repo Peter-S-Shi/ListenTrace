@@ -17,7 +17,6 @@ from PySide6.QtWidgets import (
 from listentrace.application.dto.quiz_review import QuizReviewItem
 from listentrace.application.services import quiz_service
 from listentrace.domain.enums.question_type import QuestionType
-from listentrace.infrastructure.db.repository import get_cue_by_id
 from listentrace.ui.windows.player_window import _color_badge_icon
 
 _CORRECT_COLOR = "#16A34A"
@@ -82,10 +81,9 @@ class QuizReviewDialog(QDialog):
             self._detail_view.setPlainText(self._format_item(item))
 
     def _format_item(self, item: QuizReviewItem) -> str:
-        cue = get_cue_by_id(self._connection, item.subtitle_cue_id)
         lines = [
             f"Type: {item.question_type}",
-            f"Source cue: {cue.text if cue is not None else '(cue no longer available)'}",
+            f"Source cue: {item.source_cue_text}",
             f"Result: {'Correct' if item.is_correct else 'Incorrect'}",
         ]
         if item.question_type in _TEXT_ANSWER_TYPES:

@@ -356,7 +356,7 @@ Constraint deliberately **not** enforced: unlike `PracticeSession`, there is no 
 
 ## QuizQuestion
 
-One generated question within a `QuizAttempt` — an immutable snapshot, never rewritten after generation. **Implemented (migration 5).**
+One generated question within a `QuizAttempt` — an immutable snapshot, never rewritten after generation. **Implemented (migration 5; `source_cue_text` added in migration 6).**
 
 Implemented fields:
 
@@ -365,10 +365,11 @@ Implemented fields:
 - `position` (0-based stable order; `UNIQUE (quiz_attempt_id, position)`)
 - `question_type` (`dictation`, `keyword_recognition`, `audio_transcript_choice`, or `review_missed`)
 - `subtitle_cue_id` (FK → `subtitle_cue.id`, `ON DELETE CASCADE` — the cue played for this question)
+- `source_cue_text` (migration 6 — the source cue's text captured at generation time, as part of the immutable snapshot; the consolidated review reads this, never the live `subtitle_cue.text`, so a later edit to the cue cannot change what an existing question or its review displays)
 - `source_annotation_id` / `source_saved_item_id` / `source_keyword_capture_id` (all optional, `ON DELETE SET NULL` — whichever one, if any, this question's target/evidence was drawn from; a question snapshot survives its source being edited or deleted afterward)
 - `prompt_payload` (JSON: what the learner is shown — never includes the answer itself, e.g. a dictation cue's full text is never present in `prompt_payload`, only in `correct_answer_payload`)
 - `correct_answer_payload` (JSON: the answer snapshot used for scoring and for the consolidated review — never re-derived from live cue/annotation text after generation)
-- `scoring_config` (JSON: `{"rule": ..., "version": 1}` — either `normalized_text_exact` for dictation/review-missed questions or `exact_choice_index` for keyword-recognition/audio-transcript-choice questions; the consolidated review's scoring-rule explanation is derived from this at display time)
+- `scoring_config` (JSON: `{"rule": ..., "version": 1}` — either `normalized_text_exact` for dictation/review-missed questions or `exact_choice_index` for keyword-recognition/audio-transcript-choice questions; this is the **authoritative** description of how the question is scored — `submit_quiz` reads it, not `question_type`, to decide text-vs-choice scoring, and refuses to score (aborting the whole submission) a rule/version it doesn't recognize rather than guessing; the consolidated review's scoring-rule explanation is also derived from this at display time)
 - `created_at`
 
 ## QuizAnswer
@@ -388,12 +389,14 @@ Implemented fields:
 
 Constraint actually enforced: `UNIQUE (quiz_question_id)`.
 
+`quiz_service.save_quiz_answer` validates answer shape against the question's authoritative `scoring_config` rule before persisting: a text-scored question (`normalized_text_exact`) accepts `raw_answer_text` only, a choice-scored question (`exact_choice_index`) accepts `selected_choice_index` only and rejects an out-of-range index — a malformed answer is refused (`QuizValidationError("invalid_answer_shape", ...)`) rather than silently stored.
+
 ## Quiz Generation and Scoring (`domain/services/quiz_rules.py`, `application/services/quiz_service.py`)
 
 Generation is deterministic and reproducible: every random choice (which cue gets which question type, which meaningful token is blanked, which distractors are picked, review-evidence tie-break ordering within the same priority label) is made through one seeded `random.Random(seed)` instance, and the seed itself is persisted on `QuizAttempt`. The pure selection/validation math (text normalization, tokenization, blank-span selection, whole-token-boundary containment checks, distractor de-duplication) lives in `domain/services/quiz_rules.py` with no sqlite or Qt dependency; `application/services/quiz_service.py` orchestrates it against real material/cue/annotation/saved-item/keyword-capture data and persists the result.
 
 - **Material Quiz**: built only from "usable" cues (cues with at least one non-punctuation, non-whitespace token). Each cue is used for at most one question; if fewer usable cues exist than `requested_count`, the smaller quiz is created rather than reusing a cue or padding with a weak question — if *no* usable cues exist, creation is refused (`QuizValidationError("no_usable_cues", ...)`).
-- **Review Quiz**: built only from the material's own `Annotation` rows (never another material's, and never a session-scoped `SessionDiagnosisEvidence` row directly — `Annotation` is the material-level, cross-session evidence table), filtered to the four diagnosis labels and ordered by the priority `misheard > known_not_heard > unknown_word_or_chunk > connected_reduced_speech`. If no qualifying annotation exists, creation is refused (`QuizValidationError("no_meaningful_questions", ...)`). Every Review Quiz question is `review_missed`, always blanking exactly the annotation's own stored range — no additional token selection.
+- **Review Quiz**: built only from the material's own `Annotation` rows (never another material's, and never a session-scoped `SessionDiagnosisEvidence` row directly — `Annotation` is the material-level, cross-session evidence table), filtered to the four diagnosis labels and ordered by the priority `misheard > known_not_heard > unknown_word_or_chunk > connected_reduced_speech`. Because Milestone 4 allows one cue range to carry several labels at once, candidates are first deduplicated by `(subtitle_cue_id, normalized tested-range text)` — when several labels describe the exact same tested evidence, only the single highest-priority label's annotation becomes a question, so the same span is never asked about twice. If no qualifying annotation exists, creation is refused (`QuizValidationError("no_meaningful_questions", ...)`). Every Review Quiz question is `review_missed`, always blanking exactly the annotation's own stored range — no additional token selection.
 - **Dictation** questions choose between full-cue dictation and single-meaningful-token fill-in-the-blank; blanking is skipped in favor of full-cue mode whenever a cue has fewer than two meaningful tokens (blanking a cue's only real content would leave nothing to answer from).
 - **Keyword Recognition** questions prefer a target tied to real evidence on that cue (an `Annotation` or `SavedLanguageItem` already attached to it) before falling back to a deterministically chosen token from the cue itself; a negative ("did NOT occur") question's target is verified via whole-token-boundary containment (`quiz_rules.cue_contains_target`) to genuinely not occur in that cue before being used.
 - **Audio-to-Transcript-Choice** questions require at least 2 valid distractors (other cues in the same material, deduplicated by normalized text against both the correct answer and each other) before being created at all; a cue without enough distinct distractors is skipped rather than shipped as a weak 2-choice or duplicate-choice question.
@@ -426,4 +429,4 @@ Analytics should be derived from reliable session, annotation, quiz, and review 
 - Source media, subtitle files, recordings, databases, and exports are local user data.
 - Database migrations must be additive and tested.
 - Display colors never replace semantic label keys.
-- Migrations 1→2→3→4→5 have each been additive only (no table rewritten or dropped) and are each covered by an automated upgrade test starting from the prior version's schema with real data present.
+- Migrations 1→2→3→4→5→6 have each been additive only (no table rewritten or dropped) and are each covered by an automated upgrade test starting from the prior version's schema with real data present. Migration 6 adds `quiz_question.source_cue_text` and backfills it from the live `subtitle_cue.text` for any pre-existing rows.

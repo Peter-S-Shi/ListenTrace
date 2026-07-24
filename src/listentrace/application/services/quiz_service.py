@@ -32,9 +32,16 @@ from listentrace.infrastructure.db.learning_repository import (
 from listentrace.infrastructure.db.repository import get_cues_for_track, get_subtitle_track_for_material
 from listentrace.infrastructure.db.session_repository import list_keyword_captures_for_material
 
-_TEXT_SCORING_TYPES = frozenset({QuestionType.DICTATION.value, QuestionType.REVIEW_MISSED.value})
 _TARGET_TEXT_SCORING_RULE = "normalized_text_exact"
 _TARGET_CHOICE_SCORING_RULE = "exact_choice_index"
+# The only scoring rule/version combinations this build knows how to score.
+# `scoring_config`, not `question_type`, is the authoritative source for how a
+# question is scored — a rule/version this build doesn't recognize is refused
+# rather than silently scored under a guessed rule.
+_SUPPORTED_SCORING_RULES: dict[str, int] = {
+    _TARGET_TEXT_SCORING_RULE: 1,
+    _TARGET_CHOICE_SCORING_RULE: 1,
+}
 
 _SEED_UPPER_BOUND = 2**31 - 1
 
@@ -58,6 +65,18 @@ def _require_active_attempt(conn: sqlite3.Connection, attempt_id: int) -> QuizAt
 
 def _new_seed() -> int:
     return random.SystemRandom().randrange(1, _SEED_UPPER_BOUND)
+
+
+def _load_supported_scoring_config(question: QuizQuestion) -> dict:
+    scoring = json.loads(question.scoring_config)
+    rule = scoring.get("rule")
+    version = scoring.get("version")
+    if _SUPPORTED_SCORING_RULES.get(rule) != version:
+        raise QuizValidationError(
+            "unsupported_scoring_rule",
+            f"Question {question.id} uses an unsupported scoring rule/version ({rule!r}/{version!r}).",
+        )
+    return scoring
 
 
 # ---- lifecycle ----
@@ -110,6 +129,19 @@ def save_quiz_answer(
     question = repo.get_quiz_question(conn, question_id)
     if question is None or question.quiz_attempt_id != attempt_id:
         raise QuizQuestionNotFoundError(question_id)
+
+    scoring = _load_supported_scoring_config(question)
+    if scoring["rule"] == _TARGET_TEXT_SCORING_RULE:
+        if selected_choice_index is not None:
+            raise QuizValidationError("invalid_answer_shape", "This question accepts a text answer only.")
+    else:
+        if raw_answer_text is not None:
+            raise QuizValidationError("invalid_answer_shape", "This question accepts a choice selection only.")
+        if selected_choice_index is not None:
+            choice_count = len(json.loads(question.prompt_payload).get("choices", []))
+            if not (0 <= selected_choice_index < choice_count):
+                raise QuizValidationError("invalid_answer_shape", "Selected choice is out of range.")
+
     normalized = rules.normalize_answer_text(raw_answer_text) if raw_answer_text is not None else None
     repo.save_quiz_answer(conn, question_id, raw_answer_text, normalized, selected_choice_index)
 
@@ -128,9 +160,13 @@ def submit_quiz(conn: sqlite3.Connection, attempt_id: int) -> None:
     try:
         correct_count = 0
         for question in questions:
+            # scoring_config, not question_type, is authoritative for how a
+            # question is scored; an unsupported rule/version aborts the whole
+            # submission rather than being silently scored under a guess.
+            scoring = _load_supported_scoring_config(question)
             answer = repo.get_quiz_answer(conn, question.id)
             correct_payload = json.loads(question.correct_answer_payload)
-            if question.question_type in _TEXT_SCORING_TYPES:
+            if scoring["rule"] == _TARGET_TEXT_SCORING_RULE:
                 raw = answer.raw_answer_text if answer is not None else None
                 is_correct = raw is not None and rules.is_text_answer_correct(
                     raw, correct_payload["normalized_answer_text"]
@@ -167,6 +203,7 @@ def build_quiz_review(conn: sqlite3.Connection, attempt_id: int) -> QuizReviewRe
                 position=question.position,
                 question_type=question.question_type,
                 subtitle_cue_id=question.subtitle_cue_id,
+                source_cue_text=question.source_cue_text,
                 prompt=json.loads(question.prompt_payload),
                 correct_answer=json.loads(question.correct_answer_payload),
                 raw_answer_text=answer.raw_answer_text if answer is not None else None,
@@ -290,6 +327,7 @@ def _try_build_dictation(cue: SubtitleCue, rng: random.Random) -> QuizQuestion |
     return QuizQuestion(
         question_type=QuestionType.DICTATION.value,
         subtitle_cue_id=cue.id,
+        source_cue_text=cue.text,
         prompt_payload=json.dumps(prompt),
         correct_answer_payload=json.dumps(correct),
         scoring_config=json.dumps(scoring),
@@ -340,6 +378,7 @@ def _try_build_keyword_recognition(
     return QuizQuestion(
         question_type=QuestionType.KEYWORD_RECOGNITION.value,
         subtitle_cue_id=cue.id,
+        source_cue_text=cue.text,
         source_annotation_id=annotation_id,
         source_saved_item_id=saved_item_id,
         source_keyword_capture_id=capture_id,
@@ -372,6 +411,7 @@ def _try_build_audio_transcript_choice(
     return QuizQuestion(
         question_type=QuestionType.AUDIO_TRANSCRIPT_CHOICE.value,
         subtitle_cue_id=cue.id,
+        source_cue_text=cue.text,
         prompt_payload=json.dumps(prompt),
         correct_answer_payload=json.dumps(correct),
         scoring_config=json.dumps(scoring),
@@ -390,23 +430,48 @@ def create_review_quiz(
     cues_by_id = {cue.id: cue for cue in _material_cues(conn, material_id) if cue.id is not None}
     annotations = list_annotations_for_material(conn, material_id)
     priority_index = {label: i for i, label in enumerate(rules.REVIEW_LABEL_PRIORITY)}
-    eligible = [
-        annotation
-        for annotation in annotations
-        if annotation.label_key in priority_index
-        and annotation.subtitle_cue_id in cues_by_id
-        and rules.normalize_answer_text(annotation.selected_text)
-    ]
+
+    eligible: list[tuple[Annotation, str]] = []
+    for annotation in annotations:
+        if annotation.label_key not in priority_index:
+            continue
+        cue = cues_by_id.get(annotation.subtitle_cue_id)
+        if cue is None or annotation.selection_start < 0 or annotation.selection_end > len(cue.text):
+            continue
+        normalized = rules.normalize_answer_text(cue.text[annotation.selection_start : annotation.selection_end])
+        if not normalized:
+            continue
+        eligible.append((annotation, normalized))
     if not eligible:
         raise QuizValidationError(
             "no_meaningful_questions", "This material has no saved diagnosis evidence to build a review quiz from."
         )
 
+    # Several labels can describe the exact same tested evidence (e.g. the same
+    # cue range tagged both "misheard" and "unknown word or chunk" — Milestone 4
+    # allows a range to carry several labels). Testing it more than once would be
+    # a duplicate question, so keep only the highest-priority label per distinct
+    # (cue, tested range/normalized answer) pair.
+    best_by_evidence: dict[tuple[int, str], Annotation] = {}
+    for annotation, normalized in eligible:
+        key = (annotation.subtitle_cue_id, normalized)
+        current = best_by_evidence.get(key)
+        if current is None:
+            best_by_evidence[key] = annotation
+            continue
+        current_rank = priority_index[current.label_key]
+        candidate_rank = priority_index[annotation.label_key]
+        if candidate_rank < current_rank or (
+            candidate_rank == current_rank and (annotation.id or 0) < (current.id or 0)
+        ):
+            best_by_evidence[key] = annotation
+    deduped = list(best_by_evidence.values())
+
     actual_seed = seed if seed is not None else _new_seed()
     rng = random.Random(actual_seed)
 
     groups: dict[int, list[Annotation]] = {}
-    for annotation in eligible:
+    for annotation in deduped:
         groups.setdefault(priority_index[annotation.label_key], []).append(annotation)
     ordered: list[Annotation] = []
     for group_index in sorted(groups):
@@ -459,6 +524,7 @@ def _try_build_review_question(annotation: Annotation, cue: SubtitleCue) -> Quiz
     return QuizQuestion(
         question_type=REVIEW_QUESTION_TYPE,
         subtitle_cue_id=cue.id,
+        source_cue_text=cue.text,
         source_annotation_id=annotation.id,
         prompt_payload=json.dumps(prompt),
         correct_answer_payload=json.dumps(correct),
