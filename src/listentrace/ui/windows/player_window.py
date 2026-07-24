@@ -985,6 +985,32 @@ class PlayerWindow(QMainWindow):
     def _on_open_label_colors(self) -> None:
         dialog = LabelColorDialog(self._connection, self)
         dialog.exec()
+        self._refresh_annotation_presentation()
+
+    def _refresh_annotation_presentation(self) -> None:
+        """Refresh only label-color-derived presentation: reload label preferences,
+        reapply transcript highlighting, and update every existing annotation-list
+        badge in place.
+
+        Unlike `_refresh_editing_cue_panels`, this does not reload data from the
+        database, clear the annotation list, or touch the form. It preserves the
+        current editing cue, the currently-selected annotation (list selection is
+        never cleared/rebuilt), and any unsaved form contents (checkboxes, heard_as,
+        note) exactly as the learner left them.
+        """
         cue = self._current_editing_cue()
-        if cue is not None:
-            self._apply_annotation_highlighting(cue.text, getattr(self, "_current_annotations", []))
+        if cue is None:
+            return
+
+        annotations = getattr(self, "_current_annotations", [])
+        self._apply_annotation_highlighting(cue.text, annotations)
+
+        colors = label_preference_service.get_label_preferences(self._connection)
+        for i in range(self._annotation_list.count()):
+            item = self._annotation_list.item(i)
+            if item is None:
+                continue
+            annotation_id = item.data(Qt.ItemDataRole.UserRole)
+            annotation = next((a for a in annotations if a.id == annotation_id), None)
+            if annotation is not None:
+                item.setIcon(_color_badge_icon(colors.get(annotation.label_key, "#CCCCCC")))

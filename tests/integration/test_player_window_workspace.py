@@ -465,4 +465,53 @@ def test_non_bmp_character_inside_selection_round_trips(qapp, conn, tmp_path):
     annotations = annotation_service.list_annotations_for_cue(conn, window._session.cues[0].id)
     assert annotations[0].selected_text == "hi \U0001F600 "
 
+
+def test_open_label_colors_refreshes_highlight_and_badge_without_full_reload(qapp, conn, tmp_path, monkeypatch):
+    from PySide6.QtCore import QSize
+    from PySide6.QtGui import QColor
+
+    window, _ = _open_window(conn, tmp_path)
+    window._cue_list.setCurrentRow(0)
+    _select_range(window, 0, 7)
+    window._label_checkboxes["keyword"].setChecked(True)
+    window._on_save_annotation_clicked()
+
+    window._annotation_list.setCurrentRow(0)
+    editing_cue_index_before = window._editing_cue_index
+    selected_annotation_id_before = window._editing_annotation_id
+    window._annotation_note_edit.setText("unsaved note draft")
+
+    class _FakeLabelColorDialog:
+        def __init__(self, connection, parent):
+            self._connection = connection
+
+        def exec(self):
+            # Simulate the user picking a new color inside the real dialog.
+            label_preference_service.update_label_color(self._connection, "keyword", "#00FF00")
+
+    monkeypatch.setattr(
+        "listentrace.ui.windows.player_window.LabelColorDialog", _FakeLabelColorDialog
+    )
+
+    window._on_open_label_colors()
+
+    # Transcript highlight over the annotated range reflects the new color.
+    cursor = window._editing_transcript_view.textCursor()
+    cursor.setPosition(0)
+    cursor.setPosition(1, QTextCursor.MoveMode.KeepAnchor)
+    highlight_color = cursor.charFormat().background().color()
+    assert highlight_color.name() == QColor("#00FF00").name()
+
+    # The existing list-row badge changed in place, without list rebuild.
+    updated_pixel = window._annotation_list.item(0).icon().pixmap(QSize(12, 12)).toImage().pixelColor(0, 0)
+    assert updated_pixel.name() == QColor("#00FF00").name()
+
+    # Editing cue, selected annotation, and unsaved form contents are preserved —
+    # none of this would survive a full `_refresh_editing_cue_panels()` reload.
+    assert window._editing_cue_index == editing_cue_index_before
+    assert window._editing_annotation_id == selected_annotation_id_before
+    assert window._annotation_note_edit.text() == "unsaved note draft"
+
+    window.close()
+
     window.close()
