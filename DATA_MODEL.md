@@ -167,6 +167,8 @@ Implemented fields:
 
 Constraints actually enforced: `UNIQUE (subtitle_cue_id, label_key, selection_start, selection_end)` (blocks the exact-duplicate case at the database level, reinforcing the application-layer check); `CHECK (selection_end >= selection_start)`.
 
+Editing: `annotation_service.update_annotation` can change every field on a row — `label_key`, `selection_start`/`selection_end` (and the `selected_text` re-derived from them), `heard_as`, and `note` — with the same validation as creation re-run (label validity, range bounds, Misheard-requires-`heard_as`, duplicate-on-same-range excluding the row being updated). The update is scoped to `WHERE id = ?`, so it can never affect a sibling row that shares the same cue/range under a different label.
+
 Initial label keys:
 
 - `keyword`
@@ -195,7 +197,7 @@ User-managed vocabulary item or chunk. **Implemented (migration 3).**
 Implemented fields:
 
 - `id`
-- `material_id` (FK → `material.id`, `ON DELETE CASCADE`)
+- `material_id` (FK → `material.id`, `ON DELETE CASCADE` — **never accepted as caller input**; always derived server-side via `subtitle_cue -> subtitle_track -> material`, see below)
 - `subtitle_cue_id` (FK → `subtitle_cue.id`, `ON DELETE CASCADE`)
 - `item_type` (`word` / `phrase` / `chunk` / `sentence_pattern`)
 - `text` (derived from the cue substring at the stored range, not a separately-trusted string)
@@ -208,6 +210,10 @@ Implemented fields:
 - `updated_at`
 
 Constraint actually enforced: `UNIQUE (material_id, subtitle_cue_id, item_type, selection_start, selection_end, normalized_text)` — the exact-duplicate rule reinforced at the database level. A different cue/material with the same `normalized_text` is not blocked by this constraint; the application layer (`saved_language_item_service`) detects it and requires explicit confirmation before creating a second record.
+
+`material_id` integrity: `saved_language_item_service.save_language_item` does not take `material_id` as a parameter — `infrastructure/db/learning_repository.get_material_id_for_subtitle_cue` derives it from the cue's actual ownership chain, so a cue from one material can never be recorded as belonging to another.
+
+Editing: `saved_language_item_service.update_saved_language_item` can change `item_type` (re-running the duplicate check, since `item_type` is part of the uniqueness key), `meaning`, `note`, and `context_text`. `text`, `selection_start`/`selection_end`, and `normalized_text` are a locked identity once saved — changing what text an item refers to is delete-and-recreate, not update, and this is stated directly in the UI (not a control that silently ignores changes).
 
 The application does not claim dictionary authority. The user edits and owns these fields.
 

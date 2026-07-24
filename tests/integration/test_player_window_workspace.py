@@ -74,7 +74,7 @@ def test_selecting_cue_populates_workspace_from_existing_data(qapp, conn, tmp_pa
 
     annotation_service.create_annotations(conn, cue.id, 0, 7, ["keyword"])
     cue_note_service.save_cue_note(conn, cue.id, "a note")
-    item_service.save_language_item(conn, material_id, cue.id, "word", 0, 7)
+    item_service.save_language_item(conn, cue.id, "word", 0, 7)
 
     window._cue_list.setCurrentRow(0)
 
@@ -152,6 +152,77 @@ def test_edit_and_delete_annotation_via_ui(qapp, conn, tmp_path):
     window.close()
 
 
+def test_edit_annotation_can_change_label_and_range_via_ui(qapp, conn, tmp_path):
+    window, _ = _open_window(conn, tmp_path)
+    window._cue_list.setCurrentRow(0)
+    _select_range(window, 0, 7)
+    window._label_checkboxes["keyword"].setChecked(True)
+    window._on_save_annotation_clicked()
+
+    window._annotation_list.setCurrentRow(0)
+    assert window._editing_annotation_id is not None
+
+    # Change both the label and the range, then Update.
+    window._label_checkboxes["keyword"].setChecked(False)
+    window._label_checkboxes["unknown_word_or_chunk"].setChecked(True)
+    _select_range(window, 8, 12)  # "tout"
+    window._on_update_annotation_clicked()
+
+    assert window._workspace_status_label.text() == ""
+    annotations = annotation_service.list_annotations_for_cue(conn, window._session.cues[0].id)
+    assert len(annotations) == 1
+    assert annotations[0].label_key == "unknown_word_or_chunk"
+    assert annotations[0].selected_text == "tout"
+
+    window.close()
+
+
+def test_update_annotation_requires_exactly_one_checked_label(qapp, conn, tmp_path):
+    window, _ = _open_window(conn, tmp_path)
+    window._cue_list.setCurrentRow(0)
+    _select_range(window, 0, 7)
+    window._label_checkboxes["keyword"].setChecked(True)
+    window._on_save_annotation_clicked()
+
+    window._annotation_list.setCurrentRow(0)
+    window._label_checkboxes["unknown_word_or_chunk"].setChecked(True)  # now two checked
+    window._on_update_annotation_clicked()
+
+    assert "exactly one label" in window._workspace_status_label.text()
+    # nothing should have changed
+    annotations = annotation_service.list_annotations_for_cue(conn, window._session.cues[0].id)
+    assert len(annotations) == 1
+    assert annotations[0].label_key == "keyword"
+
+    window.close()
+
+
+def test_edit_saved_item_type_via_ui_with_source_locked(qapp, conn, tmp_path):
+    window, _ = _open_window(conn, tmp_path)
+    window._cue_list.setCurrentRow(0)
+    _select_range(window, 0, 7)
+    window._item_type_combo.setCurrentIndex(window._item_type_combo.findData("word"))
+    window._on_save_item_clicked()
+    assert window._saved_items_list.count() == 1
+
+    window._saved_items_list.setCurrentRow(0)
+    assert window._editing_item_id is not None
+
+    # Change the type (allowed) while the transcript selection moves elsewhere —
+    # the update must not re-derive a new source range from that selection.
+    window._item_type_combo.setCurrentIndex(window._item_type_combo.findData("phrase"))
+    _select_range(window, 8, 12)  # "tout" — must be ignored by update
+    window._on_update_item_clicked()
+
+    assert window._workspace_status_label.text() == ""
+    items = item_service.list_saved_items_for_cue(conn, window._session.cues[0].id)
+    assert items[0].item_type == "phrase"
+    assert items[0].text == "Bonjour"  # source text unchanged despite the later selection
+    assert (items[0].selection_start, items[0].selection_end) == (0, 7)
+
+    window.close()
+
+
 def test_cue_note_edit_via_ui(qapp, conn, tmp_path):
     window, _ = _open_window(conn, tmp_path)
     window._cue_list.setCurrentRow(0)
@@ -209,7 +280,7 @@ def test_duplicate_saved_item_warning_flow_confirms_and_creates(qapp, conn, tmp_
     )
     other_track_id = insert_subtitle_track(conn, other_track)
     other_cue = get_cues_for_track(conn, other_track_id)[0]
-    item_service.save_language_item(conn, other_material_id, other_cue.id, "word", 0, 7)
+    item_service.save_language_item(conn, other_cue.id, "word", 0, 7)
 
     window._cue_list.setCurrentRow(0)
     _select_range(window, 0, 7)  # "Bonjour" in this window's first cue
@@ -259,6 +330,68 @@ def test_label_color_update_changes_presentation_not_semantics(qapp, conn, tmp_p
     window.close()
 
 
+def test_annotation_list_shows_a_color_badge_matching_the_label_color(qapp, conn, tmp_path):
+    from PySide6.QtCore import QSize
+    from PySide6.QtGui import QColor
+
+    window, _ = _open_window(conn, tmp_path)
+    window._cue_list.setCurrentRow(0)
+    _select_range(window, 0, 7)
+    window._label_checkboxes["keyword"].setChecked(True)
+    window._on_save_annotation_clicked()
+
+    item = window._annotation_list.item(0)
+    assert not item.icon().isNull()
+    # The label text itself must still be visible — color is not the only cue.
+    assert item.text().startswith("[keyword]")
+
+    default_color = label_preference_service.get_label_preferences(conn)["keyword"]
+    badge_pixel = item.icon().pixmap(QSize(12, 12)).toImage().pixelColor(0, 0)
+    assert badge_pixel == QColor(default_color)
+
+    # Changing the global color must refresh the badge (and the transcript
+    # highlight) without changing which annotation/label exists.
+    label_preference_service.update_label_color(conn, "keyword", "#00FF00")
+    window._refresh_editing_cue_panels()
+
+    updated_item = window._annotation_list.item(0)
+    updated_pixel = updated_item.icon().pixmap(QSize(12, 12)).toImage().pixelColor(0, 0)
+    assert updated_pixel == QColor("#00FF00")
+    assert updated_item.text().startswith("[keyword]")
+
+    window.close()
+
+
+def test_overlapping_annotations_each_show_their_own_badge_and_stay_selectable(qapp, conn, tmp_path):
+    from PySide6.QtCore import QSize
+    from PySide6.QtGui import QColor
+
+    window, _ = _open_window(conn, tmp_path)
+    window._cue_list.setCurrentRow(0)
+    _select_range(window, 0, 7)
+    window._label_checkboxes["keyword"].setChecked(True)
+    window._label_checkboxes["unknown_word_or_chunk"].setChecked(True)
+    window._on_save_annotation_clicked()
+
+    assert window._annotation_list.count() == 2
+    colors = label_preference_service.get_label_preferences(conn)
+
+    row0_pixel = window._annotation_list.item(0).icon().pixmap(QSize(12, 12)).toImage().pixelColor(0, 0)
+    row1_pixel = window._annotation_list.item(1).icon().pixmap(QSize(12, 12)).toImage().pixelColor(0, 0)
+    row_colors = {row0_pixel.name(), row1_pixel.name()}
+    expected_colors = {QColor(colors["keyword"]).name(), QColor(colors["unknown_word_or_chunk"]).name()}
+    assert row_colors == expected_colors
+
+    # Each row must remain independently selectable.
+    window._annotation_list.setCurrentRow(0)
+    first_id = window._editing_annotation_id
+    window._annotation_list.setCurrentRow(1)
+    second_id = window._editing_annotation_id
+    assert first_id != second_id
+
+    window.close()
+
+
 def test_m3_controls_still_work_alongside_workspace(qapp, conn, tmp_path):
     window, _ = _open_window(conn, tmp_path)
 
@@ -268,5 +401,68 @@ def test_m3_controls_still_work_alongside_workspace(qapp, conn, tmp_path):
     window._cue_list.item(1).setSelected(True)
     window._on_loop_range_clicked()
     assert window._session.loop_mode is not None
+
+    window.close()
+
+
+def test_non_bmp_selection_round_trips_through_real_qt_widget(qapp, conn, tmp_path):
+    emoji_text = "hi \U0001F600 there"  # emoji is non-BMP: 2 UTF-16 units, 1 code point
+    window, _ = _open_window(conn, tmp_path, cue_text=emoji_text)
+    window._cue_list.setCurrentRow(0)
+
+    assert window._editing_transcript_view.toPlainText() == emoji_text
+
+    # Select "there" using the real QTextDocument search, so this exercises Qt's own
+    # UTF-16 cursor positions rather than positions we computed ourselves.
+    found_cursor = window._editing_transcript_view.document().find("there")
+    assert not found_cursor.isNull()
+    window._editing_transcript_view.setTextCursor(found_cursor)
+
+    start, end = window._current_selection_range(emoji_text)
+    assert emoji_text[start:end] == "there"
+    assert (start, end) == (5, 10)  # codepoint indices: "hi " (3) + emoji (1) + " " (1)
+
+    window._label_checkboxes["keyword"].setChecked(True)
+    window._on_save_annotation_clicked()
+    assert window._workspace_status_label.text() == ""
+
+    annotations = annotation_service.list_annotations_for_cue(conn, window._session.cues[0].id)
+    assert annotations[0].selected_text == "there"
+    assert (annotations[0].selection_start, annotations[0].selection_end) == (5, 10)
+
+    # Selecting the annotation must restore the correct Qt selection despite the
+    # preceding non-BMP character.
+    window._annotation_list.setCurrentRow(0)
+    restored = window._editing_transcript_view.textCursor()
+    assert restored.selectedText() == "there"
+
+    # Highlighting must not crash or misplace the highlight for non-BMP text.
+    window._refresh_editing_cue_panels()
+
+    window.close()
+
+
+def test_non_bmp_character_inside_selection_round_trips(qapp, conn, tmp_path):
+    emoji_text = "hi \U0001F600 there"
+    window, _ = _open_window(conn, tmp_path, cue_text=emoji_text)
+    window._cue_list.setCurrentRow(0)
+
+    # Select from the start of the text through just after the emoji + following space,
+    # i.e. a selection that *contains* the non-BMP character rather than starting after it.
+    cursor = window._editing_transcript_view.textCursor()
+    cursor.setPosition(0)
+    # 5 character-steps: h, i, ' ', (the emoji as one step), ' ' -> lands right before "there".
+    cursor.movePosition(cursor.MoveOperation.Right, cursor.MoveMode.KeepAnchor, 5)
+    window._editing_transcript_view.setTextCursor(cursor)
+
+    start, end = window._current_selection_range(emoji_text)
+    assert emoji_text[start:end] == "hi \U0001F600 "
+
+    window._label_checkboxes["unknown_word_or_chunk"].setChecked(True)
+    window._on_save_annotation_clicked()
+    assert window._workspace_status_label.text() == ""
+
+    annotations = annotation_service.list_annotations_for_cue(conn, window._session.cues[0].id)
+    assert annotations[0].selected_text == "hi \U0001F600 "
 
     window.close()

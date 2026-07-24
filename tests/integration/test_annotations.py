@@ -143,16 +143,63 @@ def test_unicode_selection_round_trips(conn):
 
 def test_update_annotation_note_and_heard_as(conn, cue):
     ids = annotation_service.create_annotations(conn, cue.id, 0, 7, ["misheard"], heard_as="X")
-    annotation_service.update_annotation(conn, ids[0], heard_as="Y", note="clarified")
+    annotation_service.update_annotation(conn, ids[0], "misheard", 0, 7, heard_as="Y", note="clarified")
     annotations = annotation_service.list_annotations_for_cue(conn, cue.id)
     assert annotations[0].heard_as == "Y"
     assert annotations[0].note == "clarified"
 
 
+def test_update_annotation_can_change_label_and_range(conn, cue):
+    ids = annotation_service.create_annotations(conn, cue.id, 0, 7, ["keyword"])
+    annotation_service.update_annotation(conn, ids[0], "unknown_word_or_chunk", 8, 12)
+    annotations = annotation_service.list_annotations_for_cue(conn, cue.id)
+    assert annotations[0].label_key == "unknown_word_or_chunk"
+    assert (annotations[0].selection_start, annotations[0].selection_end) == (8, 12)
+    assert annotations[0].selected_text == "tout"
+
+
+def test_update_annotation_rejects_invalid_label(conn, cue):
+    ids = annotation_service.create_annotations(conn, cue.id, 0, 7, ["keyword"])
+    with pytest.raises(AnnotationValidationError) as exc_info:
+        annotation_service.update_annotation(conn, ids[0], "not_a_label", 0, 7)
+    assert exc_info.value.category == "invalid_label"
+
+
+def test_update_annotation_rejects_out_of_bounds_range(conn, cue):
+    ids = annotation_service.create_annotations(conn, cue.id, 0, 7, ["keyword"])
+    with pytest.raises(AnnotationValidationError) as exc_info:
+        annotation_service.update_annotation(conn, ids[0], "keyword", 0, 999)
+    assert exc_info.value.category == "invalid_range"
+
+
+def test_update_annotation_rejects_collision_with_another_row(conn, cue):
+    ids_a = annotation_service.create_annotations(conn, cue.id, 0, 7, ["keyword"])
+    annotation_service.create_annotations(conn, cue.id, 8, 12, ["unknown_word_or_chunk"])
+    with pytest.raises(AnnotationValidationError) as exc_info:
+        annotation_service.update_annotation(conn, ids_a[0], "unknown_word_or_chunk", 8, 12)
+    assert exc_info.value.category == "duplicate_annotation"
+
+
+def test_update_annotation_to_same_label_and_range_is_not_a_false_duplicate(conn, cue):
+    ids = annotation_service.create_annotations(conn, cue.id, 0, 7, ["misheard"], heard_as="X")
+    # Updating a row to its own current label/range must not trip the duplicate check.
+    annotation_service.update_annotation(conn, ids[0], "misheard", 0, 7, heard_as="Y")
+    assert annotation_service.list_annotations_for_cue(conn, cue.id)[0].heard_as == "Y"
+
+
+def test_updating_one_annotation_does_not_affect_a_sibling_on_the_same_range(conn, cue):
+    ids = annotation_service.create_annotations(conn, cue.id, 0, 7, ["keyword", "unknown_word_or_chunk"])
+    annotation_service.update_annotation(conn, ids[0], "keyword", 0, 7, note="only this one")
+    annotations = {a.id: a for a in annotation_service.list_annotations_for_cue(conn, cue.id)}
+    assert annotations[ids[0]].note == "only this one"
+    assert annotations[ids[1]].note is None
+    assert annotations[ids[1]].label_key == "unknown_word_or_chunk"
+
+
 def test_update_misheard_annotation_requires_heard_as(conn, cue):
     ids = annotation_service.create_annotations(conn, cue.id, 0, 7, ["misheard"], heard_as="X")
     with pytest.raises(AnnotationValidationError) as exc_info:
-        annotation_service.update_annotation(conn, ids[0], heard_as="", note="note")
+        annotation_service.update_annotation(conn, ids[0], "misheard", 0, 7, heard_as="", note="note")
     assert exc_info.value.category == "misheard_requires_heard_as"
 
 
@@ -169,7 +216,7 @@ def test_delete_nonexistent_annotation_raises(conn):
 
 def test_update_nonexistent_annotation_raises(conn):
     with pytest.raises(AnnotationNotFoundError):
-        annotation_service.update_annotation(conn, 999, heard_as=None, note="x")
+        annotation_service.update_annotation(conn, 999, "keyword", 0, 5, heard_as=None, note="x")
 
 
 def test_annotations_cascade_when_material_removed(conn, cue):

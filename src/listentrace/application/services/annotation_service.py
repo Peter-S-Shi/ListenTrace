@@ -82,23 +82,51 @@ def create_annotations(
 def update_annotation(
     conn: sqlite3.Connection,
     annotation_id: int,
+    label_key: str,
+    selection_start: int,
+    selection_end: int,
     heard_as: str | None = None,
     note: str | None = None,
 ) -> None:
+    """Fully update an annotation: label, canonical range, selected text, heard_as,
+    and note. Re-runs the same validation as creation (label validity, range bounds,
+    duplicate-on-same-range excluding this row, Misheard-requires-heard_as). Scoped
+    to a single row by id, so it never touches a sibling label on the same range."""
     existing = _repo_get_annotation(conn, annotation_id)
     if existing is None:
         raise AnnotationNotFoundError(annotation_id)
 
+    if label_key not in _VALID_LABELS:
+        raise AnnotationValidationError("invalid_label", f"Unknown label: {label_key!r}")
+
+    cue = get_cue_by_id(conn, existing.subtitle_cue_id)
+    if cue is None:
+        raise CueNotFoundError(existing.subtitle_cue_id)
+
+    try:
+        selected_text = validate_selection(cue.text, selection_start, selection_end)
+    except TextRangeError as exc:
+        raise AnnotationValidationError("invalid_range", str(exc)) from exc
+
     heard_as_value = heard_as.strip() if heard_as and heard_as.strip() else None
-    if existing.label_key == AnnotationLabel.MISHEARD.value and not heard_as_value:
+    if label_key == AnnotationLabel.MISHEARD.value and not heard_as_value:
         raise AnnotationValidationError(
             "misheard_requires_heard_as", "Misheard annotations require heard_as text."
         )
-    if existing.label_key != AnnotationLabel.MISHEARD.value:
+    if label_key != AnnotationLabel.MISHEARD.value:
         heard_as_value = None
 
+    duplicate = find_annotation(conn, existing.subtitle_cue_id, label_key, selection_start, selection_end)
+    if duplicate is not None and duplicate.id != annotation_id:
+        raise AnnotationValidationError(
+            "duplicate_annotation",
+            f"An annotation with label {label_key!r} already exists for this range.",
+        )
+
     note_value = note.strip() if note and note.strip() else None
-    _repo_update_annotation(conn, annotation_id, heard_as_value, note_value)
+    _repo_update_annotation(
+        conn, annotation_id, label_key, selected_text, selection_start, selection_end, heard_as_value, note_value
+    )
 
 
 def delete_annotation(conn: sqlite3.Connection, annotation_id: int) -> None:

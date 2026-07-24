@@ -19,6 +19,7 @@ from listentrace.infrastructure.db.learning_repository import (
 )
 from listentrace.infrastructure.db.learning_repository import find_saved_item_by_normalized_text_elsewhere
 from listentrace.infrastructure.db.learning_repository import find_saved_item_exact
+from listentrace.infrastructure.db.learning_repository import get_material_id_for_subtitle_cue
 from listentrace.infrastructure.db.learning_repository import (
     get_saved_language_item as _repo_get,
 )
@@ -40,7 +41,6 @@ _VALID_ITEM_TYPES = {item.value for item in SavedItemType}
 
 def save_language_item(
     conn: sqlite3.Connection,
-    material_id: int,
     subtitle_cue_id: int,
     item_type: str,
     selection_start: int,
@@ -51,8 +51,15 @@ def save_language_item(
     *,
     confirm_duplicate_text_elsewhere: bool = False,
 ) -> SavedItemSuccess | SavedItemNeedsConfirmation:
+    """`material_id` is never accepted as a parameter: it is always derived from the
+    cue's real ownership chain (subtitle_cue -> subtitle_track -> material), so a
+    caller cannot create a Saved Language Item associated with the wrong material."""
     cue = get_cue_by_id(conn, subtitle_cue_id)
     if cue is None:
+        raise CueNotFoundError(subtitle_cue_id)
+
+    material_id = get_material_id_for_subtitle_cue(conn, subtitle_cue_id)
+    if material_id is None:
         raise CueNotFoundError(subtitle_cue_id)
 
     if item_type not in _VALID_ITEM_TYPES:
@@ -111,18 +118,42 @@ def save_language_item(
 def update_saved_language_item(
     conn: sqlite3.Connection,
     item_id: int,
+    item_type: str,
     meaning: str | None = None,
     note: str | None = None,
     context_text: str | None = None,
 ) -> None:
+    """Update item type, meaning, note, and context. Source identity (material, cue,
+    selected text/range, normalized text) is intentionally locked — changing what
+    text an item refers to requires delete-and-recreate, not update, since that
+    identity is exactly what the duplicate-detection keys are built from."""
     existing = _repo_get(conn, item_id)
     if existing is None:
         raise SavedItemNotFoundError(item_id)
 
+    if item_type not in _VALID_ITEM_TYPES:
+        raise SavedItemValidationError("invalid_item_type", f"Unknown item type: {item_type!r}")
+
+    if item_type != existing.item_type:
+        duplicate = find_saved_item_exact(
+            conn,
+            existing.material_id,
+            existing.subtitle_cue_id,
+            item_type,
+            existing.selection_start,
+            existing.selection_end,
+            existing.normalized_text,
+        )
+        if duplicate is not None and duplicate.id != item_id:
+            raise SavedItemValidationError(
+                "duplicate_saved_item",
+                "An item with this type already exists for the same text and range.",
+            )
+
     meaning_value = meaning.strip() if meaning and meaning.strip() else None
     note_value = note.strip() if note and note.strip() else None
     context_value = context_text.strip() if context_text and context_text.strip() else existing.context_text
-    _repo_update(conn, item_id, meaning_value, note_value, context_value)
+    _repo_update(conn, item_id, item_type, meaning_value, note_value, context_value)
 
 
 def delete_saved_language_item(conn: sqlite3.Connection, item_id: int) -> None:

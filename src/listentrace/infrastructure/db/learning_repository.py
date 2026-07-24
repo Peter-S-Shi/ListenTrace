@@ -7,6 +7,25 @@ from listentrace.domain.models.cue_note import CueNote
 from listentrace.domain.models.saved_language_item import SavedLanguageItem
 
 
+def get_material_id_for_subtitle_cue(conn: sqlite3.Connection, subtitle_cue_id: int) -> int | None:
+    """Derive the owning material via subtitle_cue -> subtitle_track -> material.
+
+    Used so callers (application services, UI) never supply a material_id for a
+    Saved Language Item directly — it is always derived from the cue's real
+    ownership chain, preventing an inconsistent cue/material association.
+    """
+    row = conn.execute(
+        """
+        SELECT subtitle_track.material_id AS material_id
+        FROM subtitle_cue
+        JOIN subtitle_track ON subtitle_cue.subtitle_track_id = subtitle_track.id
+        WHERE subtitle_cue.id = ?
+        """,
+        (subtitle_cue_id,),
+    ).fetchone()
+    return int(row["material_id"]) if row is not None else None
+
+
 def _row_to_annotation(row: sqlite3.Row) -> Annotation:
     return Annotation(
         id=row["id"],
@@ -84,12 +103,23 @@ def list_annotations_for_cue(conn: sqlite3.Connection, subtitle_cue_id: int) -> 
 def update_annotation(
     conn: sqlite3.Connection,
     annotation_id: int,
+    label_key: str,
+    selected_text: str,
+    selection_start: int,
+    selection_end: int,
     heard_as: str | None,
     note: str | None,
 ) -> None:
+    """Update a single annotation row by id. Scoped to `WHERE id = ?` only, so this
+    never touches a sibling row that happens to share the same cue/range/label."""
     conn.execute(
-        "UPDATE annotation SET heard_as = ?, note = ?, updated_at = datetime('now') WHERE id = ?",
-        (heard_as, note, annotation_id),
+        """
+        UPDATE annotation
+        SET label_key = ?, selected_text = ?, selection_start = ?, selection_end = ?,
+            heard_as = ?, note = ?, updated_at = datetime('now')
+        WHERE id = ?
+        """,
+        (label_key, selected_text, selection_start, selection_end, heard_as, note, annotation_id),
     )
     conn.commit()
 
@@ -234,17 +264,21 @@ def find_saved_item_by_normalized_text_elsewhere(
 def update_saved_language_item(
     conn: sqlite3.Connection,
     item_id: int,
+    item_type: str,
     meaning: str | None,
     note: str | None,
     context_text: str,
 ) -> None:
+    """Update type/meaning/note/context only. Source text/range/normalized_text are
+    intentionally not parameters here: identity fields are locked once saved (see
+    `saved_language_item_service.update_saved_language_item`)."""
     conn.execute(
         """
         UPDATE saved_language_item
-        SET meaning = ?, note = ?, context_text = ?, updated_at = datetime('now')
+        SET item_type = ?, meaning = ?, note = ?, context_text = ?, updated_at = datetime('now')
         WHERE id = ?
         """,
-        (meaning, note, context_text, item_id),
+        (item_type, meaning, note, context_text, item_id),
     )
     conn.commit()
 

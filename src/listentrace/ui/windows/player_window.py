@@ -3,7 +3,7 @@ from __future__ import annotations
 import sqlite3
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QColor, QKeyEvent, QTextCharFormat, QTextCursor
+from PySide6.QtGui import QColor, QIcon, QKeyEvent, QPixmap, QTextCharFormat, QTextCursor
 from PySide6.QtMultimediaWidgets import QVideoWidget
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -44,11 +44,17 @@ from listentrace.domain.enums.annotation_label import AnnotationLabel
 from listentrace.domain.enums.saved_item_type import SavedItemType
 from listentrace.domain.services.text_range import whole_cue_range
 from listentrace.infrastructure.media.playback import PlaybackController
+from listentrace.ui.text_offset_conversion import (
+    SurrogatePairOffsetError,
+    codepoint_index_to_qt_offset,
+    qt_offset_to_codepoint_index,
+)
 from listentrace.ui.windows.label_color_dialog import LabelColorDialog
 
 _SEEK_STEP_MS = 5000
 _ACTIVE_CUE_HIGHLIGHT = QColor("#FFF3CD")
 _OVERLAP_HIGHLIGHT = QColor("#D0D0D0")
+_BADGE_SIZE = 12
 
 
 def _is_text_entry_widget(widget: object) -> bool:
@@ -59,6 +65,12 @@ def _format_time(ms: int) -> str:
     total_seconds = max(ms, 0) // 1000
     minutes, seconds = divmod(total_seconds, 60)
     return f"{minutes:02d}:{seconds:02d}"
+
+
+def _color_badge_icon(color_hex: str) -> QIcon:
+    pixmap = QPixmap(_BADGE_SIZE, _BADGE_SIZE)
+    pixmap.fill(QColor(color_hex))
+    return QIcon(pixmap)
 
 
 class PlayerWindow(QMainWindow):
@@ -271,6 +283,13 @@ class PlayerWindow(QMainWindow):
 
         item_column = QVBoxLayout()
         item_column.addWidget(QLabel("Save Language Item"))
+        source_lock_note = QLabel(
+            "Type, meaning, note, and context can be edited later. The source text/range "
+            "is fixed once saved — delete and save again to change what text an item refers to."
+        )
+        source_lock_note.setWordWrap(True)
+        source_lock_note.setStyleSheet("color: gray; font-size: 11px;")
+        item_column.addWidget(source_lock_note)
 
         item_type_row = QHBoxLayout()
         item_type_row.addWidget(QLabel("Type:"))
@@ -588,11 +607,14 @@ class PlayerWindow(QMainWindow):
         self._current_annotations = workspace.annotations
         self._apply_annotation_highlighting(cue.text, workspace.annotations)
 
+        label_colors = label_preference_service.get_label_preferences(self._connection)
+
         self._annotation_list.blockSignals(True)
         self._annotation_list.clear()
         for annotation in workspace.annotations:
             heard_as_suffix = f" (heard as: {annotation.heard_as})" if annotation.heard_as else ""
             item = QListWidgetItem(f"[{annotation.label_key}] {annotation.selected_text}{heard_as_suffix}")
+            item.setIcon(_color_badge_icon(label_colors.get(annotation.label_key, "#CCCCCC")))
             item.setData(Qt.ItemDataRole.UserRole, annotation.id)
             self._annotation_list.addItem(item)
         self._annotation_list.blockSignals(False)
@@ -648,9 +670,13 @@ class PlayerWindow(QMainWindow):
             else:
                 fmt.setBackground(_OVERLAP_HIGHLIGHT)
 
+            # i/j are codepoint indices (matching annotation.selection_start/end);
+            # convert to Qt UTF-16 offsets before positioning the highlight cursor.
             highlight_cursor = QTextCursor(document)
-            highlight_cursor.setPosition(i)
-            highlight_cursor.setPosition(j, QTextCursor.MoveMode.KeepAnchor)
+            highlight_cursor.setPosition(codepoint_index_to_qt_offset(cue_text, i))
+            highlight_cursor.setPosition(
+                codepoint_index_to_qt_offset(cue_text, j), QTextCursor.MoveMode.KeepAnchor
+            )
             highlight_cursor.setCharFormat(fmt)
             i = j
 
@@ -671,9 +697,19 @@ class PlayerWindow(QMainWindow):
         self._heard_as_edit.setEnabled(misheard_checked)
 
     def _current_selection_range(self, cue_text: str) -> tuple[int, int]:
+        """Return the current transcript selection as canonical (codepoint-index)
+        offsets. Qt reports UTF-16 code-unit offsets, which are converted here —
+        the only place a Qt cursor position is read for this purpose."""
         cursor = self._editing_transcript_view.textCursor()
-        start, end = cursor.selectionStart(), cursor.selectionEnd()
-        if start == end:
+        qt_start, qt_end = cursor.selectionStart(), cursor.selectionEnd()
+        if qt_start == qt_end:
+            return whole_cue_range(cue_text)
+        try:
+            start = qt_offset_to_codepoint_index(cue_text, qt_start)
+            end = qt_offset_to_codepoint_index(cue_text, qt_end)
+        except SurrogatePairOffsetError:
+            # Qt should never hand back a mid-surrogate-pair boundary for a user
+            # selection, but fall back safely rather than persist a corrupt range.
             return whole_cue_range(cue_text)
         return start, end
 
@@ -681,7 +717,11 @@ class PlayerWindow(QMainWindow):
         cue = self._current_editing_cue()
         if cue is None or not getattr(self, "_current_annotations", None):
             return
-        position = self._editing_transcript_view.textCursor().position()
+        qt_position = self._editing_transcript_view.textCursor().position()
+        try:
+            position = qt_offset_to_codepoint_index(cue.text, qt_position)
+        except SurrogatePairOffsetError:
+            return
         for annotation in self._current_annotations:
             if annotation.selection_start <= position < annotation.selection_end:
                 for i in range(self._annotation_list.count()):
@@ -727,7 +767,8 @@ class PlayerWindow(QMainWindow):
         annotation = next(
             (a for a in getattr(self, "_current_annotations", []) if a.id == annotation_id), None
         )
-        if annotation is None:
+        cue = self._current_editing_cue()
+        if annotation is None or cue is None:
             return
 
         for key, checkbox in self._label_checkboxes.items():
@@ -738,21 +779,45 @@ class PlayerWindow(QMainWindow):
         self._heard_as_edit.setText(annotation.heard_as or "")
         self._annotation_note_edit.setText(annotation.note or "")
 
+        # annotation.selection_start/end are canonical codepoint indices; convert to
+        # Qt UTF-16 offsets before handing them to QTextCursor.
+        qt_start = codepoint_index_to_qt_offset(cue.text, annotation.selection_start)
+        qt_end = codepoint_index_to_qt_offset(cue.text, annotation.selection_end)
         cursor = self._editing_transcript_view.textCursor()
-        cursor.setPosition(annotation.selection_start)
-        cursor.setPosition(annotation.selection_end, QTextCursor.MoveMode.KeepAnchor)
+        cursor.setPosition(qt_start)
+        cursor.setPosition(qt_end, QTextCursor.MoveMode.KeepAnchor)
         self._editing_transcript_view.setTextCursor(cursor)
 
     def _on_update_annotation_clicked(self) -> None:
         if self._editing_annotation_id is None:
             return
+        cue = self._current_editing_cue()
+        if cue is None:
+            return
+
+        checked_labels = [key for key, checkbox in self._label_checkboxes.items() if checkbox.isChecked()]
+        if len(checked_labels) != 1:
+            self._show_workspace_status(
+                "Select exactly one label to update this annotation "
+                "(delete and save again to change how many labels apply)."
+            )
+            return
+
+        start, end = self._current_selection_range(cue.text)
         heard_as = self._heard_as_edit.text()
         note = self._annotation_note_edit.text()
+
         try:
             annotation_service.update_annotation(
-                self._connection, self._editing_annotation_id, heard_as=heard_as, note=note
+                self._connection,
+                self._editing_annotation_id,
+                checked_labels[0],
+                start,
+                end,
+                heard_as=heard_as,
+                note=note,
             )
-        except (AnnotationNotFoundError, AnnotationValidationError) as exc:
+        except (AnnotationNotFoundError, AnnotationValidationError, CueNotFoundError) as exc:
             self._show_workspace_status(str(exc))
             return
         self._refresh_editing_cue_panels()
@@ -815,7 +880,6 @@ class PlayerWindow(QMainWindow):
         try:
             result = item_service.save_language_item(
                 self._connection,
-                self._material.id,
                 cue.id,
                 item_type,
                 start,
@@ -841,7 +905,6 @@ class PlayerWindow(QMainWindow):
             try:
                 result = item_service.save_language_item(
                     self._connection,
-                    self._material.id,
                     cue.id,
                     item_type,
                     start,
@@ -885,15 +948,19 @@ class PlayerWindow(QMainWindow):
     def _on_update_item_clicked(self) -> None:
         if self._editing_item_id is None:
             return
+        # Source text/range are intentionally not re-read from the transcript
+        # selection here: an item's source identity is locked once saved (see
+        # saved_language_item_service.update_saved_language_item's docstring).
         try:
             item_service.update_saved_language_item(
                 self._connection,
                 self._editing_item_id,
+                self._item_type_combo.currentData(),
                 meaning=self._item_meaning_edit.text(),
                 note=self._item_note_edit.text(),
                 context_text=self._item_context_edit.toPlainText(),
             )
-        except SavedItemNotFoundError as exc:
+        except (SavedItemNotFoundError, SavedItemValidationError) as exc:
             self._show_workspace_status(str(exc))
             return
         self._refresh_editing_cue_panels()
