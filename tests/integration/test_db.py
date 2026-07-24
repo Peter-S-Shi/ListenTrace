@@ -39,7 +39,7 @@ def test_migrate_is_idempotent(conn):
     version_before = current_version(conn)
     migrate(conn)  # second call must not raise or duplicate schema
     version_after = current_version(conn)
-    assert version_before == version_after == 7
+    assert version_before == version_after == 8
 
 
 def test_foreign_keys_are_enforced(conn):
@@ -98,7 +98,7 @@ def test_migration_upgrades_a_milestone1_v1_database(tmp_path):
 
     final_version = migrate(connection)
 
-    assert final_version == 7
+    assert final_version == 8
     columns = {row["name"] for row in connection.execute("PRAGMA table_info(material)")}
     assert "normalized_path" in columns
     tables = {
@@ -144,7 +144,7 @@ def test_migration_upgrades_a_milestone2_v2_database(tmp_path):
 
     final_version = migrate(connection)
 
-    assert final_version == 7
+    assert final_version == 8
     tables = {
         row["name"]
         for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
@@ -203,7 +203,7 @@ def test_migration_upgrades_a_milestone4_v3_database_with_existing_data_intact(t
 
     final_version = migrate(connection)
 
-    assert final_version == 7
+    assert final_version == 8
     tables = {
         row["name"]
         for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
@@ -262,7 +262,7 @@ def test_migration_upgrades_a_milestone5_v4_database_with_existing_data_intact(t
 
     final_version = migrate(connection)
 
-    assert final_version == 7
+    assert final_version == 8
     tables = {
         row["name"]
         for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
@@ -323,7 +323,7 @@ def test_migration_upgrades_a_milestone6_v6_database_with_existing_data_intact(t
 
     final_version = migrate(connection)
 
-    assert final_version == 7
+    assert final_version == 8
     tables = {
         row["name"]
         for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
@@ -383,7 +383,7 @@ def test_migration_upgrades_a_milestone6_v5_database_backfills_source_cue_text(t
 
     final_version = migrate(connection)
 
-    assert final_version == 7
+    assert final_version == 8
     backfilled = connection.execute(
         "SELECT source_cue_text FROM quiz_question WHERE quiz_attempt_id = ?", (attempt_id,)
     ).fetchone()

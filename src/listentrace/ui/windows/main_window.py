@@ -23,6 +23,7 @@ from listentrace.application.errors import (
     MaterialNotFoundError,
     PlayerOpenError,
     QuizValidationError,
+    RecordingValidationError,
 )
 from listentrace.application.services import material_library_service as library
 from listentrace.application.services import practice_session_service
@@ -480,20 +481,18 @@ class MainWindow(QMainWindow):
         answer = QMessageBox.question(
             self,
             "Remove Material",
-            "This removes ListenTrace's record for this material (its subtitle and cue data).\n"
+            "This removes ListenTrace's record for this material (its subtitle and cue data) "
+            "and permanently deletes all of its managed learner recordings.\n"
             "The original media file and subtitle file on disk will NOT be modified or deleted.\n\n"
             "Continue?",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
         )
         if answer == QMessageBox.StandardButton.Yes:
-            summary = library.remove_material(self._connection, self._recordings_dir, material_id)
-            if not summary.all_succeeded:
-                QMessageBox.warning(
-                    self,
-                    "Some Recording Files Could Not Be Deleted",
-                    f"{len(summary.failed)} recording file(s) for this material could not be deleted "
-                    "and may remain on disk. The material record itself was removed.",
-                )
+            try:
+                library.remove_material(self._connection, self._recordings_dir, material_id)
+            except RecordingValidationError as exc:
+                QMessageBox.warning(self, "Cannot Remove Material", str(exc))
+                return
             self.refresh_library()
 
     def show_error(self, message: str) -> None:

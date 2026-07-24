@@ -284,6 +284,27 @@ MIGRATIONS: list[tuple[int, str]] = [
         );
         """,
     ),
+    (
+        8,
+        """
+        -- Defensive cleanup before the index below: the application already
+        -- prevents more than one 'recording'-status row, but a migration must
+        -- not fail outright if a pre-existing database somehow has more than
+        -- one (only the most recently created is kept in progress).
+        UPDATE recording
+        SET status = 'failed',
+            failure_detail = 'Recovered during migration: duplicate in-progress recording detected.',
+            updated_at = datetime('now')
+        WHERE status = 'recording'
+          AND id NOT IN (SELECT id FROM recording WHERE status = 'recording' ORDER BY id DESC LIMIT 1);
+
+        -- Enforces "at most one recording in progress" at the database level,
+        -- not just in application code (mirrors idx_practice_session_one_active_per_material).
+        CREATE UNIQUE INDEX idx_recording_one_in_progress
+            ON recording(status)
+            WHERE status = 'recording';
+        """,
+    ),
 ]
 
 

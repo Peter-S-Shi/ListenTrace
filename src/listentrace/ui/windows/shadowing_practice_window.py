@@ -239,8 +239,13 @@ class ShadowingPracticeWindow(QMainWindow):
 
     def _on_end_of_media(self) -> None:
         self._sync_play_button_text()
+        if self._comparison_replay_pending:
+            self._comparison_replay_pending = False
+            self._recording_panel.notify_source_failed()
 
     def _on_playback_error(self, message: str) -> None:
         self._show_status(f"Playback error: {message}")
         self._playback_usable = False
         self._set_playback_controls_enabled(False)
+        self._comparison_replay_pending = False
+        self._recording_panel.notify_source_failed()

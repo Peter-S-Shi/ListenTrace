@@ -152,7 +152,7 @@ docs/
 - Real-file, multi-codec playback, audio/video-device behavior, and microphone recording are only verified with a synthesized WAV, one locally generated H.264/MP4 clip, and (for recording) three real physical microphones, on Windows so far.
 - After saving/updating/deleting an annotation, saved item, keyword capture, or session diagnosis, the corresponding list loses its selection (the form clears) — the user reselects a row to continue editing it.
 - Text-only transcripts cannot provide reliable sentence seeking unless timing data is added.
-- If a recording file cannot be deleted while removing its material (e.g. locked by another process at that exact moment), the material and its records are still removed and the orphaned file is left on disk undetected — a rare, documented tradeoff rather than blocking removal.
+- If a recording file cannot be deleted while removing its material (e.g. locked by another process at that exact moment), the material is not removed at all — it and the still-undeleted recording stay in place until the learner resolves the issue and retries.
 - Speech recognition, pronunciation scoring, automatic translation, subtitle generation, dictionary lookups, and cloud synchronization are outside the first release.
 - Users are responsible for using media and transcript material they are legally permitted to use.
 

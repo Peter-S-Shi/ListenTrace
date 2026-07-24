@@ -109,6 +109,7 @@ def test_begin_recording_rejects_a_session_from_a_different_material(conn, recor
 def test_begin_recording_accepts_a_session_belonging_to_the_material(conn, recordings_dir):
     material_id, cues = _make_material_with_cues(conn)
     session = session_svc.start_session(conn, material_id)
+    session_svc.enter_stage(conn, session.id, "shadowing")
     recording, _ = svc.begin_recording(
         conn, recordings_dir, material_id, cues[0].id, _DEVICE_A.device_id, _DEVICE_A.description,
         practice_session_id=session.id,
@@ -450,3 +451,109 @@ def test_recording_lifecycle_does_not_alter_shadowing_or_session_completion_stat
     progress_after = {p.subtitle_cue_id: (p.status, p.practice_count) for p in state_after.shadowing_progress}
     assert progress_after == progress_before
     assert state_after.stage_progress["shadowing"].status == stage_status_before
+
+
+# ---- Acceptance correction: session-linked recording must be active + shadowing ----
+
+
+def test_begin_recording_rejects_a_session_that_is_not_active(conn, recordings_dir):
+    material_id, cues = _make_material_with_cues(conn)
+    session = session_svc.start_session(conn, material_id)
+    session_svc.enter_stage(conn, session.id, "shadowing")
+    session_svc.abandon_session(conn, session.id)
+
+    with pytest.raises(RecordingValidationError) as exc_info:
+        svc.begin_recording(
+            conn, recordings_dir, material_id, cues[0].id, _DEVICE_A.device_id, _DEVICE_A.description,
+            practice_session_id=session.id,
+        )
+    assert exc_info.value.category == "session_not_active"
+
+
+def test_begin_recording_rejects_a_session_not_currently_in_the_shadowing_stage(conn, recordings_dir):
+    material_id, cues = _make_material_with_cues(conn)
+    session = session_svc.start_session(conn, material_id)  # defaults to global_comprehension
+
+    with pytest.raises(RecordingValidationError) as exc_info:
+        svc.begin_recording(
+            conn, recordings_dir, material_id, cues[0].id, _DEVICE_A.device_id, _DEVICE_A.description,
+            practice_session_id=session.id,
+        )
+    assert exc_info.value.category == "session_not_in_shadowing_stage"
+
+
+def test_begin_recording_standalone_recording_unaffected_by_an_unrelated_sessions_stage(conn, recordings_dir):
+    """A standalone (no practice_session_id) recording must succeed regardless
+    of whether some other active session on the same material happens to be
+    active and not in the shadowing stage."""
+    material_id, cues = _make_material_with_cues(conn)
+    session_svc.start_session(conn, material_id)  # active, current_stage=global_comprehension
+
+    recording, _ = svc.begin_recording(
+        conn, recordings_dir, material_id, cues[0].id, _DEVICE_A.device_id, _DEVICE_A.description
+    )
+    assert recording.practice_session_id is None
+
+
+# ---- Acceptance correction: DB-level at-most-one-in-progress constraint ----
+
+
+def test_database_rejects_a_second_row_with_status_recording_directly(conn, recordings_dir):
+    """Proves the partial unique index itself, independent of any application-
+    layer pre-check."""
+    material_id, cues = _make_material_with_cues(conn)
+    conn.execute(
+        "INSERT INTO recording (material_id, subtitle_cue_id, relative_file_path) VALUES (?, ?, ?)",
+        (material_id, cues[0].id, "1/a.wav"),
+    )
+    conn.commit()
+    import sqlite3
+
+    with pytest.raises(sqlite3.IntegrityError):
+        conn.execute(
+            "INSERT INTO recording (material_id, subtitle_cue_id, relative_file_path) VALUES (?, ?, ?)",
+            (material_id, cues[1].id, "1/b.wav"),
+        )
+
+
+def test_begin_recording_translates_the_integrity_error_into_recording_in_progress(conn, recordings_dir, monkeypatch):
+    """Simulates the pre-check missing a concurrently-created 'recording' row
+    (the race the database constraint exists to catch) by bypassing it, then
+    confirms the resulting sqlite3.IntegrityError is translated into the same
+    typed error the normal pre-check path raises."""
+    material_id, cues = _make_material_with_cues(conn)
+    conn.execute(
+        "INSERT INTO recording (material_id, subtitle_cue_id, relative_file_path) VALUES (?, ?, ?)",
+        (material_id, cues[0].id, "1/already-recording.wav"),
+    )
+    conn.commit()
+    monkeypatch.setattr(svc.repo, "list_recordings_with_status", lambda conn, status: [])
+
+    with pytest.raises(RecordingValidationError) as exc_info:
+        svc.begin_recording(
+            conn, recordings_dir, material_id, cues[1].id, _DEVICE_A.device_id, _DEVICE_A.description
+        )
+    assert exc_info.value.category == "recording_in_progress"
+
+
+# ---- Acceptance correction: material removal must not orphan recording files ----
+
+
+def test_remove_material_service_level_when_recording_file_undeletable(conn, recordings_dir):
+    from listentrace.application.services import material_library_service as library
+
+    material_id, cues = _make_material_with_cues(conn)
+    recording, path = svc.begin_recording(
+        conn, recordings_dir, material_id, cues[0].id, _DEVICE_A.device_id, _DEVICE_A.description
+    )
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.mkdir()  # forces the eventual unlink() to fail
+    svc.finish_recording(conn, recordings_dir, recording.id)
+
+    with pytest.raises(RecordingValidationError) as exc_info:
+        library.remove_material(conn, recordings_dir, material_id)
+    assert exc_info.value.category == "recording_deletion_failed"
+
+    # Neither the material nor the still-failed recording row were removed.
+    assert library.get_material_detail(conn, material_id) is not None
+    assert svc.get_take(conn, recording.id) is not None

@@ -45,7 +45,7 @@ def test_main_window_starts_with_initialized_database(qapp, tmp_path):
     window = MainWindow(connection, db_path, tmp_path / "recordings")
 
     assert window.windowTitle() == "ListenTrace"
-    assert "Schema version: 7" in window._status_label.text()
+    assert "Schema version: 8" in window._status_label.text()
 
     window.close()
 
@@ -690,6 +690,7 @@ def test_guided_session_stage4_recording_does_not_alter_mark_practiced_flow(qapp
     result = _import_shadowing_lesson(connection, tmp_path)
     recordings_dir = tmp_path / "recordings"
     session = session_service.start_session(connection, result.material_id)
+    session_service.enter_stage(connection, session.id, "shadowing")
 
     from listentrace.application.services import recording_service
     from listentrace.application.services.player_loading_service import load_material_for_player
@@ -748,7 +749,11 @@ def test_remove_material_deletes_recording_files_from_disk(qapp, tmp_path):
     assert not path.exists()
 
 
-def test_main_window_remove_material_warns_when_a_recording_file_cannot_be_deleted(qapp, tmp_path, monkeypatch):
+def test_main_window_remove_material_is_aborted_when_a_recording_file_cannot_be_deleted(qapp, tmp_path, monkeypatch):
+    """Milestone 7 acceptance correction: a material must not be removed (nor
+    its recording rows cascade-deleted) if any recording file fails to
+    delete — never create an untracked orphan file, and let the learner
+    retry."""
     connection = open_connection(tmp_path / "smoke.db")
     migrate(connection)
     result = _import_shadowing_lesson(connection, tmp_path)
@@ -777,5 +782,150 @@ def test_main_window_remove_material_warns_when_a_recording_file_cannot_be_delet
 
     window._on_remove_clicked()
 
-    assert any("Could Not Be Deleted" in title for title in warnings)
+    assert any("Cannot Remove Material" in title for title in warnings)
+    # The material and the still-failed recording row must both survive, so
+    # the learner can retry after fixing the underlying issue.
+    from listentrace.application.services import material_library_service as library
+
+    assert library.get_material_detail(connection, result.material_id) is not None
+    assert recording_service.get_take(connection, recording.id) is not None
+    window.close()
+
+
+def test_remove_material_confirmation_mentions_recordings_will_be_deleted(qapp, tmp_path, monkeypatch):
+    connection = open_connection(tmp_path / "smoke.db")
+    migrate(connection)
+    _import_shadowing_lesson(connection, tmp_path)
+
+    window = MainWindow(connection, tmp_path / "smoke.db", tmp_path / "recordings")
+    window._material_list.setCurrentItem(window._material_list.item(0))
+
+    captured_text: list[str] = []
+
+    def fake_question(self, title, text, *a, **k):
+        captured_text.append(text)
+        return QMessageBox.StandardButton.No  # decline — this test only checks the wording
+
+    monkeypatch.setattr(QMessageBox, "question", fake_question)
+    window._on_remove_clicked()
+
+    assert captured_text and "recording" in captured_text[0].lower()
+    window.close()
+
+
+def test_recording_panel_leaves_device_unselected_when_saved_device_is_unavailable(qapp, tmp_path, monkeypatch):
+    connection = open_connection(tmp_path / "smoke.db")
+    migrate(connection)
+    result = _import_shadowing_lesson(connection, tmp_path)
+
+    from listentrace.application.services import recording_service
+    from listentrace.infrastructure.db.repository import get_cues_for_track, get_subtitle_track_for_material
+    from listentrace.infrastructure.media.recording import AudioInputDevice
+    from listentrace.ui.widgets.recording_panel import RecordingPanel
+
+    track = get_subtitle_track_for_material(connection, result.material_id)
+    first_cue = get_cues_for_track(connection, track.id)[0]
+
+    device_a = AudioInputDevice(device_id="aaa", description="Mic A", is_default=True)
+    monkeypatch.setattr(recording_service, "list_audio_input_devices", lambda: [device_a])
+    recording_service.remember_device_choice(connection, "vanished-id", "Old Mic")
+
+    panel = RecordingPanel(connection, tmp_path / "recordings")
+    panel.set_context(result.material_id, first_cue.id, None)
+
+    assert panel._device_combo.currentIndex() == -1
+    assert panel._selected_device() is None
+    assert "no longer available" in panel._device_status_label.text()
+    assert panel._start_recording_button.isEnabled() is False
+
+    # Explicitly choosing the available device must enable Start Recording.
+    panel._device_combo.setCurrentIndex(0)
+    assert panel._selected_device() is not None
+    assert panel._start_recording_button.isEnabled() is True
+
+    panel.close()
+
+
+def test_guided_session_comparison_cancelled_on_source_playback_error(qapp, tmp_path):
+    connection = open_connection(tmp_path / "smoke.db")
+    migrate(connection)
+    result = _import_shadowing_lesson(connection, tmp_path)
+    recordings_dir = tmp_path / "recordings"
+    session = session_service.start_session(connection, result.material_id)
+    session_service.enter_stage(connection, session.id, "shadowing")
+
+    from listentrace.application.services import recording_service
+    from listentrace.application.services.player_loading_service import load_material_for_player
+    from listentrace.infrastructure.db.repository import get_cues_for_track, get_subtitle_track_for_material
+    from listentrace.ui.windows.guided_session_window import GuidedSessionWindow
+
+    track = get_subtitle_track_for_material(connection, result.material_id)
+    first_cue = get_cues_for_track(connection, track.id)[0]
+
+    recording, path = recording_service.begin_recording(
+        connection, recordings_dir, result.material_id, first_cue.id, "dev-1", "Test Mic",
+        practice_session_id=session.id,
+    )
+    _write_valid_wav(path, seconds=1)
+    recording_service.finish_recording(connection, recordings_dir, recording.id)
+
+    load_result = load_material_for_player(connection, result.material_id)
+    window = GuidedSessionWindow(connection, load_result, session.id, recordings_dir)
+    window._show_stage("shadowing")
+
+    panel = window._recording_panel
+    panel._takes_list.setCurrentRow(0)
+    panel._on_compare_clicked()
+    assert panel._sequencer.is_active
+
+    window._on_playback_error("simulated device failure")
+
+    assert not panel._sequencer.is_active
+    panel._takes_list.setCurrentRow(0)
+    assert panel._play_take_button.isEnabled() is True
+    assert panel._delete_take_button.isEnabled() is True
+
+    window.close()
+
+
+def test_shadowing_practice_comparison_cancelled_when_source_ends_before_finishing(qapp, tmp_path):
+    """The "cannot finish" case: the media ends before the one-shot source
+    replay's own tick-based pause boundary is ever reached, so the comparison
+    can never advance normally."""
+    connection = open_connection(tmp_path / "smoke.db")
+    migrate(connection)
+    result = _import_shadowing_lesson(connection, tmp_path)
+    recordings_dir = tmp_path / "recordings"
+
+    from listentrace.application.services import recording_service
+    from listentrace.application.services.player_loading_service import load_material_for_player
+    from listentrace.infrastructure.db.repository import get_cues_for_track, get_subtitle_track_for_material
+    from listentrace.ui.windows.shadowing_practice_window import ShadowingPracticeWindow
+
+    track = get_subtitle_track_for_material(connection, result.material_id)
+    first_cue = get_cues_for_track(connection, track.id)[0]
+
+    recording, path = recording_service.begin_recording(
+        connection, recordings_dir, result.material_id, first_cue.id, "dev-1", "Test Mic"
+    )
+    _write_valid_wav(path, seconds=1)
+    recording_service.finish_recording(connection, recordings_dir, recording.id)
+
+    load_result = load_material_for_player(connection, result.material_id)
+    window = ShadowingPracticeWindow(connection, load_result, recordings_dir)
+
+    panel = window._recording_panel
+    panel._takes_list.setCurrentRow(0)
+    panel._on_compare_clicked()
+    assert panel._sequencer.is_active
+    assert window._comparison_replay_pending is True
+
+    window._on_end_of_media()
+
+    assert window._comparison_replay_pending is False
+    assert not panel._sequencer.is_active
+    panel._takes_list.setCurrentRow(0)
+    assert panel._play_take_button.isEnabled() is True
+    assert panel._delete_take_button.isEnabled() is True
+
     window.close()

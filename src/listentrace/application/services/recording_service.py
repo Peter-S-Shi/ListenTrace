@@ -8,6 +8,8 @@ from pathlib import Path
 from listentrace.application.dto.recording_views import DeletionSummary, DeviceResolution
 from listentrace.application.errors import RecordingNotFoundError, RecordingValidationError
 from listentrace.domain.enums.recording_status import RecordingStatus
+from listentrace.domain.enums.session_status import SessionStatus
+from listentrace.domain.enums.stage_key import StageKey
 from listentrace.domain.models.recording import Recording
 from listentrace.domain.services import recording_rules as rules
 from listentrace.infrastructure.db import recording_repository as repo
@@ -140,6 +142,16 @@ def begin_recording(
             raise RecordingValidationError(
                 "session_material_mismatch", "This practice session does not belong to the given material."
             )
+        if session.status != SessionStatus.ACTIVE.value:
+            raise RecordingValidationError(
+                "session_not_active",
+                "This practice session is read-only (completed or abandoned) — recording requires an active session.",
+            )
+        if session.current_stage != StageKey.SHADOWING.value:
+            raise RecordingValidationError(
+                "session_not_in_shadowing_stage",
+                "Recording is only available while the session's current stage is Shadowing.",
+            )
     if repo.list_recordings_with_status(conn, RecordingStatus.RECORDING.value):
         raise RecordingValidationError(
             "recording_in_progress", "Another recording is already in progress. Stop it before starting a new one."
@@ -157,7 +169,15 @@ def begin_recording(
         relative_file_path=relative_path,
         device_descriptor=device_description,
     )
-    recording.id = repo.insert_recording(conn, recording)
+    # The pre-check above is the normal path; this is the race-condition
+    # backstop for the database-level partial unique index (at most one
+    # `status = 'recording'` row) added in migration 8.
+    try:
+        recording.id = repo.insert_recording(conn, recording)
+    except sqlite3.IntegrityError as exc:
+        raise RecordingValidationError(
+            "recording_in_progress", "Another recording is already in progress. Stop it before starting a new one."
+        ) from exc
     return recording, absolute_path
 
 

@@ -5,7 +5,7 @@ from pathlib import Path
 
 from listentrace.application.dto.material_views import MaterialDetail, MaterialSummary
 from listentrace.application.dto.recording_views import DeletionSummary
-from listentrace.application.errors import MaterialNotFoundError
+from listentrace.application.errors import MaterialNotFoundError, RecordingValidationError
 from listentrace.application.services import recording_service
 from listentrace.domain.enums.material_status import MaterialStatus
 from listentrace.domain.models.material import Material
@@ -84,11 +84,21 @@ def remove_material(conn: sqlite3.Connection, recordings_dir: Path, material_id:
     ListenTrace-managed local data (unlike the source media/subtitle files,
     which are never touched) — deleted explicitly here, before the DB cascade
     would otherwise remove their rows without cleaning up the files themselves.
-    A recording whose file could not be deleted is reported back rather than
-    silently left as an orphaned file; the material is removed regardless, since
-    blocking the whole removal on one locked recording file would be worse."""
+
+    If any recording file cannot be deleted, the material is **not** removed:
+    both the material and the still-failed recording rows are left intact so
+    the learner can fix the underlying issue (e.g. close whatever is using the
+    file) and retry. Proceeding anyway would cascade-delete those rows while
+    their files remained on disk — an untracked orphan with nothing left
+    pointing at it, which this deliberately never creates."""
     if get_material(conn, material_id) is None:
         raise MaterialNotFoundError(material_id)
     summary = recording_service.delete_takes_for_material(conn, recordings_dir, material_id)
+    if not summary.all_succeeded:
+        raise RecordingValidationError(
+            "recording_deletion_failed",
+            f"{len(summary.failed)} recording file(s) could not be deleted. "
+            "The material was not removed — resolve the issue and try again.",
+        )
     delete_material(conn, material_id)
     return summary

@@ -181,8 +181,13 @@ class RecordingPanel(QWidget):
                 (i for i in range(self._device_combo.count()) if self._device_combo.itemData(i).device_id == resolution.device.device_id),
                 -1,
             )
-            if index >= 0:
-                self._device_combo.setCurrentIndex(index)
+            self._device_combo.setCurrentIndex(index)
+        else:
+            # No device to preselect — including when a remembered device is no
+            # longer connected. Leave the combo unselected rather than falling
+            # back to whatever Qt would otherwise default to (the first item);
+            # the learner must explicitly choose before recording is allowed.
+            self._device_combo.setCurrentIndex(-1)
         self._device_combo.blockSignals(False)
         self._device_status_label.setText(resolution.fallback_reason or "")
         self._update_recording_buttons()
@@ -198,6 +203,7 @@ class RecordingPanel(QWidget):
         if device is not None:
             recording_service.remember_device_choice(self._connection, device.device_id, device.description)
             self._device_status_label.setText("")
+        self._update_recording_buttons()
 
     # ---- recording lifecycle ----
 
@@ -312,7 +318,7 @@ class RecordingPanel(QWidget):
         has_cue = self._subtitle_cue_id is not None
         recording_in_progress = self._active_recording is not None
         self._start_recording_button.setEnabled(
-            has_cue and not recording_in_progress and self._device_combo.count() > 0 and not self._read_only
+            has_cue and not recording_in_progress and self._selected_device() is not None and not self._read_only
         )
         self._stop_recording_button.setEnabled(recording_in_progress and self._pending_action != "finish")
         self._device_combo.setEnabled(not recording_in_progress)
@@ -423,6 +429,19 @@ class RecordingPanel(QWidget):
             return
         self._sequencer.on_source_finished()
         QTimer.singleShot(COMPARISON_PAUSE_MS, self._play_comparison_take)
+
+    def notify_source_failed(self) -> None:
+        """The host calls this when source playback fails or cannot finish
+        (a playback error, or the media ending before the one-shot replay it
+        was asked to run for the comparison ever reached its natural end) —
+        a no-op unless a comparison is actually waiting on the source. Cancels
+        the stuck comparison so take playback and deletion become usable again
+        even though the source itself is unavailable."""
+        if not self._sequencer.is_active:
+            return
+        self._sequencer.cancel()
+        self._comparison_take = None
+        self._update_take_buttons()
 
     def _play_comparison_take(self) -> None:
         if self._sequencer.step is not ComparisonStep.WAIT:

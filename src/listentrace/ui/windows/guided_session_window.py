@@ -392,12 +392,21 @@ class GuidedSessionWindow(QMainWindow):
 
     def _on_end_of_media(self) -> None:
         self._sync_playback_button_texts()
+        if self._comparison_replay_pending:
+            # The media ended before the one-shot replay's tick-based pause
+            # boundary was ever reached (e.g. the cue's end exceeds the
+            # media's actual duration) — the comparison can never finish
+            # normally; release it rather than leaving it stuck.
+            self._comparison_replay_pending = False
+            self._recording_panel.notify_source_failed()
 
     def _on_playback_error(self, message: str) -> None:
         self._show_status(f"Playback error: {message}")
         self._playback_usable = False
         self._set_diagnosis_playback_controls_enabled(False)
         self._set_shadowing_playback_controls_enabled(False)
+        self._comparison_replay_pending = False
+        self._recording_panel.notify_source_failed()
 
     def _set_diagnosis_playback_controls_enabled(self, enabled: bool) -> None:
         for widget in (self._diagnosis_play_button, self._diagnosis_replay_button, self._diagnosis_loop_button):
