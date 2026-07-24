@@ -261,3 +261,10 @@ Avoid logging:
 - Playback backend: PySide6's `QtMultimedia` (`QMediaPlayer` + `QAudioOutput`), wrapped in `infrastructure/media/playback.py`. It bundles its own decoding backend, so no separate system FFmpeg install is required. Verified: load, duration, play, pause, seek, end-of-media detection.
 - Application-data path: a small internal `infrastructure/appdata.py` module (no external dependency), resolving `%APPDATA%`/`~/Library/Application Support`/`XDG_DATA_HOME` per platform.
 - Migrations: a minimal internal migration runner (`infrastructure/db/migrations.py`) using `PRAGMA user_version` for schema-version tracking, rather than an external migration library.
+
+## Architecture Decisions Resolved in Milestone 2
+
+- Duplicate detection: a `normalized_path` column (resolved absolute path, case-folded) with a unique index rejects re-importing the same file; a separate content fingerprint (`infrastructure/media/validation.py::compute_file_fingerprint`) catches the same content at a different path and requires explicit user confirmation rather than blocking or silently merging. The fingerprint hashes file size plus the first and last 1 MiB, not the full file, to stay fast on large media.
+- Media/subtitle validation lives in `infrastructure/media/validation.py` (existence, readability, supported extensions) and reuses the Milestone 1 subtitle parsers/errors — it does not re-verify actual playback; that remains the player's job in Milestone 3.
+- Atomicity: `infrastructure/db/repository.py::create_material_package` performs the material + subtitle-track + cue inserts as one transaction (commit only on full success, rollback on any exception). All validation (media, subtitle, duplicates) runs before this function is ever called, so a rejected import never touches the database.
+- Application services (`material_import_service`, `material_library_service`) return typed results/raise typed errors (`ImportSuccess`, `ImportNeedsConfirmation`, `MaterialValidationError` with a `category`, `MaterialNotFoundError`) rather than exposing SQL/exception details directly to the UI.

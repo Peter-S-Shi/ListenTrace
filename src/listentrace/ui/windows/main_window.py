@@ -1,79 +1,229 @@
 from __future__ import annotations
 
-import struct
-import tempfile
-import wave
+import sqlite3
 from pathlib import Path
 
-from PySide6.QtCore import QTimer
-from PySide6.QtWidgets import QLabel, QMainWindow, QPushButton, QVBoxLayout, QWidget
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import (
+    QDialog,
+    QHBoxLayout,
+    QInputDialog,
+    QLabel,
+    QListWidget,
+    QListWidgetItem,
+    QMainWindow,
+    QMessageBox,
+    QPushButton,
+    QVBoxLayout,
+    QWidget,
+)
 
+from listentrace.application.errors import MaterialNotFoundError
+from listentrace.application.services import material_library_service as library
+from listentrace.domain.enums.material_status import MaterialStatus
 from listentrace.infrastructure.db.migrations import current_version
-from listentrace.infrastructure.media.playback import PlaybackController
+from listentrace.ui.windows.import_dialog import ImportDialog
 
 
 class MainWindow(QMainWindow):
-    def __init__(self, db_connection, db_path: Path) -> None:
+    def __init__(self, db_connection: sqlite3.Connection, db_path: Path) -> None:
         super().__init__()
         self.setWindowTitle("ListenTrace")
-        self.resize(480, 320)
+        self.resize(720, 480)
 
-        self._db_connection = db_connection
-        self._playback_controller: PlaybackController | None = None
+        self._connection = db_connection
+        self._db_path = db_path
+        self._showing_archived = False
 
         central = QWidget(self)
-        layout = QVBoxLayout(central)
+        outer_layout = QVBoxLayout(central)
 
-        title_label = QLabel("ListenTrace — Application Foundation")
+        title_label = QLabel("ListenTrace — Material Library")
         title_label.setStyleSheet("font-size: 16px; font-weight: bold;")
-        layout.addWidget(title_label)
+        outer_layout.addWidget(title_label)
 
-        schema_version = current_version(db_connection)
         self._status_label = QLabel(
-            f"Database ready\nPath: {db_path}\nSchema version: {schema_version}"
+            f"Database ready\nPath: {db_path}\nSchema version: {current_version(db_connection)}"
         )
-        layout.addWidget(self._status_label)
+        outer_layout.addWidget(self._status_label)
 
-        self._spike_label = QLabel("Media playback spike: not yet run")
-        layout.addWidget(self._spike_label)
+        content_layout = QHBoxLayout()
 
-        spike_button = QPushButton("Run media playback spike")
-        spike_button.clicked.connect(self._run_media_spike)
-        layout.addWidget(spike_button)
+        list_column = QVBoxLayout()
+        list_buttons_row = QHBoxLayout()
+        self._import_button = QPushButton("Import Material")
+        self._import_button.clicked.connect(self._on_import_clicked)
+        self._toggle_archived_button = QPushButton("Show Archived")
+        self._toggle_archived_button.clicked.connect(self._on_toggle_archived)
+        list_buttons_row.addWidget(self._import_button)
+        list_buttons_row.addWidget(self._toggle_archived_button)
+        list_column.addLayout(list_buttons_row)
+
+        self._material_list = QListWidget()
+        self._material_list.currentItemChanged.connect(self._on_selection_changed)
+        list_column.addWidget(self._material_list)
+
+        content_layout.addLayout(list_column, 1)
+
+        detail_column = QVBoxLayout()
+        self._detail_label = QLabel("Select a material to see details.")
+        self._detail_label.setWordWrap(True)
+        detail_column.addWidget(self._detail_label)
+
+        action_row = QHBoxLayout()
+        self._rename_button = QPushButton("Rename")
+        self._rename_button.clicked.connect(self._on_rename_clicked)
+        self._archive_restore_button = QPushButton("Archive")
+        self._archive_restore_button.clicked.connect(self._on_archive_restore_clicked)
+        self._remove_button = QPushButton("Remove")
+        self._remove_button.clicked.connect(self._on_remove_clicked)
+        action_row.addWidget(self._rename_button)
+        action_row.addWidget(self._archive_restore_button)
+        action_row.addWidget(self._remove_button)
+        detail_column.addLayout(action_row)
+
+        content_layout.addLayout(detail_column, 1)
+
+        outer_layout.addLayout(content_layout)
 
         self._error_label = QLabel("")
         self._error_label.setStyleSheet("color: red;")
-        layout.addWidget(self._error_label)
+        self._error_label.setWordWrap(True)
+        outer_layout.addWidget(self._error_label)
 
         self.setCentralWidget(central)
 
+        self._set_action_buttons_enabled(False)
+        self.refresh_library()
+
+    def refresh_library(self) -> None:
+        self._material_list.clear()
+
+        materials = (
+            library.list_archived_materials(self._connection)
+            if self._showing_archived
+            else library.list_active_materials(self._connection)
+        )
+
+        if not materials:
+            empty_item = QListWidgetItem(
+                "No archived materials."
+                if self._showing_archived
+                else "Library is empty — import a material to get started."
+            )
+            empty_item.setFlags(Qt.ItemFlag.NoItemFlags)
+            self._material_list.addItem(empty_item)
+            self._set_action_buttons_enabled(False)
+            self._detail_label.setText("Select a material to see details.")
+            return
+
+        for material in materials:
+            label = material.title
+            if not material.media_available:
+                label += "  [media missing]"
+            item = QListWidgetItem(label)
+            item.setData(Qt.ItemDataRole.UserRole, material.id)
+            self._material_list.addItem(item)
+
+    def _selected_material_id(self) -> int | None:
+        item = self._material_list.currentItem()
+        if item is None:
+            return None
+        return item.data(Qt.ItemDataRole.UserRole)
+
+    def _on_selection_changed(self, current: QListWidgetItem, previous: QListWidgetItem) -> None:
+        material_id = current.data(Qt.ItemDataRole.UserRole) if current is not None else None
+        if material_id is None:
+            self._set_action_buttons_enabled(False)
+            self._detail_label.setText("Select a material to see details.")
+            return
+
+        self._set_action_buttons_enabled(True)
+        try:
+            detail = library.get_material_detail(self._connection, material_id)
+        except MaterialNotFoundError:
+            self._detail_label.setText("This material no longer exists.")
+            self.refresh_library()
+            return
+
+        self._archive_restore_button.setText(
+            "Restore" if detail.status == MaterialStatus.ARCHIVED.value else "Archive"
+        )
+
+        subtitle_line = f"Subtitle path: {detail.subtitle_source_path or '(none)'}"
+        if detail.subtitle_source_path is not None and not detail.subtitle_available:
+            subtitle_line += "  [MISSING]"
+
+        media_line = f"Media path: {detail.media_path}"
+        if not detail.media_available:
+            media_line += "  [MISSING]"
+
+        lines = [
+            f"Title: {detail.title}",
+            f"Status: {detail.status}",
+            f"Language: {detail.language or '(not set)'}",
+            media_line,
+            f"Subtitle format: {detail.subtitle_format or '(none)'}",
+            subtitle_line,
+            f"Cue count: {detail.cue_count}",
+        ]
+        self._detail_label.setText("\n".join(lines))
+
+    def _set_action_buttons_enabled(self, enabled: bool) -> None:
+        self._rename_button.setEnabled(enabled)
+        self._archive_restore_button.setEnabled(enabled)
+        self._remove_button.setEnabled(enabled)
+
+    def _on_import_clicked(self) -> None:
+        dialog = ImportDialog(self._connection, self)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            self.refresh_library()
+
+    def _on_toggle_archived(self) -> None:
+        self._showing_archived = not self._showing_archived
+        self._toggle_archived_button.setText(
+            "Show Active" if self._showing_archived else "Show Archived"
+        )
+        self.refresh_library()
+
+    def _on_rename_clicked(self) -> None:
+        material_id = self._selected_material_id()
+        if material_id is None:
+            return
+        detail = library.get_material_detail(self._connection, material_id)
+        new_title, ok = QInputDialog.getText(
+            self, "Rename Material", "New title:", text=detail.title
+        )
+        if ok and new_title.strip():
+            library.rename_material(self._connection, material_id, new_title.strip())
+            self.refresh_library()
+
+    def _on_archive_restore_clicked(self) -> None:
+        material_id = self._selected_material_id()
+        if material_id is None:
+            return
+        detail = library.get_material_detail(self._connection, material_id)
+        if detail.status == MaterialStatus.ARCHIVED.value:
+            library.restore_material(self._connection, material_id)
+        else:
+            library.archive_material(self._connection, material_id)
+        self.refresh_library()
+
+    def _on_remove_clicked(self) -> None:
+        material_id = self._selected_material_id()
+        if material_id is None:
+            return
+        answer = QMessageBox.question(
+            self,
+            "Remove Material",
+            "This removes ListenTrace's record for this material (its subtitle and cue data).\n"
+            "The original media file and subtitle file on disk will NOT be modified or deleted.\n\n"
+            "Continue?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        )
+        if answer == QMessageBox.StandardButton.Yes:
+            library.remove_material(self._connection, material_id)
+            self.refresh_library()
+
     def show_error(self, message: str) -> None:
         self._error_label.setText(message)
-
-    def _run_media_spike(self) -> None:
-        try:
-            tmp_dir = tempfile.mkdtemp()
-            wav_path = Path(tmp_dir) / "spike.wav"
-            with wave.open(str(wav_path), "w") as wf:
-                wf.setnchannels(1)
-                wf.setsampwidth(2)
-                wf.setframerate(8000)
-                wf.writeframes(struct.pack("<h", 0) * 8000)
-
-            controller = PlaybackController(self)
-            controller.set_volume(0.0)
-            self._playback_controller = controller
-
-            def report_duration() -> None:
-                self._spike_label.setText(
-                    f"Media playback spike: loaded OK, duration={controller.duration_ms} ms"
-                )
-
-            controller.duration_changed.connect(lambda _d: report_duration())
-            controller.playback_error.connect(
-                lambda msg: self._spike_label.setText(f"Media playback spike failed: {msg}")
-            )
-            controller.load(wav_path)
-            QTimer.singleShot(500, controller.play)
-        except Exception as exc:  # noqa: BLE001 - surfaced to the user, not swallowed
-            self.show_error(f"Media spike error: {exc}")

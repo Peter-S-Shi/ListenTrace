@@ -46,6 +46,13 @@ MIGRATIONS: list[tuple[int, str]] = [
         );
         """,
     ),
+    (
+        2,
+        """
+        ALTER TABLE material ADD COLUMN normalized_path TEXT;
+        CREATE UNIQUE INDEX idx_material_normalized_path ON material(normalized_path);
+        """,
+    ),
 ]
 
 

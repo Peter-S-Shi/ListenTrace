@@ -2,7 +2,7 @@
 
 This document defines the first domain direction. It is not a frozen database schema.
 
-**Milestone 1 status**: only `Material`, `SubtitleTrack`, and `SubtitleCue` are implemented as actual SQLite tables (migration version 1), matching the field lists below except that not all optional fields are populated by application logic yet. `PracticeSession`, `StageResponse`, `KeywordCapture`, `Annotation`, `SavedLanguageItem`, `QuizSession`, `QuizItemResult`, and `RecordingReference` remain design direction only and will be added as migrations in the milestones that need them.
+**Status (through Milestone 2)**: `Material`, `SubtitleTrack`, and `SubtitleCue` are implemented as actual SQLite tables (schema version 2), matching the field lists below except that not all optional fields are populated by application logic yet. Migration 2 added `Material.normalized_path` (see below) on top of Milestone 1's migration 1. `PracticeSession`, `StageResponse`, `KeywordCapture`, `Annotation`, `SavedLanguageItem`, `QuizSession`, `QuizItemResult`, and `RecordingReference` remain design direction only and will be added as migrations in the milestones that need them.
 
 ## Entity Overview
 
@@ -32,11 +32,12 @@ Suggested fields:
 - `title`
 - `language`
 - `media_path`
+- `normalized_path` (added in migration 2: resolved absolute path, case-folded; unique — enforces duplicate-path rejection)
 - `media_kind`
 - `duration_ms`
 - `file_size_bytes`
-- `file_fingerprint`
-- `status`
+- `file_fingerprint` (partial-content hash: file size + first/last 1 MiB, not a full-file hash)
+- `status` (`active` or `archived`; removal deletes the row rather than using a third status value)
 - `created_at`
 - `updated_at`
 - `last_opened_at`
@@ -44,8 +45,8 @@ Suggested fields:
 Notes:
 
 - Store a filesystem reference, not media bytes.
-- Fingerprinting should help detect replacement or movement without exposing file content.
-- Removing a record must not delete the source file by default.
+- `normalized_path` catches re-importing the identical file path; `file_fingerprint` separately catches the same content at a different path (soft warning, not a hard rejection).
+- Removing a record must not delete the source file by default — verified: `DELETE FROM material` cascades to `subtitle_track`/`subtitle_cue` via existing foreign keys but never touches the filesystem.
 
 ## SubtitleTrack
 

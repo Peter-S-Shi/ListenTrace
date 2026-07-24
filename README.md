@@ -67,7 +67,7 @@ Run the automated tests:
 
 ## Development Status
 
-Milestone 1 (Application Foundation) is implemented and verified: the desktop shell starts, SQLite initializes through an explicit migration, SRT/WebVTT parsing is covered by tests, and the media playback spike is verified end-to-end (load, play, pause, seek, end-of-media detection).
+Milestone 1 (Application Foundation) and Milestone 2 (Material Library and Import Validation) are implemented and verified. Users can import a local media file plus an SRT/WebVTT subtitle into a library, view details, rename, archive/restore, and remove records — with atomic import, duplicate-path rejection, duplicate-fingerprint confirmation, and no modification of source files.
 
 See:
 
@@ -81,28 +81,33 @@ See:
 
 ```text
 src/listentrace/
-  application/        # use-case coordination (empty scaffolding, populated from Milestone 2 onward)
+  application/
+    dto/              # ImportSuccess/ImportNeedsConfirmation, MaterialSummary/MaterialDetail
+    services/         # material_import_service, material_library_service
   domain/
+    enums/            # MaterialStatus
     models/           # Material, SubtitleTrack, SubtitleCue
   infrastructure/
-    db/               # SQLite connection, migrations, minimal repository functions
+    db/               # SQLite connection, migrations, repository functions
     subtitles/        # SRT/WebVTT parsers, timecode and text normalization
-    media/            # PlaybackController adapter around QtMultimedia
+    media/            # PlaybackController adapter around QtMultimedia; file validation/fingerprinting
     appdata.py         # cross-platform app-data directory resolution
     logging_setup.py   # rotating file + console logging
   ui/
     app.py            # application entry point
-    windows/          # MainWindow (foundation-verification shell)
+    windows/          # MainWindow (material library), ImportDialog
 tests/
   unit/               # subtitle parsing
-  integration/        # database, media playback, UI smoke test
+  integration/        # database, migrations, media playback, import, library, UI smoke tests
   fixtures/
 docs/
 ```
 
 ## Current Limitations
 
-- Only the foundation is implemented: no material library, playback UI, transcript workspace, quizzes, or recording.
+- No synchronized player, transcript workspace, quizzes, shadowing, or recording yet (planned for later milestones).
+- Only one primary subtitle track per material is managed through the UI, though the schema supports more.
+- Plain-text (non-timed) transcript import is not supported.
 - The media playback spike ran without an audio device dependency (volume muted, synthetic silent WAV); real-file, multi-format playback and audio-device behavior still need manual verification in later milestones.
 - Text-only transcripts cannot provide reliable sentence seeking unless timing data is added.
 - Speech recognition, pronunciation scoring, automatic translation, subtitle generation, and cloud synchronization are outside the first release.

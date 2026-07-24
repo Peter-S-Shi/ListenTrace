@@ -33,6 +33,14 @@ A plain-text transcript may be accepted later with reduced functionality:
 
 The interface must clearly explain any reduced mode.
 
+## Material Library Management
+
+- The application references the original media and subtitle files in place; it never copies, modifies, or deletes them.
+- Importing the same media file twice (by path) is rejected. Importing different files with identical content prompts the user to confirm before continuing, rather than silently merging them.
+- Archiving hides a material from the default library view without deleting any records; archived materials can be viewed and restored.
+- Removing a material deletes only ListenTrace's own records (material, subtitle track, cues) for it. The confirmation dialog states explicitly that the original media and subtitle files are left untouched.
+- If a previously imported media or subtitle file is later moved or deleted, the library marks it as missing rather than failing silently.
+
 ## Guided Intensive Listening
 
 ### Stage 1 — Global Comprehension
