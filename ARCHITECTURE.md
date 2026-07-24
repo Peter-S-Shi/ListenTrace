@@ -252,9 +252,12 @@ Avoid logging:
 
 ## Architecture Decisions Still Open
 
-- exact playback backend;
 - whether UI uses view models or a lighter presenter pattern;
-- application-data path library;
-- migration library versus a minimal internal migration runner;
-- supported operating systems;
+- supported operating systems (only Windows verified so far);
 - packaging tool.
+
+## Architecture Decisions Resolved in Milestone 1
+
+- Playback backend: PySide6's `QtMultimedia` (`QMediaPlayer` + `QAudioOutput`), wrapped in `infrastructure/media/playback.py`. It bundles its own decoding backend, so no separate system FFmpeg install is required. Verified: load, duration, play, pause, seek, end-of-media detection.
+- Application-data path: a small internal `infrastructure/appdata.py` module (no external dependency), resolving `%APPDATA%`/`~/Library/Application Support`/`XDG_DATA_HOME` per platform.
+- Migrations: a minimal internal migration runner (`infrastructure/db/migrations.py`) using `PRAGMA user_version` for schema-version tracking, rather than an external migration library.

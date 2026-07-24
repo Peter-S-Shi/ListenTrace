@@ -1,6 +1,8 @@
 # ListenTrace Initial Data Model
 
-This document defines the first domain direction. It is not a frozen database schema. Milestone 1 should convert it into migrations only after the application foundation and playback spike confirm the implementation approach.
+This document defines the first domain direction. It is not a frozen database schema.
+
+**Milestone 1 status**: only `Material`, `SubtitleTrack`, and `SubtitleCue` are implemented as actual SQLite tables (migration version 1), matching the field lists below except that not all optional fields are populated by application logic yet. `PracticeSession`, `StageResponse`, `KeywordCapture`, `Annotation`, `SavedLanguageItem`, `QuizSession`, `QuizItemResult`, and `RecordingReference` remain design direction only and will be added as migrations in the milestones that need them.
 
 ## Entity Overview
 

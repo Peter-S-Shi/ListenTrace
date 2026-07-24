@@ -38,19 +38,36 @@ The intended intensive-listening flow is:
 
 ## Initial Technical Direction
 
-The initial implementation target is:
+The implementation target verified in Milestone 1:
 
-- Python
+- Python (3.10+, verified on 3.14)
 - PySide6 desktop interface
 - SQLite local storage
-- FFmpeg/ffprobe for media inspection and playback support
+- PySide6's built-in `QtMultimedia` backend for media inspection and playback (bundles its own decoding backend; no separate system FFmpeg install is required)
 - SRT and WebVTT subtitle parsing
 
-This direction may be refined during the foundation milestone after a minimal technical spike.
+## Setup, Run, and Test
+
+```bash
+python -m venv .venv
+.venv/Scripts/pip install -e ".[dev]"   # Windows; use .venv/bin/pip on macOS/Linux
+```
+
+Run the application:
+
+```bash
+.venv/Scripts/python -m listentrace.ui.app
+```
+
+Run the automated tests:
+
+```bash
+.venv/Scripts/python -m pytest
+```
 
 ## Development Status
 
-The product plan and project architecture are documented. Product code, installation commands, build steps, automated tests, and continuous integration have not yet been verified.
+Milestone 1 (Application Foundation) is implemented and verified: the desktop shell starts, SQLite initializes through an explicit migration, SRT/WebVTT parsing is covered by tests, and the media playback spike is verified end-to-end (load, play, pause, seek, end-of-media detection).
 
 See:
 
@@ -62,24 +79,31 @@ See:
 
 ## Repository Structure
 
-The planned structure is:
-
 ```text
 src/listentrace/
-  application/
+  application/        # use-case coordination (empty scaffolding, populated from Milestone 2 onward)
   domain/
+    models/           # Material, SubtitleTrack, SubtitleCue
   infrastructure/
+    db/               # SQLite connection, migrations, minimal repository functions
+    subtitles/        # SRT/WebVTT parsers, timecode and text normalization
+    media/            # PlaybackController adapter around QtMultimedia
+    appdata.py         # cross-platform app-data directory resolution
+    logging_setup.py   # rotating file + console logging
   ui/
+    app.py            # application entry point
+    windows/          # MainWindow (foundation-verification shell)
 tests/
+  unit/               # subtitle parsing
+  integration/        # database, media playback, UI smoke test
+  fixtures/
 docs/
 ```
 
-The exact package structure will be established during Milestone 1.
-
 ## Current Limitations
 
-- No working application has been verified.
-- Media formats and playback backend remain subject to a technical spike.
+- Only the foundation is implemented: no material library, playback UI, transcript workspace, quizzes, or recording.
+- The media playback spike ran without an audio device dependency (volume muted, synthetic silent WAV); real-file, multi-format playback and audio-device behavior still need manual verification in later milestones.
 - Text-only transcripts cannot provide reliable sentence seeking unless timing data is added.
 - Speech recognition, pronunciation scoring, automatic translation, subtitle generation, and cloud synchronization are outside the first release.
 - Users are responsible for using media and transcript material they are legally permitted to use.
