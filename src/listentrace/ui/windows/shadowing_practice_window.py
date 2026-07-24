@@ -36,6 +36,7 @@ class ShadowingPracticeWindow(QMainWindow):
         load_result: PlayerLoadResult,
         recordings_dir: Path,
         parent: QWidget | None = None,
+        initial_cue_id: int | None = None,
     ) -> None:
         super().__init__(parent)
         self._connection = connection
@@ -49,6 +50,11 @@ class ShadowingPracticeWindow(QMainWindow):
         self._player_session = PlayerSession(self._cues)
         self._playback_usable = True
         self._cue_index: int | None = 0 if self._cues else None
+        if initial_cue_id is not None:
+            for index, cue in enumerate(self._cues):
+                if cue.id == initial_cue_id:
+                    self._cue_index = index
+                    break
         self._comparison_replay_pending = False
 
         central = QWidget(self)

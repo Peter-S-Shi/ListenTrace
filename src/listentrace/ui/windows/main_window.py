@@ -33,6 +33,7 @@ from listentrace.domain.enums.material_status import MaterialStatus
 from listentrace.infrastructure.db.migrations import current_version
 from listentrace.ui.windows.guided_session_window import GuidedSessionWindow
 from listentrace.ui.windows.import_dialog import ImportDialog
+from listentrace.ui.windows.learning_history_window import LearningHistoryWindow
 from listentrace.ui.windows.player_window import PlayerWindow
 from listentrace.ui.windows.quiz_history_dialog import QuizHistoryDialog
 from listentrace.ui.windows.quiz_window import QuizWindow
@@ -58,6 +59,7 @@ class MainWindow(QMainWindow):
         self._guided_session_window: GuidedSessionWindow | None = None
         self._quiz_window: QuizWindow | None = None
         self._shadowing_practice_window: ShadowingPracticeWindow | None = None
+        self._learning_history_window: LearningHistoryWindow | None = None
 
         central = QWidget(self)
         outer_layout = QVBoxLayout(central)
@@ -89,6 +91,8 @@ class MainWindow(QMainWindow):
         self._shadowing_practice_button.clicked.connect(self._on_shadowing_practice_clicked)
         self._toggle_archived_button = QPushButton("Show Archived")
         self._toggle_archived_button.clicked.connect(self._on_toggle_archived)
+        self._learning_history_button = QPushButton("Learning History")
+        self._learning_history_button.clicked.connect(self._on_learning_history_clicked)
         list_buttons_row.addWidget(self._import_button)
         list_buttons_row.addWidget(self._open_player_button)
         list_buttons_row.addWidget(self._start_intensive_button)
@@ -96,6 +100,7 @@ class MainWindow(QMainWindow):
         list_buttons_row.addWidget(self._session_history_button)
         list_buttons_row.addWidget(self._shadowing_practice_button)
         list_buttons_row.addWidget(self._toggle_archived_button)
+        list_buttons_row.addWidget(self._learning_history_button)
         list_column.addLayout(list_buttons_row)
 
         quiz_buttons_row = QHBoxLayout()
@@ -443,6 +448,16 @@ class MainWindow(QMainWindow):
             return
         self._quiz_window = QuizWindow(self._connection, load_result, attempt_id, self)
         self._quiz_window.show()
+
+    def _on_learning_history_clicked(self) -> None:
+        """Opens globally (works with no material selected); preselects the
+        currently selected material in the library list, if any, as a
+        convenience — the material-level Session History/Quiz History entry
+        points above are unchanged and still open their own dialogs directly."""
+        self._learning_history_window = LearningHistoryWindow(
+            self._connection, self._recordings_dir, self, initial_material_id=self._selected_material_id()
+        )
+        self._learning_history_window.show()
 
     def _on_toggle_archived(self) -> None:
         self._showing_archived = not self._showing_archived

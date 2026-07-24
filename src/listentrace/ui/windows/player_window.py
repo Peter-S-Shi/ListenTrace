@@ -80,6 +80,7 @@ class PlayerWindow(QMainWindow):
         load_result: PlayerLoadResult,
         connection: sqlite3.Connection,
         parent: QWidget | None = None,
+        initial_cue_index: int | None = None,
     ) -> None:
         super().__init__(parent)
         material = load_result.material
@@ -176,6 +177,8 @@ class PlayerWindow(QMainWindow):
             self._cue_list.addItem(QListWidgetItem(label))
         self._cue_list.currentItemChanged.connect(self._on_editing_cue_changed)
         layout.addWidget(self._cue_list, 1)
+        if initial_cue_index is not None and 0 <= initial_cue_index < self._cue_list.count():
+            self._cue_list.setCurrentRow(initial_cue_index)
 
         self._workspace_panel = self._build_workspace_panel()
         layout.addWidget(self._workspace_panel)

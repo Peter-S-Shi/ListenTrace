@@ -2,7 +2,23 @@
 
 This document defines the first domain direction. It is not a frozen database schema.
 
-**Status (through the Milestone 7 acceptance correction)**: `Material`, `SubtitleTrack`, `SubtitleCue`, `Annotation`, `CueNote`, `SavedLanguageItem`, `AnnotationLabelPreference`, `PracticeSession`, `SessionStageProgress`, `StageResponse`, `KeywordCapture`, `SessionDiagnosisEvidence`, `ShadowingCueProgress`, `QuizAttempt`, `QuizQuestion`, `QuizAnswer`, `Recording`, and `MicrophonePreference` are implemented as actual SQLite tables (schema version 8). Migration 2 added `Material.normalized_path`; migration 3 (Milestone 4) added the four learning-evidence tables; migration 4 (Milestone 5, additive, no data loss) added the six guided-session tables; migration 5 (Milestone 6, additive, no data loss) added the three quiz tables; migration 6 (Milestone 6 acceptance correction, additive) added `QuizQuestion.source_cue_text`; migration 7 (Milestone 7, additive, no data loss) added `Recording` and `MicrophonePreference`; migration 8 (Milestone 7 acceptance correction, additive) added the `idx_recording_one_in_progress` partial unique index — see their sections below for the field lists actually implemented, which differ from this document's original design sketch in three deliberate ways: `Annotation` did **not** gain a `practice_session_id` column (see `SessionDiagnosisEvidence` below for why), the quiz design replaced the sketched `QuizSession`/`QuizItemResult` pair with `QuizAttempt`/`QuizQuestion`/`QuizAnswer`, and `RecordingReference` was renamed `Recording` with a `practice_session_id` that is optional and `ON DELETE SET NULL` rather than required — see the `Recording` section below for why.
+**Status (through Milestone 8)**: `Material`, `SubtitleTrack`, `SubtitleCue`, `Annotation`, `CueNote`, `SavedLanguageItem`, `AnnotationLabelPreference`, `PracticeSession`, `SessionStageProgress`, `StageResponse`, `KeywordCapture`, `SessionDiagnosisEvidence`, `ShadowingCueProgress`, `QuizAttempt`, `QuizQuestion`, `QuizAnswer`, `Recording`, and `MicrophonePreference` are implemented as actual SQLite tables (schema version 8, unchanged by Milestone 8 — see the Learning History Read Model note below). Migration 2 added `Material.normalized_path`; migration 3 (Milestone 4) added the four learning-evidence tables; migration 4 (Milestone 5, additive, no data loss) added the six guided-session tables; migration 5 (Milestone 6, additive, no data loss) added the three quiz tables; migration 6 (Milestone 6 acceptance correction, additive) added `QuizQuestion.source_cue_text`; migration 7 (Milestone 7, additive, no data loss) added `Recording` and `MicrophonePreference`; migration 8 (Milestone 7 acceptance correction, additive) added the `idx_recording_one_in_progress` partial unique index — see their sections below for the field lists actually implemented, which differ from this document's original design sketch in three deliberate ways: `Annotation` did **not** gain a `practice_session_id` column (see `SessionDiagnosisEvidence` below for why), the quiz design replaced the sketched `QuizSession`/`QuizItemResult` pair with `QuizAttempt`/`QuizQuestion`/`QuizAnswer`, and `RecordingReference` was renamed `Recording` with a `practice_session_id` that is optional and `ON DELETE SET NULL` rather than required — see the `Recording` section below for why.
+
+## Learning History Read Model (Milestone 8)
+
+Milestone 8 (Learning History and Analytics) added no new tables and required
+no migration — every metric, list, and chart it exposes is derived entirely
+from the tables above via bounded, cross-material SQL in
+`infrastructure/db/history_repository.py`, read into DTOs by
+`application/services/learning_history_service.py`. Two evidence sources
+that must never be summed together are read by two separate functions:
+`session_diagnosis_evidence` (session-scoped history) via
+`list_session_diagnosis_evidence`/`diagnosis_label_frequency`, and the
+current, editable `Annotation` state via
+`list_current_annotation_label_counts`. See `ARCHITECTURE.md`'s "Resolved in
+Milestone 8" section for the full set of decisions (date-anchor consistency,
+the shadowing-practice-count date-filter approximation, chart/table parity,
+and the Needs Attention rule set in `domain/services/needs_attention_rules.py`).
 
 ## Entity Overview
 

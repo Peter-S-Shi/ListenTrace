@@ -217,15 +217,67 @@ Record only meaningful and reliable evidence:
 - annotation categories;
 - quiz attempts and accuracy;
 - repeated attempts;
-- optional practice duration;
 - recording references.
 
 Progress views should help answer:
 
 - Which error types recur?
 - Which materials remain difficult?
-- Is recognition improving on repeated practice?
 - How consistently is the learner practicing?
+
+Progress views must not claim to answer whether recognition is "improving" —
+recurring or receding diagnosis frequency is shown as evidence for the
+learner to interpret, never converted into an improvement/regression verdict
+or an ability score (see the Milestone 8 subsection below).
+
+### Confirmed Learning History Behavior (Milestone 8)
+
+- A global **Learning History** entry point opens without any material
+  selected, covering every material by default; it can also be filtered or
+  drilled down to one material, and existing material-level Session
+  History/Quiz History shortcuts are unchanged.
+- Six areas: **Overview** (fixed-calculation-rule metrics — materials
+  practiced, completed/active/abandoned sessions, completed quizzes and their
+  average accuracy, session-diagnosis-evidence count, cumulative shadowing
+  practice actions, retained-recording count and total duration — no
+  combined learning or difficulty score), **Activity** (a combined,
+  type-filterable, material-filterable, date-filterable chronological feed
+  across Session/Quiz/Diagnosis/Shadowing/Recording, each kept in its own
+  distinct type), **Sessions** (Active/Completed/Abandoned kept visibly
+  distinct; only Completed counts as completed practice; per-session
+  stage-completion/skip/incomplete outcomes and skip notes are shown), a
+  **Continue Learning** area (always shows every active session regardless of
+  the current date filter, with Resume/Open Material/Abandon — an abandoned
+  session is preserved as history but can never resume as itself; restarting
+  practice creates a new session), **Diagnoses** (session-scoped historical
+  `session_diagnosis_evidence` frequency/recurrence, kept in a visibly
+  separate section from the material's *current*, editable `Annotation`
+  state — the two counts are never added together), **Quizzes** (completed-
+  attempt history with per-question-type breakdown when available, plus
+  comparisons grouped strictly by material and quiz mode — never across
+  either), and **Shadowing & Recordings** (cumulative explicit practice
+  counts and high-frequency cues; retained — `ready` status only — recording
+  totals and durations; deleted recordings are excluded from every total).
+- A **Needs Attention** list gives each flagged material transparent,
+  independently-named reasons (low recent quiz accuracy, repeated diagnosis
+  evidence, multiple abandoned sessions, a frequently revisited material,
+  sessions with many skipped stages, an active unfinished session) — never a
+  single rank or difficulty index.
+- Five date-range presets (Last 7/30/90 Days, Custom Range, All Time) filter
+  consistently across the Overview, every list, and all charts, using the
+  computer's local timezone to interpret and display boundaries; Continue
+  Learning and Needs Attention are deliberately exceptions — they always
+  reflect current state, not a historical window.
+- No effective study time, practice-minute totals, or elapsed-wall-clock
+  duration is ever shown or computed — only real, stored event timestamps.
+  No pronunciation score, waveform analysis, or composite ability/difficulty
+  score exists anywhere in Learning History.
+- History is read-only: no deletion of sessions, quiz attempts, or session
+  diagnosis evidence, and no bulk-delete or export from this surface
+  (existing Milestone 7 recording deletion is unchanged). Every list
+  supports navigating back into the live workflow (Open Material, Resume,
+  View Session Detail, Open Quiz Review, Jump to Cue, Open Shadowing
+  Practice) without ever auto-starting a new session.
 
 ## Export
 

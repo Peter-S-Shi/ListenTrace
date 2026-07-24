@@ -67,13 +67,15 @@ Run the automated tests:
 
 ## Development Status
 
-Milestones 1–7 are implemented and verified. Users can import a local media file plus an SRT/WebVTT subtitle into a library, view details, rename, archive/restore, and remove records, then open a synchronized player: play/pause/seek, active-cue tracking, previous/next-cue navigation, replay-once, single-cue and continuous-range looping, transcript show/hide, volume/mute, and keyboard shortcuts. The player includes an integrated transcript workspace: select an editing cue (independent of whatever cue is currently playing), select a text range, and save one or more semantic labels (keyword, known-but-not-heard, connected/reduced speech, misheard, unknown word/chunk) as annotations; keep a free-form note per cue; and save reusable word/phrase/chunk/sentence-pattern language items with source context.
+Milestones 1–8 are implemented and verified. Users can import a local media file plus an SRT/WebVTT subtitle into a library, view details, rename, archive/restore, and remove records, then open a synchronized player: play/pause/seek, active-cue tracking, previous/next-cue navigation, replay-once, single-cue and continuous-range looping, transcript show/hide, volume/mute, and keyboard shortcuts. The player includes an integrated transcript workspace: select an editing cue (independent of whatever cue is currently playing), select a text range, and save one or more semantic labels (keyword, known-but-not-heard, connected/reduced speech, misheard, unknown word/chunk) as annotations; keep a free-form note per cue; and save reusable word/phrase/chunk/sentence-pattern language items with source context.
 
 The library also offers a guided, resumable intensive-listening session (Start/Resume Intensive Practice, plus a Session History view) alongside the standalone player: five sequential stages — global comprehension, keyword/fragment capture, transcript comparison and error diagnosis, sentence-level shadowing, and a transcript-free final summary — each with its own persisted status (not started/in progress/completed/skipped) and explicit Skip Stage support so the workflow never becomes a rigid exam. At most one intensive session is active per material at a time; completed or abandoned sessions remain as read-only history. Revealing the transcript for Stage 3 locks Stages 1 and 2 as read-only evidence for that session. Stage 3 diagnosis reuses the exact same semantic-label/highlighting/Unicode-offset logic as the standalone workspace, recording a repeatable per-session snapshot that optionally links to (without ever overwriting) a shared material-level annotation. Duplicate handling, atomic writes, and no modification of source files apply throughout.
 
 The library also offers deterministic, locally-generated quizzes (Start Material Quiz / Start Review Quiz / Resume Quiz / Quiz History): cue dictation or fill-in-the-blank, keyword recognition (does a word/chunk occur in this cue?), audio-to-transcript multiple choice, and — for a Review Quiz built from a material's own saved diagnosis history — targeted recall of previously misheard or missed spots, prioritized `misheard > known but not heard > unknown word/chunk > connected/reduced speech`. A requested question count is a target, not a promise: a material with too little usable content produces a smaller quiz or is refused outright rather than padded with weak or duplicate questions. Correctness is never revealed question-by-question — the learner answers the whole quiz, submits it once (an atomic, all-or-nothing scoring transaction), and only then sees one consolidated review showing their answer, the correct answer, correct/incorrect, the source cue, the question type, and a short explanation of the scoring rule. Quiz attempts can be closed and resumed without losing answers; completed and abandoned attempts are permanently read-only, and multiple quiz attempts may be active on the same material at once. Text scoring ignores case, punctuation, and extra whitespace but otherwise requires exact spelling — no fuzzy or AI-assisted matching.
 
 The library also offers shadowing recording, from Guided Session Stage 4 or a standalone Shadowing Practice window (both reuse the exact same recording widget — there is only one recording system, not two): pick a microphone (remembered for next time, never silently swapped if it disappears), record a take as local WAV, and keep as many takes per cue as wanted until explicitly deleted (one take, every take for a cue, or every take for a material). Play any take, or run a source-then-take comparison that plays the original cue, pauses briefly, then plays the take — never mixed together. A take is only ever listed once it is confirmed valid; a failed or aborted capture never appears as a normal playable take. Only one recording can be in progress at a time, and a capture interrupted by a crash or forced close is automatically cleaned up the next time the app starts. Recording is entirely optional in Guided Session Stage 4 and never changes any stage's completion status.
+
+A global **Learning History** view (opens with no material selected, or preselected from the library) is a read-only learning-evidence center across six areas — Overview, Activity, Sessions, Diagnoses, Quizzes, and Shadowing & Recordings — filterable by material and by date range (Last 7/30/90 Days, Custom Range, All Time, applied consistently across every list and chart in the local timezone). Active/Completed/Abandoned sessions stay visibly distinct (only Completed counts as completed practice); a dedicated Continue Learning area always shows active sessions regardless of the date filter; session-scoped diagnosis history is shown separately from the material's current, editable annotations; quiz trends are grouped strictly by material and mode; a Needs Attention list gives each flagged material transparent, independently-named reasons rather than one score; and every list can navigate back into the live workflow (open the material, resume or view a session, open a quiz's review, jump to a cue, open Shadowing Practice). No effective study time, pronunciation score, or combined ability/difficulty score is ever computed or shown — only real stored evidence.
 
 See:
 
@@ -91,12 +93,15 @@ src/listentrace/
     dto/              # ImportSuccess/ImportNeedsConfirmation, MaterialSummary/MaterialDetail,
                        # PlayerLoadResult, LoopMode/PlayerTick, SavedItemSuccess/NeedsConfirmation,
                        # CueWorkspace, PracticeSessionState, QuizState, QuizReviewItem/QuizReviewResult,
-                       # DeviceResolution, DeletionSummary
+                       # DeviceResolution, DeletionSummary, learning_history (OverviewMetrics,
+                       # ActivityItem, SessionHistoryEntry, DiagnosisCategorySummary, QuizHistoryEntry,
+                       # QuizComparisonGroup, NeedsAttentionEntry, ShadowingEvidenceEntry,
+                       # RecordingEvidenceEntry/Summary, ChartData/ChartPoint)
     services/         # material_import_service, material_library_service,
                        # player_loading_service, player_session (pure, no Qt),
                        # annotation_service, cue_note_service, saved_language_item_service,
                        # label_preference_service, cue_workspace_service, practice_session_service,
-                       # quiz_service, recording_service
+                       # quiz_service, recording_service, learning_history_service
   domain/
     enums/            # MaterialStatus, AnnotationLabel, SavedItemType, SessionStatus, StageStatus,
                        # StageKey, KeywordCaptureType, StageOutcome, ShadowingStatus, QuizMode,
@@ -109,10 +114,13 @@ src/listentrace/
                        # offsets), session_rules (session/stage lifecycle + completion eligibility),
                        # quiz_rules (deterministic generation/scoring math), recording_rules
                        # (status transitions + managed-path construction), comparison_sequence
-                       # (source-vs-take comparison state machine) — all pure, no Qt
+                       # (source-vs-take comparison state machine), date_range (timezone-safe
+                       # date-range-preset resolution), needs_attention_rules (transparent,
+                       # independently-named material-attention reasons) — all pure, no Qt
   infrastructure/
     db/               # SQLite connection, migrations, repository + learning_repository +
-                       # session_repository + quiz_repository + recording_repository functions
+                       # session_repository + quiz_repository + recording_repository +
+                       # history_repository (cross-material, bounded read-model queries) functions
     subtitles/        # SRT/WebVTT parsers, timecode and text normalization
     media/            # PlaybackController adapter around QtMultimedia playback; RecordingController
                        # adapter around QtMultimedia audio capture; file validation/fingerprinting
@@ -124,25 +132,31 @@ src/listentrace/
     text_offset_conversion.py   # shared Qt UTF-16 <-> Python code-point offset conversion
     app.py            # application entry point
     widgets/          # RecordingPanel — the one recording UI, shared by GuidedSessionWindow
-                       # Stage 4 and ShadowingPracticeWindow (not duplicated)
+                       # Stage 4 and ShadowingPracticeWindow (not duplicated); SimpleBarChart —
+                       # a small dependency-free QPainter bar chart used by Learning History
     windows/          # MainWindow (material library), ImportDialog, PlayerWindow
                        # (with integrated transcript workspace), LabelColorDialog,
                        # GuidedSessionWindow (five-stage guided session), SessionHistoryDialog,
-                       # QuizWindow, QuizHistoryDialog, QuizReviewDialog, ShadowingPracticeWindow
+                       # QuizWindow, QuizHistoryDialog, QuizReviewDialog, ShadowingPracticeWindow,
+                       # LearningHistoryWindow (global learning-evidence center)
 tests/
   unit/               # subtitle parsing, CueIndex, PlayerSession, text_range, session_rules,
-                       # quiz_rules, recording_rules, comparison_sequence
+                       # quiz_rules, recording_rules, comparison_sequence, date_range,
+                       # needs_attention_rules
   integration/        # database/migrations, import, library, player, player workspace,
                        # annotations, cue notes, saved language items, label preferences,
                        # practice_session_service, guided session window, quiz_service,
-                       # recording_service, UI smoke
+                       # recording_service, learning_history_service, learning history window,
+                       # UI smoke
   fixtures/
 docs/
 ```
 
 ## Current Limitations
 
-- No progress analytics yet (planned for Milestone 8); recordings are captured and retained but not yet summarized into trends.
+- Learning History shows no effective study time, practice-minute totals, pronunciation score, waveform analysis, or combined ability/difficulty score — by design (see `docs/PRODUCT_SPEC.md`/`ARCHITECTURE.md`), not an oversight.
+- Cumulative shadowing-practice-count totals shown under a date filter are an honest approximation (they include a row's full lifetime count whenever its *most recent* practice falls in range, since only a last-practiced timestamp is stored, not a per-event log) — exact only under All Time.
+- Learning History has no export, deletion, or editing of sessions/quiz attempts/session diagnosis evidence — it is a read-only navigation surface (Milestone 9 is the planned structured-export milestone).
 - Recordings are fixed-format WAV only — no user-selectable formats, transcoding, trimming, editing, noise reduction, waveform display, automatic take ranking, or pronunciation/speech-recognition scoring (see `docs/PRODUCT_SPEC.md`).
 - Quizzes are deterministic and locally generated only — no AI-generated questions, fuzzy/semantic answer grading, speech recognition, or adaptive difficulty (see `docs/PRODUCT_SPEC.md`).
 - Only one primary subtitle track per material is managed through the UI, though the schema supports more.
