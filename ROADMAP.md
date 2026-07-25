@@ -347,19 +347,22 @@ Deferred beyond v1.0. There is no current implementation plan, and it is not par
 
 # Post-M10 — Release Engineering and v1.0 Delivery
 
-Once Milestone 10 is accepted, remaining work before v1.0 is release engineering rather than new user features, organized into four phases. No packaging technology, installer format, or release date is chosen yet — that decision belongs to Phase A.
+Once Milestone 10 is accepted, remaining work before v1.0 is release engineering rather than new user features, organized into four phases. Phase A's packaging decisions are locked (see below); a v1.0 release date is still not chosen.
 
-## Phase A — Packaging Spike
+## Phase A — Packaging Spike (Completed)
 
-Decide and validate:
+Decided and validated:
 
 - Windows-first release target;
-- packaging technology;
-- installer versus portable build;
-- application icon and version metadata;
-- application-data and recording locations;
-- preservation of SQLite data during upgrades;
-- uninstall behavior.
+- packaging technology: PyInstaller, one onedir build;
+- that same onedir build serves both distribution forms — an Inno Setup installer and a portable ZIP, not two separate pipelines;
+- per-user install by default (no admin rights required to install), with a machine-wide install still offered as an option;
+- application icon and version metadata: a placeholder icon (regenerable, not a final design) and version/publisher metadata that names only "ListenTrace" — no separate individual or company name;
+- application-data and recording locations: unchanged — the existing `%APPDATA%\ListenTrace` location (database, recordings, logs) is preserved exactly as before packaging;
+- preservation of SQLite data during upgrades: the install/upgrade path never touches `%APPDATA%\ListenTrace`;
+- uninstall behavior: uninstalling removes only the installed program files — the learner's local data (database, recordings, logs) is never deleted by install, upgrade, or uninstall.
+
+See `packaging/README.md` for the full build recipe and `ARCHITECTURE.md`'s "Resolved in Post-M10 Phase A" section for the validation evidence (a real install → launch → uninstall cycle, and a portable-build launch from a different path). Code signing, auto-update, macOS/Linux packaging, and CI-driven builds remain unaddressed.
 
 ## Phase B — Release Hardening
 
@@ -476,4 +479,4 @@ Completion of:
 - Whether imported media is referenced in place or optionally copied
 - Audio recording format and retention defaults
 - Initial accessibility and localization targets
-- Packaging and update strategy
+- Update strategy (auto-update) — packaging itself was decided and validated in Post-M10 Phase A; see `packaging/README.md`
