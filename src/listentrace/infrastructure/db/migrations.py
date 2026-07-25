@@ -366,6 +366,37 @@ MIGRATIONS: list[tuple[int, str]] = [
         );
         """,
     ),
+    (
+        10,
+        """
+        -- Post-M10 Phase B (Release Hardening): "large-history behavior".
+        -- SQLite never creates an index for a foreign-key column on its own --
+        -- only PRIMARY KEY/UNIQUE constraints get one automatically, and a
+        -- composite UNIQUE/PRIMARY KEY index only accelerates lookups on its
+        -- own *leading* column. Every column below is filtered directly
+        -- (typically `WHERE material_id = ?`, joined through Learning
+        -- History/Quick-Practice-recommendation/export queries) without being
+        -- the leading column of any existing constraint, so every such
+        -- lookup was previously a full table scan. Purely additive: new
+        -- indexes only, no data or existing-index change, safe on a large
+        -- pre-existing database.
+        --
+        -- `practice_session.material_id` specifically needs its own index
+        -- despite `idx_practice_session_one_active_per_material` already
+        -- existing on the same column: that index is a *partial* one (`WHERE
+        -- status = 'active' AND mode = 'intensive'`), so it cannot serve a
+        -- plain `material_id = ?` lookup across every status/mode.
+        CREATE INDEX idx_subtitle_track_material_id ON subtitle_track(material_id);
+        CREATE INDEX idx_practice_session_material_id ON practice_session(material_id);
+        CREATE INDEX idx_keyword_capture_practice_session_id ON keyword_capture(practice_session_id);
+        CREATE INDEX idx_session_diagnosis_evidence_subtitle_cue_id ON session_diagnosis_evidence(subtitle_cue_id);
+        CREATE INDEX idx_quiz_attempt_material_id ON quiz_attempt(material_id);
+        CREATE INDEX idx_recording_material_id ON recording(material_id);
+        CREATE INDEX idx_recording_subtitle_cue_id ON recording(subtitle_cue_id);
+        CREATE INDEX idx_quick_practice_session_material_id ON quick_practice_session(material_id);
+        CREATE INDEX idx_saved_language_item_subtitle_cue_id ON saved_language_item(subtitle_cue_id);
+        """,
+    ),
 ]
 
 
@@ -375,13 +406,41 @@ def current_version(conn: sqlite3.Connection) -> int:
 
 
 def migrate(conn: sqlite3.Connection) -> int:
-    """Apply all pending migrations in order. Safe to call repeatedly (idempotent)."""
+    """Apply all pending migrations in order. Safe to call repeatedly (idempotent).
+
+    Each migration is applied as one atomic transaction. `executescript` is
+    deliberately not used to run a migration's SQL: it implicitly commits any
+    pending transaction before running and executes its statements outside
+    normal transactional control, so a statement failing partway through a
+    script can leave every earlier statement in that same script already
+    applied even after an explicit `conn.rollback()` (confirmed directly: a
+    script with two valid `CREATE TABLE` statements followed by a broken one
+    leaves both tables behind after rollback). Without this fix, a migration
+    interrupted by any failure -- a transient disk-full condition, a locked
+    file, a future migration bug -- would leave the schema half-created while
+    `PRAGMA user_version` stayed unbumped, so every subsequent app startup
+    would retry the exact same migration from scratch and fail again with
+    "table already exists", permanently stuck with no recovery path.
+
+    Splitting each migration into individual statements and running them one
+    at a time inside a single explicit `BEGIN`/`COMMIT` (rolled back as a
+    whole, including the `PRAGMA user_version` update -- itself confirmed
+    transactional) keeps a failed migration a true no-op instead of a stuck,
+    half-applied one.
+    """
     version = current_version(conn)
     for target_version, sql in MIGRATIONS:
         if target_version <= version:
             continue
-        conn.executescript(sql)
-        conn.execute(f"PRAGMA user_version = {target_version}")
+        statements = [statement.strip() for statement in sql.split(";") if statement.strip()]
+        conn.execute("BEGIN")
+        try:
+            for statement in statements:
+                conn.execute(statement)
+            conn.execute(f"PRAGMA user_version = {target_version}")
+        except Exception:
+            conn.rollback()
+            raise
         conn.commit()
         version = target_version
     return version

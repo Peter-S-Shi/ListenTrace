@@ -81,7 +81,7 @@ From Learning History, **Export Learning Evidence** builds a local, user-control
 
 The library also offers **Quick Practice** — a short, low-friction, cue-based practice mode, a companion to Guided Intensive Listening rather than a replacement for it. Start it from the Material Library / Learning History (**Quick Practice**, choosing Recommended Practice — 3, 5, or 10 cues, default 5, from a deterministic, reason-based recommendation list built from existing diagnosis/quiz/shadowing evidence, with a safe fallback when too little evidence exists — or Selected Cues, in whatever order picked) or from the Player (**Quick Practice This Cue** / **Quick Practice Selected Cues**, starting immediately from the current cue or range). Each cue runs one compact, forward-only cycle: Listen (transcript hidden) -> Recall (Understood/Partly Understood/Missed, required, plus an optional guessed fragment) -> Reveal & Diagnose (the same semantic labels and validation as the standalone workspace, always optional) -> Replay & Shadow (optional explicit shadowing mark, optional recording through the same shared recording widget). There is no exact-step resume: closing after at least one completed cue preserves that evidence as a read-only abandoned run; closing before any cue is completed discards the run entirely rather than leaving misleading history. A concise completion summary (cues completed, recall-result counts, diagnoses created, shadowing actions, recordings created, cues worth revisiting) never computes an effective-time, pronunciation, ability, difficulty, or improvement score. Quick Practice evidence is always counted separately from Intensive Practice and Quiz evidence in Learning History (a `Quick Practices Completed` overview count, its own Activity entries, and a dedicated history tab), can trigger its own transparent Needs Attention reason (`Missed repeatedly in Quick Practice`, requiring at least two Missed results), and has its own independent, privacy-controlled export category.
 
-Milestone 10 was the final planned user-feature milestone for the first release; the project is now in feature freeze. Milestone 11's optional assisted features (speech recognition, pronunciation feedback, translation, and similar) are deferred beyond v1.0. Post-M10 Phase A — Packaging Spike is complete: a Windows PyInstaller build, an Inno Setup installer, and a portable zip have all been built and validated end-to-end (see `packaging/README.md`). Remaining work is release hardening, clean-machine testing, and v1.0 delivery — see `ROADMAP.md`.
+Milestone 10 was the final planned user-feature milestone for the first release; the project is now in feature freeze. Milestone 11's optional assisted features (speech recognition, pronunciation feedback, translation, and similar) are deferred beyond v1.0. Post-M10 Phase A — Packaging Spike and Phase B — Release Hardening are both complete: a Windows PyInstaller build, an Inno Setup installer, and a portable zip have all been built and validated end-to-end (see `packaging/README.md`), and a corrective-work pass fixed a migration-atomicity bug, a startup-crash-before-`QApplication` gap, added crash logging and large-history database indexes, and added a partial Windows long-path mitigation (see `ARCHITECTURE.md`). Remaining work is clean-machine testing and v1.0 delivery — see `ROADMAP.md`.
 
 See:
 
@@ -169,19 +169,21 @@ tests/
                        # quiz_rules, recording_rules, comparison_sequence, date_range,
                        # needs_attention_rules, export_privacy, export_formatters, export_io,
                        # quick_practice_rules, quick_practice_recommendation
-  integration/        # database/migrations, import, library, player, player workspace,
-                       # annotations, cue notes, saved language items, label preferences,
-                       # practice_session_service, guided session window, quiz_service,
-                       # recording_service, learning_history_service, learning history window,
-                       # export_service, export dialog, quick_practice_service, quick practice
-                       # window, quick practice start dialog, quick practice entry points, UI smoke
+  integration/        # database/migrations, app startup (Post-M10 Phase B), import, library,
+                       # player, player workspace, annotations, cue notes, saved language items,
+                       # label preferences, practice_session_service, guided session window,
+                       # quiz_service, recording_service, learning_history_service, learning
+                       # history window, export_service, export dialog, quick_practice_service,
+                       # quick practice window, quick practice start dialog, quick practice
+                       # entry points, UI smoke
   fixtures/
 docs/
-packaging/            # Post-M10 Phase A packaging spike: listentrace.spec (PyInstaller),
-                       # version_info.txt (Windows version resource), installer.iss (Inno Setup),
-                       # assets/ (placeholder icon + its generator script), README.md (decisions
-                       # and build steps). Build output (packaging/build, packaging/dist) is
-                       # gitignored.
+packaging/            # Post-M10 Phase A packaging spike, plus a Phase B addition:
+                       # listentrace.spec (PyInstaller), version_info.txt (Windows version
+                       # resource), installer.iss (Inno Setup), app.manifest (longPathAware
+                       # opt-in, Phase B), assets/ (placeholder icon + its generator script),
+                       # README.md (decisions and build steps). Build output (packaging/build,
+                       # packaging/dist) is gitignored.
 ```
 
 ## Current Limitations
@@ -205,6 +207,7 @@ packaging/            # Post-M10 Phase A packaging spike: listentrace.spec (PyIn
 - Quick Practice has no back navigation and no exact-step resume by design — closing mid-run either preserves completed-cue evidence as read-only "abandoned" history or, if nothing was completed yet, discards the run entirely; a completed or abandoned run can never resume as itself. Its completion summary intentionally does not report a "recordings created" count — Quick Practice recordings are ordinary standalone recordings with no schema link back to the run, so any such count could not be authoritative; recordings remain available through the Replay & Shadow step and through Learning History.
 - Users are responsible for using media and transcript material they are legally permitted to use.
 - The packaged Windows build (installer and portable zip, see `packaging/README.md`) is unsigned — Windows SmartScreen is expected to warn on first run — and has only been built/installed/uninstalled on the development machine so far, not on a genuinely clean machine with no preinstalled Python. Code signing, auto-update, and macOS/Linux packaging are not addressed.
+- Windows long-path support (paths over roughly 260 characters) is only partially addressed: the packaged exe opts into `longPathAware`, but Windows also requires an admin-only, off-by-default machine-wide setting this app cannot enable itself — see `ARCHITECTURE.md`.
 
 ## Privacy
 

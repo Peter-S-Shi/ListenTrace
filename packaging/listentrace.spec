@@ -49,6 +49,7 @@ exe = EXE(
     console=False,
     icon=str(PACKAGING_DIR / "assets" / "listentrace.ico"),
     version=str(PACKAGING_DIR / "version_info.txt"),
+    manifest=str(PACKAGING_DIR / "app.manifest"),
 )
 coll = COLLECT(
     exe,

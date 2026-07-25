@@ -39,7 +39,7 @@ def test_migrate_is_idempotent(conn):
     version_before = current_version(conn)
     migrate(conn)  # second call must not raise or duplicate schema
     version_after = current_version(conn)
-    assert version_before == version_after == 9
+    assert version_before == version_after == 10
 
 
 def test_foreign_keys_are_enforced(conn):
@@ -98,7 +98,7 @@ def test_migration_upgrades_a_milestone1_v1_database(tmp_path):
 
     final_version = migrate(connection)
 
-    assert final_version == 9
+    assert final_version == 10
     columns = {row["name"] for row in connection.execute("PRAGMA table_info(material)")}
     assert "normalized_path" in columns
     tables = {
@@ -144,7 +144,7 @@ def test_migration_upgrades_a_milestone2_v2_database(tmp_path):
 
     final_version = migrate(connection)
 
-    assert final_version == 9
+    assert final_version == 10
     tables = {
         row["name"]
         for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
@@ -203,7 +203,7 @@ def test_migration_upgrades_a_milestone4_v3_database_with_existing_data_intact(t
 
     final_version = migrate(connection)
 
-    assert final_version == 9
+    assert final_version == 10
     tables = {
         row["name"]
         for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
@@ -262,7 +262,7 @@ def test_migration_upgrades_a_milestone5_v4_database_with_existing_data_intact(t
 
     final_version = migrate(connection)
 
-    assert final_version == 9
+    assert final_version == 10
     tables = {
         row["name"]
         for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
@@ -323,7 +323,7 @@ def test_migration_upgrades_a_milestone6_v6_database_with_existing_data_intact(t
 
     final_version = migrate(connection)
 
-    assert final_version == 9
+    assert final_version == 10
     tables = {
         row["name"]
         for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
@@ -383,7 +383,7 @@ def test_migration_upgrades_a_milestone6_v5_database_backfills_source_cue_text(t
 
     final_version = migrate(connection)
 
-    assert final_version == 9
+    assert final_version == 10
     backfilled = connection.execute(
         "SELECT source_cue_text FROM quiz_question WHERE quiz_attempt_id = ?", (attempt_id,)
     ).fetchone()
@@ -423,7 +423,7 @@ def test_migration_upgrades_a_milestone9_v8_database_with_existing_data_intact(t
 
     final_version = migrate(connection)
 
-    assert final_version == 9
+    assert final_version == 10
     tables = {
         row["name"]
         for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
@@ -438,5 +438,131 @@ def test_migration_upgrades_a_milestone9_v8_database_with_existing_data_intact(t
         "SELECT status FROM recording WHERE material_id = ?", (material_id,)
     ).fetchone()
     assert recording_row["status"] == "ready"
+
+    connection.close()
+
+
+def test_migration_upgrades_a_milestone10_v9_database_with_existing_data_intact(tmp_path):
+    """Post-M10 Phase B (Release Hardening) schema version 10 only adds
+    indexes on pre-existing foreign-key columns for large-history query
+    performance -- no table, column, or data change. An existing v9 database
+    (post-Milestone-10) with real Quick Practice data must upgrade cleanly,
+    gain the new indexes, and keep that data intact."""
+    connection = open_connection(tmp_path / "v9.db")
+    for target_version, sql in MIGRATIONS:
+        if target_version > 9:
+            break
+        connection.executescript(sql)
+    connection.execute("PRAGMA user_version = 9")
+    connection.commit()
+    assert current_version(connection) == 9
+
+    material_id = insert_material(connection, Material(title="M10 Lesson", media_path="C:/media/m10.mp4"))
+    track = SubtitleTrack(
+        material_id=material_id,
+        format="srt",
+        source_path="C:/media/m10.srt",
+        cues=[SubtitleCue(cue_index=1, start_ms=0, end_ms=1000, text="Bonjour")],
+    )
+    insert_subtitle_track(connection, track)
+    connection.execute(
+        "INSERT INTO quick_practice_session (material_id, source_type, requested_count, actual_count, status) "
+        "VALUES (?, 'selected', 1, 1, 'completed')",
+        (material_id,),
+    )
+    connection.commit()
+
+    final_version = migrate(connection)
+
+    assert final_version == 10
+    indexes = {
+        row["name"]
+        for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'index'")
+    }
+    assert {
+        "idx_subtitle_track_material_id",
+        "idx_practice_session_material_id",
+        "idx_keyword_capture_practice_session_id",
+        "idx_session_diagnosis_evidence_subtitle_cue_id",
+        "idx_quiz_attempt_material_id",
+        "idx_recording_material_id",
+        "idx_recording_subtitle_cue_id",
+        "idx_quick_practice_session_material_id",
+        "idx_saved_language_item_subtitle_cue_id",
+    } <= indexes
+
+    # Existing Milestone 1-10 data must survive the upgrade untouched.
+    stored = get_material(connection, material_id)
+    assert stored is not None
+    assert stored.title == "M10 Lesson"
+    qp_row = connection.execute(
+        "SELECT status FROM quick_practice_session WHERE material_id = ?", (material_id,)
+    ).fetchone()
+    assert qp_row["status"] == "completed"
+
+    connection.close()
+
+
+def test_migrate_rolls_back_completely_when_a_migration_fails(tmp_path, monkeypatch):
+    """Regression test for a real bug caught during Post-M10 Phase B: `migrate`
+    used to run each migration's SQL via `executescript`, which implicitly
+    commits before running and executes statements outside normal
+    transactional control -- a script failing partway through left every
+    earlier statement in it already applied even after `conn.rollback()`.
+    That meant a migration interrupted by any failure left the schema
+    half-created while `PRAGMA user_version` stayed unbumped, so every
+    subsequent app startup retried the exact same migration and failed again
+    with "table already exists" -- a permanently stuck database with no
+    recovery path. `migrate` now runs each migration inside one explicit
+    transaction, split into individual statements, so a failure rolls back
+    completely and a fixed-and-retried migration can still succeed."""
+    connection = open_connection(tmp_path / "broken.db")
+    baseline_version = migrate(connection)
+    assert baseline_version == 10
+
+    broken_migrations = list(MIGRATIONS) + [
+        (
+            11,
+            """
+            CREATE TABLE never_should_exist (id INTEGER PRIMARY KEY);
+            CREATE TABLE THIS IS NOT VALID SQL;
+            """,
+        )
+    ]
+    monkeypatch.setattr("listentrace.infrastructure.db.migrations.MIGRATIONS", broken_migrations)
+
+    with pytest.raises(sqlite3.OperationalError):
+        migrate(connection)
+
+    # The failure must be a true no-op: version unchanged, and the table from
+    # the first (valid) statement in the broken script must not have leaked
+    # through despite the later statement's failure.
+    assert current_version(connection) == 10
+    tables = {
+        row["name"]
+        for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
+    }
+    assert "never_should_exist" not in tables
+
+    # Retrying the same broken migration again must fail the same clean way
+    # -- never "table already exists" -- proving no partial state leaked
+    # through on the first attempt.
+    with pytest.raises(sqlite3.OperationalError) as excinfo:
+        migrate(connection)
+    assert "already exists" not in str(excinfo.value)
+    assert current_version(connection) == 10
+
+    # Fixing the migration and retrying must succeed normally -- the earlier
+    # failure left nothing behind to conflict with a corrected retry.
+    fixed_migrations = list(MIGRATIONS) + [
+        (11, "CREATE TABLE never_should_exist (id INTEGER PRIMARY KEY);")
+    ]
+    monkeypatch.setattr("listentrace.infrastructure.db.migrations.MIGRATIONS", fixed_migrations)
+    assert migrate(connection) == 11
+    tables = {
+        row["name"]
+        for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
+    }
+    assert "never_should_exist" in tables
 
     connection.close()

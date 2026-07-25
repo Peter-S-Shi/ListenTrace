@@ -1,10 +1,11 @@
-# Packaging (Post-M10 Phase A — Packaging Spike)
+# Packaging (Post-M10 Phase A — Packaging Spike, plus a Phase B addition)
 
 This directory holds the build recipe validated during Phase A of
 `ROADMAP.md`'s "Post-M10 — Release Engineering and v1.0 Delivery" sequence.
 Phase A's job was to **decide and validate** a Windows packaging approach,
-not to finalize release engineering — Phase B (hardening), Phase C
-(clean-machine testing), and Phase D (release candidate) still remain.
+not to finalize release engineering — Phase B (hardening) has since added
+one packaging-level fix of its own (the manifest addition below); Phase C
+(clean-machine testing) and Phase D (release candidate) still remain.
 
 ## Decisions made in Phase A
 
@@ -60,9 +61,10 @@ about:
    harmless on Windows).
 2. **The frozen exe launches successfully** and, with `%APPDATA%` redirected
    to a throwaway directory, correctly creates `ListenTrace/listentrace.db`
-   (schema version 9, all 21 tables present, including `quick_practice_*`),
-   `ListenTrace/recordings/`, and `ListenTrace/logs/listentrace.log` — the
-   exact same layout `appdata.py` produces when run from source.
+   (schema version 9 at the time of this validation, all 21 tables present,
+   including `quick_practice_*`), `ListenTrace/recordings/`, and
+   `ListenTrace/logs/listentrace.log` — the exact same layout `appdata.py`
+   produces when run from source.
 3. **The portable form works from an arbitrary path**: the onedir build was
    zipped, extracted to a completely different directory, and launched from
    there — it started correctly and resolved app-data the same way.
@@ -76,6 +78,22 @@ about:
    real `%APPDATA%\Roaming\ListenTrace\recordings` directory on this machine
    was left completely untouched throughout the entire install → launch →
    uninstall cycle.
+
+## Phase B addition: long-path manifest opt-in
+
+`packaging/app.manifest` (embedded into the exe via `listentrace.spec`'s
+`manifest=` argument) declares `longPathAware`, opting the built exe into
+Windows support for paths longer than the legacy 260-character `MAX_PATH`
+limit. This is a **partial mitigation, not a full fix** — confirmed directly
+that creating a deeply nested path over ~260 characters fails with
+`WinError 206` on this development machine even with the manifest in place,
+because Windows' legacy Win32 file APIs also require the machine-wide
+`LongPathsEnabled` registry policy to be turned on (admin-only, off by
+default). This app cannot enable that policy itself without contradicting
+Phase A's own per-user-only, no-admin-required install decision, so this
+manifest entry only helps on a machine where an administrator has already
+turned that policy on elsewhere. See `ARCHITECTURE.md`'s "Resolved in
+Post-M10 Phase B" section for the full investigation.
 
 ## Building it yourself
 
@@ -94,19 +112,22 @@ This produces `packaging/dist/ListenTrace/` (the onedir build). From there:
 
 `packaging/build/` and `packaging/dist/` are both gitignored (matching the
 repository's existing `build/`/`dist/` rules) — only the recipe files
-(`listentrace.spec`, `version_info.txt`, `installer.iss`, `assets/`) are
-committed.
+(`listentrace.spec`, `version_info.txt`, `installer.iss`, `app.manifest`,
+`assets/`) are committed.
 
-## Explicitly not addressed by Phase A
+## Explicitly not addressed
 
 - Code signing (the exe and installer are unsigned; Windows SmartScreen will
-  warn on first run — a Phase B/D concern, not resolved here).
+  warn on first run — a Phase D concern, not resolved here).
 - Auto-update.
 - macOS/Linux packaging.
 - CI-driven builds (there is still no continuous-integration configuration
   anywhere in this project).
 - A final, designed application icon (the current one is a placeholder).
-- Everything listed under `ROADMAP.md`'s Phase B (hardening), Phase C
-  (clean-machine testing on a genuinely clean environment — this spike's
-  validation all ran on the existing development machine), and Phase D
-  (release candidate).
+- Full Windows long-path support (see the Phase B addition above — the
+  manifest opt-in is necessary but not sufficient on its own).
+- Everything else listed under `ROADMAP.md`'s Phase B (hardening; most of
+  Phase B's work was in application code, not this directory — see
+  `ARCHITECTURE.md`), Phase C (clean-machine testing on a genuinely clean
+  environment — every validation in this file and in Phase B ran on the
+  existing development machine), and Phase D (release candidate).
