@@ -13,7 +13,7 @@ from listentrace.domain.models.recording import Recording
 from listentrace.domain.models.session_diagnosis_evidence import SessionDiagnosisEvidence
 from listentrace.domain.models.subtitle import SubtitleCue, SubtitleTrack
 from listentrace.domain.services.date_range import PRESET_ALL_TIME, PRESET_LAST_7_DAYS, resolve_date_range
-from listentrace.infrastructure.db import quiz_repository, recording_repository, session_repository
+from listentrace.infrastructure.db import quick_practice_repository, quiz_repository, recording_repository, session_repository
 from listentrace.infrastructure.db.connection import open_connection
 from listentrace.infrastructure.db.migrations import migrate
 from listentrace.infrastructure.db.repository import insert_material, insert_subtitle_track, get_subtitle_track_for_material, get_cues_for_track
@@ -133,6 +133,26 @@ def _make_recording(conn, material_id, cue_id, status="ready", duration_ms=1000,
     return recording_id
 
 
+def _make_quick_practice_session(
+    conn, material_id, cue_ids, status="active", source_type="selected", recall_results=None, started_at=None
+):
+    session_id = quick_practice_repository.create_quick_practice_session(
+        conn, material_id, source_type, len(cue_ids), cue_ids
+    )
+    items = quick_practice_repository.list_items(conn, session_id)
+    recall_results = recall_results or []
+    for item, recall_result in zip(items, recall_results):
+        if recall_result is not None:
+            quick_practice_repository.set_item_recall(conn, item.id, recall_result, None)
+            quick_practice_repository.set_item_completed(conn, item.id)
+    if status != "active":
+        quick_practice_repository.set_quick_practice_session_status(conn, session_id, status)
+    if started_at is not None:
+        conn.execute("UPDATE quick_practice_session SET started_at = ? WHERE id = ?", (started_at, session_id))
+        conn.commit()
+    return session_id
+
+
 # ---- overview ----
 
 
@@ -148,6 +168,7 @@ def test_overview_is_all_zero_when_nothing_exists(conn, all_time_range):
     assert overview.shadowing_practice_count == 0
     assert overview.retained_recording_count == 0
     assert overview.retained_recording_total_duration_ms == 0
+    assert overview.quick_practices_completed == 0
 
 
 def test_overview_counts_sessions_by_status_distinctly(conn, all_time_range):
@@ -575,6 +596,23 @@ def test_needs_attention_flags_active_unfinished_session(conn):
     assert "active_unfinished_session" in [r.reason_key for r in entries[0].reasons]
 
 
+def test_needs_attention_flags_repeated_missed_quick_practice_results(conn):
+    material_id, cues = _make_material_with_cues(conn)
+    _make_quick_practice_session(conn, material_id, [cues[0].id], status="completed", recall_results=["missed"])
+    _make_quick_practice_session(conn, material_id, [cues[1].id], status="completed", recall_results=["missed"])
+
+    entries = svc.list_needs_attention(conn)
+    assert len(entries) == 1
+    assert "repeated_missed_in_quick_practice" in [r.reason_key for r in entries[0].reasons]
+
+
+def test_needs_attention_does_not_flag_a_single_missed_quick_practice_result(conn):
+    material_id, cues = _make_material_with_cues(conn)
+    _make_quick_practice_session(conn, material_id, [cues[0].id], status="completed", recall_results=["missed"])
+    entries = svc.list_needs_attention(conn)
+    assert entries == []
+
+
 # ---- activity feed ----
 
 
@@ -584,10 +622,11 @@ def test_activity_feed_keeps_each_evidence_kind_distinct(conn, all_time_range):
     _make_diagnosis(conn, session_id, cues[0].id)
     _make_quiz_attempt(conn, material_id, status="completed", correct=1, actual=4)
     _make_recording(conn, material_id, cues[0].id, status="ready")
+    _make_quick_practice_session(conn, material_id, [cues[0].id], status="completed", recall_results=["understood"])
 
     activity = svc.list_activity(conn, None, all_time_range)
     types = {item.activity_type for item in activity}
-    assert types == {"session", "diagnosis", "quiz", "recording"}
+    assert types == {"session", "diagnosis", "quiz", "recording", "quick_practice"}
 
 
 def test_activity_feed_can_filter_by_type(conn, all_time_range):
@@ -598,6 +637,56 @@ def test_activity_feed_can_filter_by_type(conn, all_time_range):
     activity = svc.list_activity(conn, None, all_time_range, activity_types=["diagnosis"])
     assert len(activity) == 1
     assert activity[0].activity_type == "diagnosis"
+
+
+# ---- quick practice (Milestone 10) ----
+
+
+def test_overview_counts_completed_quick_practice_runs_only(conn, all_time_range):
+    material_id, cues = _make_material_with_cues(conn)
+    _make_quick_practice_session(
+        conn, material_id, [cues[0].id], status="completed", recall_results=["understood"]
+    )
+    _make_quick_practice_session(conn, material_id, [cues[0].id], status="abandoned")
+    _make_quick_practice_session(conn, material_id, [cues[0].id], status="active")
+
+    overview = svc.get_overview(conn, None, all_time_range)
+    assert overview.quick_practices_completed == 1
+    # Never counted as an Intensive Session or a Quiz Attempt.
+    assert overview.completed_sessions == 0
+    assert overview.completed_quizzes == 0
+
+
+def test_quick_practice_history_lists_per_session_cue_results(conn, all_time_range):
+    material_id, cues = _make_material_with_cues(conn)
+    session_id = _make_quick_practice_session(
+        conn,
+        material_id,
+        [cues[0].id, cues[1].id],
+        status="completed",
+        source_type="recommended",
+        recall_results=["missed", "understood"],
+    )
+
+    entries = svc.list_quick_practice_history(conn, material_id, all_time_range)
+    assert len(entries) == 1
+    entry = entries[0]
+    assert entry.session_id == session_id
+    assert entry.source_type == "recommended"
+    assert entry.status == "completed"
+    assert [item.recall_result for item in entry.items] == ["missed", "understood"]
+    assert all(item.completed for item in entry.items)
+
+
+def test_quick_practice_history_keeps_active_completed_abandoned_visibly_distinct(conn, all_time_range):
+    material_id, cues = _make_material_with_cues(conn)
+    _make_quick_practice_session(conn, material_id, [cues[0].id], status="completed", recall_results=["understood"])
+    _make_quick_practice_session(conn, material_id, [cues[0].id], status="abandoned")
+    _make_quick_practice_session(conn, material_id, [cues[0].id], status="active")
+
+    entries = svc.list_quick_practice_history(conn, material_id, all_time_range)
+    statuses = sorted(e.status for e in entries)
+    assert statuses == ["abandoned", "active", "completed"]
 
 
 # ---- empty / partial states ----

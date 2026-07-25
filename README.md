@@ -67,7 +67,7 @@ Run the automated tests:
 
 ## Development Status
 
-Milestones 1–9 are implemented and verified. Users can import a local media file plus an SRT/WebVTT subtitle into a library, view details, rename, archive/restore, and remove records, then open a synchronized player: play/pause/seek, active-cue tracking, previous/next-cue navigation, replay-once, single-cue and continuous-range looping, transcript show/hide, volume/mute, and keyboard shortcuts. The player includes an integrated transcript workspace: select an editing cue (independent of whatever cue is currently playing), select a text range, and save one or more semantic labels (keyword, known-but-not-heard, connected/reduced speech, misheard, unknown word/chunk) as annotations; keep a free-form note per cue; and save reusable word/phrase/chunk/sentence-pattern language items with source context.
+Milestones 1–10 are implemented and verified. Users can import a local media file plus an SRT/WebVTT subtitle into a library, view details, rename, archive/restore, and remove records, then open a synchronized player: play/pause/seek, active-cue tracking, previous/next-cue navigation, replay-once, single-cue and continuous-range looping, transcript show/hide, volume/mute, and keyboard shortcuts. The player includes an integrated transcript workspace: select an editing cue (independent of whatever cue is currently playing), select a text range, and save one or more semantic labels (keyword, known-but-not-heard, connected/reduced speech, misheard, unknown word/chunk) as annotations; keep a free-form note per cue; and save reusable word/phrase/chunk/sentence-pattern language items with source context.
 
 The library also offers a guided, resumable intensive-listening session (Start/Resume Intensive Practice, plus a Session History view) alongside the standalone player: five sequential stages — global comprehension, keyword/fragment capture, transcript comparison and error diagnosis, sentence-level shadowing, and a transcript-free final summary — each with its own persisted status (not started/in progress/completed/skipped) and explicit Skip Stage support so the workflow never becomes a rigid exam. At most one intensive session is active per material at a time; completed or abandoned sessions remain as read-only history. Revealing the transcript for Stage 3 locks Stages 1 and 2 as read-only evidence for that session. Stage 3 diagnosis reuses the exact same semantic-label/highlighting/Unicode-offset logic as the standalone workspace, recording a repeatable per-session snapshot that optionally links to (without ever overwriting) a shared material-level annotation. Duplicate handling, atomic writes, and no modification of source files apply throughout.
 
@@ -79,7 +79,9 @@ A global **Learning History** view (opens with no material selected, or preselec
 
 From Learning History, **Export Learning Evidence** builds a local, user-controlled Markdown or JSON export of the same stored evidence: choose a scope (All Materials / One Material / Selected Materials), a date range (the same presets and local-time rules as Learning History), which evidence categories to include, and which privacy-sensitive fields (transcript excerpts, learner notes, mishearing text, vocabulary meanings, source labels, local file names) to include or redact — an unchecked field is redacted in place, never silently dropped along with its whole record. Absolute paths, original media/subtitle/recording paths, and raw audio are never included, regardless of any selection. A preview (Markdown, JSON, and a separate reusable external-evaluation instruction template) is generated before anything is saved or copied, and the exact same generated text is what gets written to disk (atomically, with overwrite confirmation) or copied to the clipboard — nothing is ever regenerated between preview and save. The JSON export carries a stable `export_version` (currently `1`), independent of the database schema version. No network request is made anywhere in the export flow.
 
-Milestone 10 — Quick Practice Mode remains before feature freeze; it is the final planned user-feature milestone for the first release. Milestone 11's optional assisted features (speech recognition, pronunciation feedback, translation, and similar) are deferred beyond v1.0. After Milestone 10 is accepted, work shifts to packaging, release hardening, clean-machine testing, and v1.0 delivery — see `ROADMAP.md`.
+The library also offers **Quick Practice** — a short, low-friction, cue-based practice mode, a companion to Guided Intensive Listening rather than a replacement for it. Start it from the Material Library / Learning History (**Quick Practice**, choosing Recommended Practice — 3, 5, or 10 cues, default 5, from a deterministic, reason-based recommendation list built from existing diagnosis/quiz/shadowing evidence, with a safe fallback when too little evidence exists — or Selected Cues, in whatever order picked) or from the Player (**Quick Practice This Cue** / **Quick Practice Selected Cues**, starting immediately from the current cue or range). Each cue runs one compact, forward-only cycle: Listen (transcript hidden) -> Recall (Understood/Partly Understood/Missed, required, plus an optional guessed fragment) -> Reveal & Diagnose (the same semantic labels and validation as the standalone workspace, always optional) -> Replay & Shadow (optional explicit shadowing mark, optional recording through the same shared recording widget). There is no exact-step resume: closing after at least one completed cue preserves that evidence as a read-only abandoned run; closing before any cue is completed discards the run entirely rather than leaving misleading history. A concise completion summary (cues completed, recall-result counts, diagnoses created, shadowing actions, recordings created, cues worth revisiting) never computes an effective-time, pronunciation, ability, difficulty, or improvement score. Quick Practice evidence is always counted separately from Intensive Practice and Quiz evidence in Learning History (a `Quick Practices Completed` overview count, its own Activity entries, and a dedicated history tab), can trigger its own transparent Needs Attention reason (`Missed repeatedly in Quick Practice`, requiring at least two Missed results), and has its own independent, privacy-controlled export category.
+
+Milestone 10 was the final planned user-feature milestone for the first release; the project is now in feature freeze. Milestone 11's optional assisted features (speech recognition, pronunciation feedback, translation, and similar) are deferred beyond v1.0. Work now shifts to packaging, release hardening, clean-machine testing, and v1.0 delivery — see `ROADMAP.md`.
 
 See:
 
@@ -100,23 +102,29 @@ src/listentrace/
                        # DeviceResolution, DeletionSummary, learning_history (OverviewMetrics,
                        # ActivityItem, SessionHistoryEntry, DiagnosisCategorySummary, QuizHistoryEntry,
                        # QuizComparisonGroup, NeedsAttentionEntry, ShadowingEvidenceEntry,
-                       # RecordingEvidenceEntry/Summary, ChartData/ChartPoint, export
-                       # (ExportScope/ExportBundle)
+                       # RecordingEvidenceEntry/Summary, QuickPracticeHistoryEntry/ItemResult,
+                       # ChartData/ChartPoint, export (ExportScope/ExportBundle), quick_practice
+                       # (QuickPracticeSessionState/ItemState, RecommendedCueEntry,
+                       # QuickPracticeCompletionSummary)
     services/         # material_import_service, material_library_service,
                        # player_loading_service, player_session (pure, no Qt),
                        # annotation_service, cue_note_service, saved_language_item_service,
                        # label_preference_service, cue_workspace_service, practice_session_service,
                        # quiz_service, recording_service, learning_history_service,
                        # export_service (build_export), export_formatters (Markdown/JSON/
-                       # evaluation-template rendering)
+                       # evaluation-template rendering), quick_practice_service (recommend_cues,
+                       # start_recommended_session/start_selected_session, recall/diagnosis/
+                       # shadowed/completion lifecycle, close_session, completion summary)
   domain/
     enums/            # MaterialStatus, AnnotationLabel, SavedItemType, SessionStatus, StageStatus,
                        # StageKey, KeywordCaptureType, StageOutcome, ShadowingStatus, QuizMode,
-                       # QuizStatus, QuestionType, AnsweredState, RecordingStatus
+                       # QuizStatus, QuestionType, AnsweredState, RecordingStatus, RecallResult,
+                       # QuickPracticeStatus, QuickPracticeSource
     models/           # Material, SubtitleTrack, SubtitleCue, Annotation, CueNote, SavedLanguageItem,
                        # PracticeSession, SessionStageProgress, StageResponse, KeywordCapture,
                        # SessionDiagnosisEvidence, ShadowingCueProgress, QuizAttempt, QuizQuestion,
-                       # QuizAnswer, Recording, MicrophonePreference
+                       # QuizAnswer, Recording, MicrophonePreference, QuickPracticeSession,
+                       # QuickPracticeItem, QuickPracticeDiagnosisEvidence
     services/         # CueIndex (active-cue/navigation rules), text_range (canonical selection
                        # offsets), session_rules (session/stage lifecycle + completion eligibility),
                        # quiz_rules (deterministic generation/scoring math), recording_rules
@@ -124,12 +132,15 @@ src/listentrace/
                        # (source-vs-take comparison state machine), date_range (timezone-safe
                        # date-range-preset resolution), needs_attention_rules (transparent,
                        # independently-named material-attention reasons), export_privacy (evidence-
-                       # category/privacy-field defaults and redaction rules) — all pure, no Qt
+                       # category/privacy-field defaults and redaction rules), quick_practice_rules
+                       # (lifecycle/completion rules), quick_practice_recommendation (deterministic,
+                       # reason-based cue recommendation) — all pure, no Qt
   infrastructure/
     db/               # SQLite connection, migrations, repository + learning_repository +
                        # session_repository + quiz_repository + recording_repository +
-                       # history_repository + export_repository (narrow export-only queries)
-                       # functions
+                       # history_repository + export_repository (narrow export-only queries) +
+                       # quick_practice_repository (live-workflow CRUD + recommendation evidence
+                       # queries) functions
     subtitles/        # SRT/WebVTT parsers, timecode and text normalization
     media/            # PlaybackController adapter around QtMultimedia playback; RecordingController
                        # adapter around QtMultimedia audio capture; file validation/fingerprinting
@@ -142,23 +153,28 @@ src/listentrace/
     text_offset_conversion.py   # shared Qt UTF-16 <-> Python code-point offset conversion
     app.py            # application entry point
     widgets/          # RecordingPanel — the one recording UI, shared by GuidedSessionWindow
-                       # Stage 4 and ShadowingPracticeWindow (not duplicated); SimpleBarChart —
-                       # a small dependency-free QPainter bar chart used by Learning History
+                       # Stage 4, ShadowingPracticeWindow, and QuickPracticeWindow (not duplicated);
+                       # SimpleBarChart — a small dependency-free QPainter bar chart used by
+                       # Learning History
     windows/          # MainWindow (material library), ImportDialog, PlayerWindow
                        # (with integrated transcript workspace), LabelColorDialog,
                        # GuidedSessionWindow (five-stage guided session), SessionHistoryDialog,
                        # QuizWindow, QuizHistoryDialog, QuizReviewDialog, ShadowingPracticeWindow,
                        # LearningHistoryWindow (global learning-evidence center), ExportDialog
-                       # (scope/date/category/privacy selection, preview, save, copy)
+                       # (scope/date/category/privacy selection, preview, save, copy),
+                       # QuickPracticeStartDialog (Recommended/Selected Cues), QuickPracticeWindow
+                       # (per-cue Listen&Recall/Diagnose/Replay&Shadow cycle + completion summary)
 tests/
   unit/               # subtitle parsing, CueIndex, PlayerSession, text_range, session_rules,
                        # quiz_rules, recording_rules, comparison_sequence, date_range,
-                       # needs_attention_rules, export_privacy, export_formatters, export_io
+                       # needs_attention_rules, export_privacy, export_formatters, export_io,
+                       # quick_practice_rules, quick_practice_recommendation
   integration/        # database/migrations, import, library, player, player workspace,
                        # annotations, cue notes, saved language items, label preferences,
                        # practice_session_service, guided session window, quiz_service,
                        # recording_service, learning_history_service, learning history window,
-                       # export_service, export dialog, UI smoke
+                       # export_service, export dialog, quick_practice_service, quick practice
+                       # window, quick practice start dialog, quick practice entry points, UI smoke
   fixtures/
 docs/
 ```
@@ -181,6 +197,7 @@ docs/
 - Text-only transcripts cannot provide reliable sentence seeking unless timing data is added.
 - If a recording file cannot be deleted while removing its material (e.g. locked by another process at that exact moment), the material is not removed at all — it and the still-undeleted recording stay in place until the learner resolves the issue and retries.
 - Speech recognition, pronunciation scoring, automatic translation, subtitle generation, dictionary lookups, and cloud synchronization are outside the first release.
+- Quick Practice has no back navigation and no exact-step resume by design — closing mid-run either preserves completed-cue evidence as read-only "abandoned" history or, if nothing was completed yet, discards the run entirely; a completed or abandoned run can never resume as itself. Its completion summary's "recordings created during this run" figure is a best-effort correlation (matching cues and creation time), not a persisted link, since Quick Practice recordings are ordinary standalone recordings with no schema link back to the run.
 - Users are responsible for using media and transcript material they are legally permitted to use.
 
 ## Privacy

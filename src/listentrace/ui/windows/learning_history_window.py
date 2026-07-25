@@ -9,6 +9,7 @@ from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QDateEdit,
+    QDialog,
     QHBoxLayout,
     QLabel,
     QListWidget,
@@ -25,6 +26,7 @@ from PySide6.QtWidgets import (
 
 from listentrace.application.dto.learning_history import (
     ActivityItem,
+    QuickPracticeHistoryEntry,
     RecordingEvidenceEntry,
     SessionHistoryEntry,
     ShadowingEvidenceEntry,
@@ -38,6 +40,8 @@ from listentrace.ui.widgets.simple_bar_chart import SimpleBarChart
 from listentrace.ui.windows.export_dialog import ExportDialog
 from listentrace.ui.windows.guided_session_window import GuidedSessionWindow
 from listentrace.ui.windows.player_window import PlayerWindow, _format_time
+from listentrace.ui.windows.quick_practice_start_dialog import QuickPracticeStartDialog
+from listentrace.ui.windows.quick_practice_window import QuickPracticeWindow
 from listentrace.ui.windows.quiz_review_dialog import QuizReviewDialog
 from listentrace.ui.windows.quiz_window import QuizWindow
 from listentrace.ui.windows.shadowing_practice_window import ShadowingPracticeWindow
@@ -52,7 +56,7 @@ _PRESET_LABELS: list[tuple[str, str]] = [
     ("All Time", date_range_rules.PRESET_ALL_TIME),
 ]
 
-_ACTIVITY_TYPES = ("session", "quiz", "diagnosis", "shadowing", "recording")
+_ACTIVITY_TYPES = ("session", "quiz", "diagnosis", "shadowing", "recording", "quick_practice")
 
 
 def _format_duration_ms(duration_ms: int | None) -> str:
@@ -120,6 +124,9 @@ class LearningHistoryWindow(QMainWindow):
         self._apply_button = QPushButton("Apply")
         self._apply_button.clicked.connect(self._on_reload_clicked)
         filter_row.addWidget(self._apply_button)
+        self._quick_practice_button = QPushButton("Quick Practice...")
+        self._quick_practice_button.clicked.connect(self._on_quick_practice_clicked)
+        filter_row.addWidget(self._quick_practice_button)
         self._export_button = QPushButton("Export Learning Evidence...")
         self._export_button.clicked.connect(self._on_export_clicked)
         filter_row.addWidget(self._export_button)
@@ -139,6 +146,7 @@ class LearningHistoryWindow(QMainWindow):
         self._tabs.addTab(self._build_diagnoses_tab(), "Diagnoses")
         self._tabs.addTab(self._build_quizzes_tab(), "Quizzes")
         self._tabs.addTab(self._build_shadowing_recordings_tab(), "Shadowing & Recordings")
+        self._tabs.addTab(self._build_quick_practice_tab(), "Quick Practice")
 
         self.setCentralWidget(central)
 
@@ -210,6 +218,7 @@ class LearningHistoryWindow(QMainWindow):
         self._populate_diagnoses(conn, material_id, resolved_range)
         self._populate_quizzes(conn, material_id, resolved_range)
         self._populate_shadowing_recordings(conn, material_id, resolved_range)
+        self._populate_quick_practice(conn, material_id, resolved_range)
 
     # ---- Overview tab ----
 
@@ -264,6 +273,7 @@ class LearningHistoryWindow(QMainWindow):
             f"{overview.shadowing_practice_count}",
             f"Retained Recordings: {overview.retained_recording_count} "
             f"({_format_duration_ms(overview.retained_recording_total_duration_ms)} total)",
+            f"Quick Practices Completed: {overview.quick_practices_completed}",
         ]
         self._overview_label.setText("\n".join(lines))
 
@@ -406,6 +416,11 @@ class LearningHistoryWindow(QMainWindow):
                 self._open_guided_session(entry.material_id, entry.session_id)
             else:
                 self._open_shadowing(entry.material_id, entry.subtitle_cue_id)
+        elif entry.activity_type == "quick_practice":
+            # Quick Practice has no exact-step resume (see ROADMAP.md) — a
+            # read-only history entry safely opens the material itself
+            # rather than attempting to resume the run.
+            self._open_material(entry.material_id)
 
     # ---- Sessions tab ----
 
@@ -709,6 +724,54 @@ class LearningHistoryWindow(QMainWindow):
         else:
             self._open_shadowing(entry.material_id, entry.subtitle_cue_id)
 
+    # ---- Quick Practice tab ----
+
+    def _build_quick_practice_tab(self) -> QWidget:
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        layout.addWidget(
+            QLabel(
+                "Quick Practice runs — Active/Completed/Abandoned kept visibly distinct, "
+                "never counted as Intensive Sessions or Quiz Attempts (double-click opens the material):"
+            )
+        )
+        self._quick_practice_list = QListWidget()
+        self._quick_practice_list.itemDoubleClicked.connect(self._on_quick_practice_item_double_clicked)
+        layout.addWidget(self._quick_practice_list, 1)
+        return widget
+
+    def _quick_practice_entry_text(self, entry: QuickPracticeHistoryEntry) -> str:
+        anchor = entry.completed_at or entry.abandoned_at or entry.started_at
+        results = ", ".join(
+            f"{item.cue_text[:24]}: {item.recall_result or 'in progress'}" for item in entry.items
+        )
+        text = (
+            f"[{entry.status}] {entry.material_title} — {entry.source_type} — {anchor} — "
+            f"{entry.actual_count} cue(s)"
+        )
+        if results:
+            text += f" — {results}"
+        return text
+
+    def _populate_quick_practice(
+        self, conn: sqlite3.Connection, material_id: int | None, resolved_range: date_range_rules.ResolvedDateRange
+    ) -> None:
+        self._quick_practice_entries = history_svc.list_quick_practice_history(conn, material_id, resolved_range)
+        self._quick_practice_list.clear()
+        for entry in self._quick_practice_entries:
+            item = QListWidgetItem(self._quick_practice_entry_text(entry))
+            item.setData(Qt.ItemDataRole.UserRole, entry)
+            self._quick_practice_list.addItem(item)
+        if not self._quick_practice_entries:
+            empty = QListWidgetItem("No Quick Practice runs for the selected filters.")
+            empty.setFlags(Qt.ItemFlag.NoItemFlags)
+            self._quick_practice_list.addItem(empty)
+
+    def _on_quick_practice_item_double_clicked(self, item: QListWidgetItem) -> None:
+        entry: QuickPracticeHistoryEntry | None = item.data(Qt.ItemDataRole.UserRole)
+        if entry is not None:
+            self._open_material(entry.material_id)
+
     # ---- shared navigation ----
 
     def _open_material(self, material_id: int, initial_cue_id: int | None = None) -> None:
@@ -764,3 +827,30 @@ class LearningHistoryWindow(QMainWindow):
     def _on_export_clicked(self) -> None:
         dialog = ExportDialog(self._connection, self, initial_material_id=self._selected_material_id())
         dialog.exec()
+
+    def _on_quick_practice_clicked(self) -> None:
+        material_id = self._selected_material_id()
+        if material_id is None:
+            QMessageBox.information(
+                self, "Select a Material", "Select one material from the filter above to start Quick Practice."
+            )
+            return
+        try:
+            load_result = load_material_for_player(self._connection, material_id)
+        except PlayerOpenError as exc:
+            QMessageBox.warning(self, "Cannot Start Quick Practice", str(exc))
+            return
+        if not load_result.cues:
+            QMessageBox.warning(
+                self, "Cannot Start Quick Practice", "This material has no timed cues available for Quick Practice."
+            )
+            return
+        start_dialog = QuickPracticeStartDialog(
+            self._connection, material_id, load_result.material.title, load_result.cues, self
+        )
+        if start_dialog.exec() != QDialog.DialogCode.Accepted or start_dialog.started_session_id is None:
+            return
+        self._child_window = QuickPracticeWindow(
+            self._connection, load_result, start_dialog.started_session_id, self._recordings_dir, self
+        )
+        self._child_window.show()

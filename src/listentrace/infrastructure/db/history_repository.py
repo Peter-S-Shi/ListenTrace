@@ -73,6 +73,12 @@ _ACTIVITY_UNION_SQL = """
            r.id, r.subtitle_cue_id, NULL, r.status, NULL, r.practice_session_id
     FROM recording r JOIN material m ON m.id = r.material_id
     WHERE r.status = 'ready'
+
+    UNION ALL
+
+    SELECT 'quick_practice', COALESCE(qps.completed_at, qps.abandoned_at, qps.started_at),
+           qps.material_id, m.title, qps.id, NULL, NULL, qps.status, NULL, NULL
+    FROM quick_practice_session qps JOIN material m ON m.id = qps.material_id
 """
 
 
@@ -613,6 +619,22 @@ def list_session_status_counts_by_material(conn: sqlite3.Connection) -> dict[int
     return result
 
 
+def list_quick_practice_missed_counts_by_material(conn: sqlite3.Connection) -> dict[int, int]:
+    """Per material: total completed Quick Practice items with a Missed
+    recall result, across every run regardless of that run's own status —
+    a current snapshot for Needs Attention, unfiltered by date range."""
+    rows = conn.execute(
+        """
+        SELECT quick_practice_session.material_id AS material_id, COUNT(*) AS n
+        FROM quick_practice_item
+        JOIN quick_practice_session ON quick_practice_session.id = quick_practice_item.quick_practice_session_id
+        WHERE quick_practice_item.recall_result = 'missed' AND quick_practice_item.completed_at IS NOT NULL
+        GROUP BY quick_practice_session.material_id
+        """
+    ).fetchall()
+    return {row["material_id"]: row["n"] for row in rows}
+
+
 def list_skipped_stage_counts_by_material(conn: sqlite3.Connection) -> dict[int, list[int]]:
     """Per material: one entry per completed/abandoned session, counting how
     many of its 5 stages ended up `skipped`. Active sessions are excluded —
@@ -631,6 +653,95 @@ def list_skipped_stage_counts_by_material(conn: sqlite3.Connection) -> dict[int,
     for row in rows:
         result.setdefault(row["material_id"], []).append(row["skipped_count"])
     return result
+
+
+# ---- quick practice (Milestone 10) ----
+#
+# Kept in its own section with its own anchor expression, mirroring the
+# session/quiz split above: `quick_practice_session` has no `last_resumed_at`
+# (Quick Practice has no exact-step resume, see ARCHITECTURE.md), so its
+# anchor is COALESCE(completed_at, abandoned_at, started_at) instead.
+
+
+def list_quick_practice_sessions(
+    conn: sqlite3.Connection,
+    material_id: int | None = None,
+    start_utc: str | None = None,
+    end_utc: str | None = None,
+    statuses: list[str] | None = None,
+) -> list[sqlite3.Row]:
+    conditions: list[str] = ["1 = 1"]
+    params: list = []
+    if material_id is not None:
+        conditions.append("quick_practice_session.material_id = ?")
+        params.append(material_id)
+    _append_range(
+        conditions,
+        params,
+        "COALESCE(quick_practice_session.completed_at, quick_practice_session.abandoned_at, "
+        "quick_practice_session.started_at)",
+        start_utc,
+        end_utc,
+    )
+    if statuses:
+        placeholders = ", ".join("?" for _ in statuses)
+        conditions.append(f"quick_practice_session.status IN ({placeholders})")
+        params.extend(statuses)
+    sql = f"""
+        SELECT quick_practice_session.*, material.title AS material_title
+        FROM quick_practice_session
+        JOIN material ON material.id = quick_practice_session.material_id
+        WHERE {" AND ".join(conditions)}
+        ORDER BY quick_practice_session.started_at DESC, quick_practice_session.id DESC
+    """
+    return conn.execute(sql, params).fetchall()
+
+
+def list_items_for_quick_practice_sessions(
+    conn: sqlite3.Connection, session_ids: list[int]
+) -> dict[int, list[sqlite3.Row]]:
+    """Per-session cue results, in one bounded batch query (never one query
+    per session) — the "per-session cue results" Learning History surfaces
+    for Quick Practice history."""
+    if not session_ids:
+        return {}
+    placeholders = ", ".join("?" for _ in session_ids)
+    rows = conn.execute(
+        f"""
+        SELECT quick_practice_item.*, subtitle_cue.text AS cue_text,
+               (SELECT COUNT(*) FROM quick_practice_diagnosis_evidence
+                WHERE quick_practice_diagnosis_evidence.quick_practice_item_id = quick_practice_item.id) AS diagnosis_count
+        FROM quick_practice_item
+        JOIN subtitle_cue ON subtitle_cue.id = quick_practice_item.subtitle_cue_id
+        WHERE quick_practice_item.quick_practice_session_id IN ({placeholders})
+        ORDER BY quick_practice_item.quick_practice_session_id, quick_practice_item.position
+        """,
+        session_ids,
+    ).fetchall()
+    result: dict[int, list[sqlite3.Row]] = {}
+    for row in rows:
+        result.setdefault(row["quick_practice_session_id"], []).append(row)
+    return result
+
+
+def count_quick_practice_sessions(
+    conn: sqlite3.Connection,
+    status: str,
+    anchor_column: str,
+    material_id: int | None = None,
+    start_utc: str | None = None,
+    end_utc: str | None = None,
+) -> int:
+    if anchor_column not in {"started_at", "completed_at", "abandoned_at"}:
+        raise ValueError(f"Unsupported anchor column: {anchor_column!r}")
+    conditions = ["status = ?"]
+    params: list = [status]
+    if material_id is not None:
+        conditions.append("material_id = ?")
+        params.append(material_id)
+    _append_range(conditions, params, anchor_column, start_utc, end_utc)
+    sql = f"SELECT COUNT(*) AS n FROM quick_practice_session WHERE {' AND '.join(conditions)}"
+    return int(conn.execute(sql, params).fetchone()["n"])
 
 
 # ---- charts ----

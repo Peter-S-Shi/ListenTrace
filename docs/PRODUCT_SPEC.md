@@ -4,7 +4,7 @@
 
 ListenTrace is a desktop listening-practice workspace for learners who want to understand why natural foreign-language speech was not recognized.
 
-It combines local media, a matching transcript, repeated listening, semantic error tagging, shadowing, quizzes, and learning history.
+It combines local media, a matching transcript, repeated listening, semantic error tagging, shadowing, quizzes, quick practice, and learning history.
 
 ## Primary User
 
@@ -316,11 +316,30 @@ Requirements:
 - Quiz question/answer exports read only each attempt's immutable generation-time snapshot, never live cue or annotation text, so an export remains accurate even after the source material is later edited. Incomplete (active or abandoned) quiz attempts are excluded from export the same way they are excluded from Learning History's own averages. Session diagnosis history and current material annotations are exported under separate keys and are never merged or added together.
 - No network request occurs anywhere in the export flow; no account, API key, cloud upload, scheduled export, or embedded AI submission exists.
 
+## Quick Practice
+
+A short, low-friction, cue-based practice mode — a companion to Guided Intensive Listening, never a replacement for it. Typically 5-10 minutes; the application never displays or calculates effective study time.
+
+- **Two ways to start**: **Recommended Practice** (3, 5, or 10 cues, default 5 — a deterministic list built from existing local evidence: recent Misheard/Known but Not Heard/Connected or Reduced Speech diagnosis, incorrect quiz evidence, recurring diagnosis history, and little-or-no shadowing practice as an amplifying signal only, never a qualifying one on its own; every recommended cue shows its own transparent reason(s), never a hidden score; when too little evidence exists, the list safely falls back to material order with no invented reasons) or **Selected Cues** (one cue, a continuous range, or an explicit multi-cue selection — order preserved exactly as picked).
+- **Entry points**: Material Library / Learning History (**Quick Practice**, opens the start dialog), the Player (**Quick Practice This Cue** for the current editing cue, **Quick Practice Selected Cues** for a selected range — both start immediately, no dialog needed since the cue selection is already unambiguous).
+- **Per-cue micro-cycle**, forward-only (no back navigation, no exact-step resume):
+  1. **Listen** — transcript hidden, replay freely.
+  2. **Recall** — choose Understood / Partly Understood / Missed (required to continue); an optional short typed guess at what was heard.
+  3. **Reveal & Diagnose** — the transcript is revealed as the natural next step after Recall (never automatically during Listen); add one or more of the same five semantic diagnosis labels used everywhere else in the app, or add none and continue — diagnosis is always optional and reuses the exact same validation, annotation reuse, and Misheard-requires-an-explanation rule as the standalone workspace and Guided Session Stage 3.
+  4. **Replay & Shadow** — replay the source, optionally mark the cue explicitly shadowed, optionally record a take through the same shared recording widget used everywhere else — recording is always optional and never blocks moving on.
+- **Progressive, forward-only persistence.** Each cue's result is saved as it happens; there is no "current step" to resume into after closing the app. Closing mid-run preserves every already-completed cue's evidence and marks the run **abandoned** (with a confirmation, since real evidence would otherwise be lost); closing before any cue is completed **discards the run entirely** so it never appears as misleading history — no confirmation is needed, since nothing was recorded yet. A completed or abandoned run is permanently read-only and can never resume as itself; a later Quick Practice always starts a new run.
+- **A concise, read-only completion summary**: cues completed, Understood/Partly Understood/Missed counts, diagnoses created, explicit shadowing actions, recordings created during the run, and which cues are worth revisiting (a Missed result or at least one diagnosis) — never an effective-time, pronunciation, ability, difficulty, or improvement score.
+- **Evidence stays distinct from Intensive Practice, Quiz Attempts, and plain player activity.** A Quick Practice run is never counted as a completed Intensive Session or a completed quiz, and diagnosis recorded through it carries its own explicit provenance even though it reuses the same underlying `Annotation` records everyone else edits.
+- **Learning History** shows a `Quick Practices Completed` overview count, `quick_practice` Activity feed entries, and a dedicated Quick Practice tab with each run's status (Active/Completed/Abandoned kept visibly distinct) and its own per-cue results.
+- **Needs Attention** may flag a material with `Missed repeatedly in Quick Practice` once at least two completed items have a Missed recall result, across any number of runs — a single isolated Missed result never raises this on its own.
+- **Export** offers an independent `quick_practice_evidence` category (on by default, alongside the other summary-level categories — Quick Practice evidence is closer in verbosity to a summary than to raw transcript text) covering scope, source type, cue order, recall result, heard fragment, related diagnosis evidence, explicit shadowing evidence, and timestamps, with the same privacy controls as everywhere else (transcript excerpts, mishearing text, learner notes) — never recording metadata or any path.
+- No AI recommendation, pronunciation scoring, adaptive difficulty, countdown, streaks, points, or other game mechanics exist anywhere in Quick Practice.
+
 ## Release Scope
 
-- Quick Practice (Milestone 10) is in scope for the first release; its roadmap-level definition is locked in `ROADMAP.md`. After its acceptance the project enters feature freeze.
+- Quick Practice (Milestone 10) is implemented; the project is now in feature freeze for the first release. No further user-feature milestones are planned before v1.0.
 - Milestone 11's optional assisted features (speech recognition, pronunciation feedback, translation assistance, subtitle generation, question generation) are outside first-release scope and remain deferred until after a packaged, tested, successfully used v1.0.
-- Windows-first packaging and release validation (packaging spike, release hardening, clean-machine testing, release-candidate validation) follow feature completion, not before it — see `ROADMAP.md`'s Post-M10 sequence.
+- Windows-first packaging and release validation (packaging spike, release hardening, clean-machine testing, release-candidate validation) follow feature completion — see `ROADMAP.md`'s Post-M10 sequence, which is the project's next engineering objective.
 
 ## Copyright and Source Policy
 

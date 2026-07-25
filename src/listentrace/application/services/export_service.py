@@ -15,6 +15,7 @@ from listentrace.domain.services.date_range import SQLITE_UTC_TIMESTAMP_FORMAT, 
 from listentrace.infrastructure.db import export_repository as export_repo
 from listentrace.infrastructure.db import history_repository as history_repo
 from listentrace.infrastructure.db import learning_repository, quiz_repository, session_repository
+from listentrace.infrastructure.db import quick_practice_repository
 
 """Application service for Milestone 9 (Structured Export and External
 Evaluation).
@@ -32,6 +33,9 @@ generated exports — this module only reads.
 """
 
 EXPORT_VERSION = 1
+"""Milestone 10 added the optional `quick_practice_evidence` key to each
+material's export block without changing the meaning of any existing
+field, so `export_version` stays at 1 (see ARCHITECTURE.md)."""
 
 TIMESTAMP_CONVENTION = (
     "All timestamps in this export are exactly as recorded by ListenTrace, in "
@@ -133,6 +137,11 @@ def _build_material_export(
 
     if privacy.CATEGORY_VOCABULARY in categories:
         block["vocabulary_and_saved_chunks"] = _build_saved_items(conn, material_id, privacy_fields)
+
+    if privacy.CATEGORY_QUICK_PRACTICE_EVIDENCE in categories:
+        block["quick_practice_evidence"] = _build_quick_practice_evidence(
+            conn, material_id, resolved_range, privacy_fields
+        )
 
     return block
 
@@ -415,6 +424,70 @@ def _build_cue_notes(conn: sqlite3.Connection, material_id: int, privacy_fields:
         }
         for row in rows
     ]
+
+
+def _build_quick_practice_evidence(
+    conn: sqlite3.Connection, material_id: int, resolved_range: ResolvedDateRange, privacy_fields: frozenset[str]
+) -> list[dict]:
+    """One entry per Quick Practice run (Milestone 10), each with its own
+    per-cue results — never merged with Intensive Practice or Quiz
+    evidence. `heard_fragment` (the learner's own guess, recorded before
+    the transcript is revealed) is gated under `mishearing_text`, the same
+    privacy field already used for the conceptually equivalent `heard_as`
+    field elsewhere — a documented reading of the milestone prompt's
+    "learner-text or mishearing control" choice (see ARCHITECTURE.md)."""
+    rows = history_repo.list_quick_practice_sessions(conn, material_id, resolved_range.start_utc, resolved_range.end_utc)
+    result: list[dict] = []
+    for row in rows:
+        session_id = row["id"]
+        diagnosis_by_item: dict[int, list] = {}
+        for evidence in quick_practice_repository.list_diagnosis_for_session(conn, session_id):
+            diagnosis_by_item.setdefault(evidence.quick_practice_item_id, []).append(evidence)
+
+        items = []
+        for item in quick_practice_repository.list_items(conn, session_id):
+            items.append(
+                {
+                    "position": item.position,
+                    "subtitle_cue_id": item.subtitle_cue_id,
+                    "recall_result": item.recall_result,
+                    "heard_fragment": privacy.redact_unless_included(
+                        item.heard_fragment, privacy.PRIVACY_MISHEARING_TEXT, privacy_fields
+                    ),
+                    "completed": item.completed_at is not None,
+                    "shadowed": item.shadowed_at is not None,
+                    "diagnosis": [
+                        {
+                            "label_key": evidence.label_key,
+                            "transcript_excerpt": privacy.redact_unless_included(
+                                evidence.selected_text, privacy.PRIVACY_TRANSCRIPT_EXCERPTS, privacy_fields
+                            ),
+                            "heard_as": privacy.redact_unless_included(
+                                evidence.heard_as, privacy.PRIVACY_MISHEARING_TEXT, privacy_fields
+                            ),
+                            "note": privacy.redact_unless_included(
+                                evidence.note, privacy.PRIVACY_LEARNER_NOTES, privacy_fields
+                            ),
+                        }
+                        for evidence in diagnosis_by_item.get(item.id, [])
+                    ],
+                }
+            )
+
+        result.append(
+            {
+                "session_id": session_id,
+                "source_type": row["source_type"],
+                "status": row["status"],
+                "requested_count": row["requested_count"],
+                "actual_count": row["actual_count"],
+                "started_at": row["started_at"],
+                "completed_at": row["completed_at"],
+                "abandoned_at": row["abandoned_at"],
+                "items": items,
+            }
+        )
+    return result
 
 
 def _build_saved_items(conn: sqlite3.Connection, material_id: int, privacy_fields: frozenset[str]) -> list[dict]:

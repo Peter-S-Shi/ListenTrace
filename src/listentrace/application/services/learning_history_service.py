@@ -11,6 +11,8 @@ from listentrace.application.dto.learning_history import (
     NeedsAttentionEntry,
     OverviewMetrics,
     QuestionTypeBreakdown,
+    QuickPracticeHistoryEntry,
+    QuickPracticeItemResult,
     QuizComparisonGroup,
     QuizHistoryEntry,
     RecordingEvidenceEntry,
@@ -91,6 +93,9 @@ def get_overview(
         retained_recording_total_duration_ms=repo.sum_ready_recording_duration_ms(
             conn, material_id, start_utc, end_utc
         ),
+        quick_practices_completed=repo.count_quick_practice_sessions(
+            conn, "completed", "completed_at", material_id, start_utc, end_utc
+        ),
     )
 
 
@@ -109,6 +114,8 @@ def _activity_summary(row: sqlite3.Row) -> str:
         return f"Shadowing practiced — {row['status']}"
     if activity_type == "recording":
         return "Recording retained"
+    if activity_type == "quick_practice":
+        return f"Quick Practice — {row['status']}"
     return activity_type
 
 
@@ -296,8 +303,15 @@ def list_needs_attention(conn: sqlite3.Connection) -> list[NeedsAttentionEntry]:
     diagnosis_counts = repo.list_diagnosis_label_counts_by_material(conn)
     session_status_counts = repo.list_session_status_counts_by_material(conn)
     skipped_counts = repo.list_skipped_stage_counts_by_material(conn)
+    quick_practice_missed_counts = repo.list_quick_practice_missed_counts_by_material(conn)
 
-    material_ids = set(accuracies) | set(diagnosis_counts) | set(session_status_counts) | set(skipped_counts)
+    material_ids = (
+        set(accuracies)
+        | set(diagnosis_counts)
+        | set(session_status_counts)
+        | set(skipped_counts)
+        | set(quick_practice_missed_counts)
+    )
     if not material_ids:
         return []
     titles = {row["id"]: row["title"] for row in repo.list_all_materials(conn) if row["id"] in material_ids}
@@ -313,6 +327,7 @@ def list_needs_attention(conn: sqlite3.Connection) -> list[NeedsAttentionEntry]:
             total_session_count=sum(status_counts.values()),
             active_session_count=status_counts.get("active", 0),
             skipped_stage_counts_by_session=tuple(skipped_counts.get(material_id, [])),
+            quick_practice_missed_count=quick_practice_missed_counts.get(material_id, 0),
         )
         reasons = needs_attention_rules.evaluate_material(stats)
         if reasons:
@@ -385,6 +400,50 @@ def list_recording_evidence(
         conn, material_id, resolved_range.start_utc, resolved_range.end_utc
     )
     return RecordingEvidenceSummary(entries=entries, total_duration_ms=total_duration_ms)
+
+
+# ---- quick practice (Milestone 10) ----
+
+
+def list_quick_practice_history(
+    conn: sqlite3.Connection, material_id: int | None, resolved_range: date_range_rules.ResolvedDateRange
+) -> list[QuickPracticeHistoryEntry]:
+    """Every Quick Practice run (Active/Completed/Abandoned kept visibly
+    distinct via `.status`, matching Intensive Practice's own Sessions
+    tab), newest-started first, each with its own per-cue results — never
+    counted as a Completed Intensive Session or a Quiz Attempt."""
+    rows = repo.list_quick_practice_sessions(conn, material_id, resolved_range.start_utc, resolved_range.end_utc)
+    items_by_session = repo.list_items_for_quick_practice_sessions(conn, [row["id"] for row in rows])
+    return [_to_quick_practice_history_entry(row, items_by_session.get(row["id"], [])) for row in rows]
+
+
+def _to_quick_practice_history_entry(
+    row: sqlite3.Row, item_rows: list[sqlite3.Row]
+) -> QuickPracticeHistoryEntry:
+    return QuickPracticeHistoryEntry(
+        session_id=row["id"],
+        material_id=row["material_id"],
+        material_title=row["material_title"],
+        source_type=row["source_type"],
+        status=row["status"],
+        requested_count=row["requested_count"],
+        actual_count=row["actual_count"],
+        started_at=row["started_at"],
+        completed_at=row["completed_at"],
+        abandoned_at=row["abandoned_at"],
+        items=[
+            QuickPracticeItemResult(
+                subtitle_cue_id=item_row["subtitle_cue_id"],
+                cue_text=item_row["cue_text"],
+                position=item_row["position"],
+                recall_result=item_row["recall_result"],
+                completed=item_row["completed_at"] is not None,
+                diagnosis_count=item_row["diagnosis_count"],
+                shadowed=item_row["shadowed_at"] is not None,
+            )
+            for item_row in item_rows
+        ],
+    )
 
 
 # ---- charts (each backed by the same data as its tabular equivalent) ----

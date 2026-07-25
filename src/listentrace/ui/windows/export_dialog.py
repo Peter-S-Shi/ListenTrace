@@ -61,6 +61,7 @@ _CATEGORY_LABELS: dict[str, str] = {
     export_privacy.CATEGORY_RETAINED_RECORDING_METADATA: "Retained recording metadata",
     export_privacy.CATEGORY_LEARNER_NOTES: "Learner notes and summaries",
     export_privacy.CATEGORY_VOCABULARY: "Vocabulary and saved chunks",
+    export_privacy.CATEGORY_QUICK_PRACTICE_EVIDENCE: "Quick Practice evidence",
 }
 
 _PRIVACY_LABELS: dict[str, str] = {

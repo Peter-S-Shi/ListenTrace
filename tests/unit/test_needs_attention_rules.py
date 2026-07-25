@@ -12,6 +12,7 @@ def _stats(**overrides):
         total_session_count=0,
         active_session_count=0,
         skipped_stage_counts_by_session=(),
+        quick_practice_missed_count=0,
     )
     defaults.update(overrides)
     return rules.MaterialActivityStats(**defaults)
@@ -73,6 +74,16 @@ def test_many_skipped_stages_counts_sessions_at_or_above_threshold():
 def test_active_unfinished_session_is_flagged():
     stats = _stats(active_session_count=1)
     assert "active_unfinished_session" in [r.reason_key for r in rules.evaluate_material(stats)]
+
+
+def test_one_isolated_missed_quick_practice_result_is_not_flagged():
+    stats = _stats(quick_practice_missed_count=1)
+    assert "repeated_missed_in_quick_practice" not in [r.reason_key for r in rules.evaluate_material(stats)]
+
+
+def test_repeated_missed_quick_practice_results_are_flagged():
+    stats = _stats(quick_practice_missed_count=rules.REPEATED_QUICK_PRACTICE_MISSED_THRESHOLD)
+    assert "repeated_missed_in_quick_practice" in [r.reason_key for r in rules.evaluate_material(stats)]
 
 
 def test_reasons_never_produce_a_combined_score():

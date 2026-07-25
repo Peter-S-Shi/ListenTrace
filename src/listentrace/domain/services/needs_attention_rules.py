@@ -30,6 +30,12 @@ MANY_SKIPPED_STAGES_THRESHOLD = 2
 """A single session with at least this many skipped stages counts as "many
 skipped stages"."""
 
+REPEATED_QUICK_PRACTICE_MISSED_THRESHOLD = 2
+"""At least this many completed Quick Practice items with a Missed recall
+result counts as "repeated Missed in Quick Practice" — a single isolated
+Missed result must never raise this reason on its own (see ROADMAP.md /
+Milestone 10)."""
+
 
 @dataclass(slots=True, frozen=True)
 class MaterialActivityStats:
@@ -46,6 +52,9 @@ class MaterialActivityStats:
     active_session_count: int = 0
     skipped_stage_counts_by_session: tuple[int, ...] = ()
     """One entry per completed/abandoned session: how many of its stages were skipped."""
+    quick_practice_missed_count: int = 0
+    """Total completed Quick Practice items with a Missed recall result for
+    this material, across every run regardless of the run's own outcome."""
 
 
 @dataclass(slots=True, frozen=True)
@@ -111,6 +120,14 @@ def evaluate_material(stats: MaterialActivityStats) -> list[NeedsAttentionReason
             NeedsAttentionReason(
                 "active_unfinished_session",
                 f"{stats.active_session_count} active session(s) not yet completed.",
+            )
+        )
+
+    if stats.quick_practice_missed_count >= REPEATED_QUICK_PRACTICE_MISSED_THRESHOLD:
+        reasons.append(
+            NeedsAttentionReason(
+                "repeated_missed_in_quick_practice",
+                f"{stats.quick_practice_missed_count} Missed recall result(s) in Quick Practice.",
             )
         )
 

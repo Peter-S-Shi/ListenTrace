@@ -26,6 +26,9 @@ class OverviewMetrics:
     All Time."""
     retained_recording_count: int
     retained_recording_total_duration_ms: int
+    quick_practices_completed: int
+    """Never combined with `completed_sessions` (Intensive Practice) or a
+    quiz count — Quick Practice is its own distinct activity kind."""
 
 
 @dataclass(slots=True, frozen=True)
@@ -156,6 +159,32 @@ class RecordingEvidenceEntry:
 class RecordingEvidenceSummary:
     entries: list[RecordingEvidenceEntry]
     total_duration_ms: int
+
+
+@dataclass(slots=True, frozen=True)
+class QuickPracticeItemResult:
+    subtitle_cue_id: int
+    cue_text: str
+    position: int
+    recall_result: str | None
+    completed: bool
+    diagnosis_count: int
+    shadowed: bool
+
+
+@dataclass(slots=True, frozen=True)
+class QuickPracticeHistoryEntry:
+    session_id: int
+    material_id: int
+    material_title: str
+    source_type: str
+    status: str
+    requested_count: int
+    actual_count: int
+    started_at: str
+    completed_at: str | None
+    abandoned_at: str | None
+    items: list[QuickPracticeItemResult] = field(default_factory=list)
 
 
 @dataclass(slots=True, frozen=True)

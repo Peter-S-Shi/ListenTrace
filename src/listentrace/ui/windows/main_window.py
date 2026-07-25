@@ -35,6 +35,8 @@ from listentrace.ui.windows.guided_session_window import GuidedSessionWindow
 from listentrace.ui.windows.import_dialog import ImportDialog
 from listentrace.ui.windows.learning_history_window import LearningHistoryWindow
 from listentrace.ui.windows.player_window import PlayerWindow
+from listentrace.ui.windows.quick_practice_start_dialog import QuickPracticeStartDialog
+from listentrace.ui.windows.quick_practice_window import QuickPracticeWindow
 from listentrace.ui.windows.quiz_history_dialog import QuizHistoryDialog
 from listentrace.ui.windows.quiz_window import QuizWindow
 from listentrace.ui.windows.session_history_dialog import SessionHistoryDialog
@@ -60,6 +62,7 @@ class MainWindow(QMainWindow):
         self._quiz_window: QuizWindow | None = None
         self._shadowing_practice_window: ShadowingPracticeWindow | None = None
         self._learning_history_window: LearningHistoryWindow | None = None
+        self._quick_practice_window: QuickPracticeWindow | None = None
 
         central = QWidget(self)
         outer_layout = QVBoxLayout(central)
@@ -93,12 +96,15 @@ class MainWindow(QMainWindow):
         self._toggle_archived_button.clicked.connect(self._on_toggle_archived)
         self._learning_history_button = QPushButton("Learning History")
         self._learning_history_button.clicked.connect(self._on_learning_history_clicked)
+        self._quick_practice_button = QPushButton("Quick Practice")
+        self._quick_practice_button.clicked.connect(self._on_quick_practice_clicked)
         list_buttons_row.addWidget(self._import_button)
         list_buttons_row.addWidget(self._open_player_button)
         list_buttons_row.addWidget(self._start_intensive_button)
         list_buttons_row.addWidget(self._resume_intensive_button)
         list_buttons_row.addWidget(self._session_history_button)
         list_buttons_row.addWidget(self._shadowing_practice_button)
+        list_buttons_row.addWidget(self._quick_practice_button)
         list_buttons_row.addWidget(self._toggle_archived_button)
         list_buttons_row.addWidget(self._learning_history_button)
         list_column.addLayout(list_buttons_row)
@@ -237,6 +243,7 @@ class MainWindow(QMainWindow):
         self._start_intensive_button.setEnabled(enabled and not self._showing_archived)
         self._session_history_button.setEnabled(enabled and not self._showing_archived)
         self._shadowing_practice_button.setEnabled(enabled and not self._showing_archived)
+        self._quick_practice_button.setEnabled(enabled and not self._showing_archived)
         self._start_material_quiz_button.setEnabled(enabled and not self._showing_archived)
         self._start_review_quiz_button.setEnabled(enabled and not self._showing_archived)
         self._quiz_history_button.setEnabled(enabled and not self._showing_archived)
@@ -448,6 +455,28 @@ class MainWindow(QMainWindow):
             return
         self._quiz_window = QuizWindow(self._connection, load_result, attempt_id, self)
         self._quiz_window.show()
+
+    def _on_quick_practice_clicked(self) -> None:
+        material_id = self._selected_material_id()
+        if material_id is None or self._showing_archived:
+            return
+        try:
+            load_result = load_material_for_player(self._connection, material_id)
+        except PlayerOpenError as exc:
+            QMessageBox.warning(self, "Cannot Start Quick Practice", str(exc))
+            return
+        if not load_result.cues:
+            self.show_error("This material has no timed cues available for Quick Practice.")
+            return
+        start_dialog = QuickPracticeStartDialog(
+            self._connection, material_id, load_result.material.title, load_result.cues, self
+        )
+        if start_dialog.exec() != QDialog.DialogCode.Accepted or start_dialog.started_session_id is None:
+            return
+        self._quick_practice_window = QuickPracticeWindow(
+            self._connection, load_result, start_dialog.started_session_id, self._recordings_dir, self
+        )
+        self._quick_practice_window.show()
 
     def _on_learning_history_clicked(self) -> None:
         """Opens globally (works with no material selected); preselects the

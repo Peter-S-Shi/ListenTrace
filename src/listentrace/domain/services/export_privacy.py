@@ -32,6 +32,7 @@ CATEGORY_SHADOWING_EVIDENCE = "shadowing_evidence"
 CATEGORY_RETAINED_RECORDING_METADATA = "retained_recording_metadata"
 CATEGORY_LEARNER_NOTES = "learner_notes_and_summaries"
 CATEGORY_VOCABULARY = "vocabulary_and_saved_chunks"
+CATEGORY_QUICK_PRACTICE_EVIDENCE = "quick_practice_evidence"
 
 # Ordered for stable UI presentation.
 EVIDENCE_CATEGORIES: tuple[str, ...] = (
@@ -46,6 +47,7 @@ EVIDENCE_CATEGORIES: tuple[str, ...] = (
     CATEGORY_RETAINED_RECORDING_METADATA,
     CATEGORY_LEARNER_NOTES,
     CATEGORY_VOCABULARY,
+    CATEGORY_QUICK_PRACTICE_EVIDENCE,
 )
 
 # "Defaults should be useful without oversharing": the aggregate/summary
@@ -65,6 +67,7 @@ DEFAULT_CATEGORIES: frozenset[str] = frozenset(
         CATEGORY_RETAINED_RECORDING_METADATA,
         CATEGORY_LEARNER_NOTES,
         CATEGORY_VOCABULARY,
+        CATEGORY_QUICK_PRACTICE_EVIDENCE,
     }
 )
 

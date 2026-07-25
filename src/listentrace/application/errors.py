@@ -110,3 +110,27 @@ class RecordingValidationError(Exception):
     def __init__(self, category: str, message: str):
         self.category = category
         super().__init__(message)
+
+
+class QuickPracticeNotFoundError(Exception):
+    def __init__(self, session_id: int):
+        self.session_id = session_id
+        super().__init__(f"Quick Practice session {session_id} not found")
+
+
+class QuickPracticeItemNotFoundError(Exception):
+    def __init__(self, item_id: int):
+        self.item_id = item_id
+        super().__init__(f"Quick Practice item {item_id} not found")
+
+
+class QuickPracticeDiagnosisNotFoundError(Exception):
+    def __init__(self, evidence_id: int):
+        self.evidence_id = evidence_id
+        super().__init__(f"Quick Practice diagnosis {evidence_id} not found")
+
+
+class QuickPracticeValidationError(Exception):
+    def __init__(self, category: str, message: str):
+        self.category = category
+        super().__init__(message)

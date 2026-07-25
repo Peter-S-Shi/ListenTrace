@@ -14,6 +14,7 @@ from listentrace.application.dto.export import (
 )
 from listentrace.application.services import export_formatters as fmt
 from listentrace.application.services import export_service as svc
+from listentrace.application.services import quick_practice_service
 from listentrace.domain.models.material import Material
 from listentrace.domain.models.quiz_attempt import QuizAttempt
 from listentrace.domain.models.quiz_question import QuizQuestion
@@ -663,3 +664,123 @@ def test_material_with_no_evidence_still_exports_cleanly(conn, all_time_range):
     assert material["quiz_attempts"] == []
     assert material["session_diagnosis_history"] == []
     assert material["retained_recordings"] == []
+    assert material["quick_practice_evidence"] == []
+
+
+# ---- quick practice evidence (Milestone 10) ----
+
+
+def _make_quick_practice_run(conn, material_id, cues):
+    session = quick_practice_service.start_selected_session(conn, material_id, [cues[0].id])
+    item_id = quick_practice_service.load_session_state(conn, session.id).items[0].item.id
+    quick_practice_service.record_recall(conn, item_id, "missed", "bonjoor")
+    evidence_id = quick_practice_service.record_item_diagnosis(
+        conn, item_id, 0, 7, "misheard", heard_as="bonjoor", note="a note"
+    )
+    quick_practice_service.mark_item_shadowed(conn, item_id)
+    quick_practice_service.complete_item(conn, item_id)
+    quick_practice_service.complete_session(conn, session.id)
+    return session.id, item_id, evidence_id
+
+
+def test_quick_practice_evidence_appears_only_when_selected(conn, all_time_range):
+    material_id, cues = _make_material_with_cues(conn)
+    _make_quick_practice_run(conn, material_id, cues)
+
+    without = frozenset(export_privacy.EVIDENCE_CATEGORIES) - {export_privacy.CATEGORY_QUICK_PRACTICE_EVIDENCE}
+    bundle = svc.build_export(conn, ExportScope(kind=SCOPE_ALL), all_time_range, without, _ALL_PRIVACY_FIELDS)
+    assert "quick_practice_evidence" not in bundle.materials[0]
+
+    with_it = frozenset({export_privacy.CATEGORY_QUICK_PRACTICE_EVIDENCE})
+    bundle = svc.build_export(conn, ExportScope(kind=SCOPE_ALL), all_time_range, with_it, _ALL_PRIVACY_FIELDS)
+    runs = bundle.materials[0]["quick_practice_evidence"]
+    assert len(runs) == 1
+    assert runs[0]["status"] == "completed"
+    assert runs[0]["source_type"] == "selected"
+    item = runs[0]["items"][0]
+    assert item["recall_result"] == "missed"
+    assert item["heard_fragment"] == "bonjoor"
+    assert item["shadowed"] is True
+    assert item["completed"] is True
+    assert item["diagnosis"][0]["label_key"] == "misheard"
+    assert item["diagnosis"][0]["transcript_excerpt"] == "Bonjour"
+    assert item["diagnosis"][0]["heard_as"] == "bonjoor"
+    assert item["diagnosis"][0]["note"] == "a note"
+
+
+def test_quick_practice_evidence_never_counted_as_intensive_or_quiz(conn, all_time_range):
+    material_id, cues = _make_material_with_cues(conn)
+    _make_quick_practice_run(conn, material_id, cues)
+    bundle = svc.build_export(conn, ExportScope(kind=SCOPE_ALL), all_time_range, _ALL_CATEGORIES, _ALL_PRIVACY_FIELDS)
+    material = bundle.materials[0]
+    assert material["sessions"] == []
+    assert material["quiz_attempts"] == []
+
+
+def test_quick_practice_heard_fragment_follows_mishearing_text_privacy_field(conn, all_time_range):
+    material_id, cues = _make_material_with_cues(conn)
+    _make_quick_practice_run(conn, material_id, cues)
+    no_mishearing = frozenset(export_privacy.PRIVACY_FIELDS) - {export_privacy.PRIVACY_MISHEARING_TEXT}
+    bundle = svc.build_export(
+        conn,
+        ExportScope(kind=SCOPE_ALL),
+        all_time_range,
+        frozenset({export_privacy.CATEGORY_QUICK_PRACTICE_EVIDENCE}),
+        no_mishearing,
+    )
+    item = bundle.materials[0]["quick_practice_evidence"][0]["items"][0]
+    assert item["heard_fragment"] == export_privacy.REDACTED_PLACEHOLDER
+    assert item["diagnosis"][0]["heard_as"] == export_privacy.REDACTED_PLACEHOLDER
+    # recall_result and completion/shadowed flags are structure, never redacted.
+    assert item["recall_result"] == "missed"
+    assert item["shadowed"] is True
+
+
+def test_quick_practice_diagnosis_transcript_follows_transcript_excerpts_privacy_field(conn, all_time_range):
+    material_id, cues = _make_material_with_cues(conn)
+    _make_quick_practice_run(conn, material_id, cues)
+    no_transcript = frozenset(export_privacy.PRIVACY_FIELDS) - {export_privacy.PRIVACY_TRANSCRIPT_EXCERPTS}
+    bundle = svc.build_export(
+        conn,
+        ExportScope(kind=SCOPE_ALL),
+        all_time_range,
+        frozenset({export_privacy.CATEGORY_QUICK_PRACTICE_EVIDENCE}),
+        no_transcript,
+    )
+    item = bundle.materials[0]["quick_practice_evidence"][0]["items"][0]
+    assert item["diagnosis"][0]["transcript_excerpt"] == export_privacy.REDACTED_PLACEHOLDER
+    assert item["heard_fragment"] == "bonjoor"  # unaffected field stays
+
+
+def test_quick_practice_evidence_date_filtering_excludes_out_of_range_runs(conn, recent_range):
+    material_id, cues = _make_material_with_cues(conn)
+    session_id, _, _ = _make_quick_practice_run(conn, material_id, cues)
+    conn.execute(
+        "UPDATE quick_practice_session SET started_at = ?, completed_at = ? WHERE id = ?",
+        (_OLD_TIMESTAMP, _OLD_TIMESTAMP, session_id),
+    )
+    conn.commit()
+    bundle = svc.build_export(
+        conn,
+        ExportScope(kind=SCOPE_ALL),
+        recent_range,
+        frozenset({export_privacy.CATEGORY_QUICK_PRACTICE_EVIDENCE}),
+        _ALL_PRIVACY_FIELDS,
+    )
+    assert bundle.materials[0]["quick_practice_evidence"] == []
+
+
+def test_quick_practice_evidence_never_includes_a_path_field(conn, all_time_range):
+    material_id, cues = _make_material_with_cues(conn)
+    _make_quick_practice_run(conn, material_id, cues)
+    bundle = svc.build_export(
+        conn,
+        ExportScope(kind=SCOPE_ALL),
+        all_time_range,
+        frozenset({export_privacy.CATEGORY_QUICK_PRACTICE_EVIDENCE}),
+        _ALL_PRIVACY_FIELDS,
+    )
+    text = json.dumps(bundle.materials[0]["quick_practice_evidence"])
+    assert ".mp4" not in text
+    assert ".srt" not in text
+    assert "C:/Users" not in text

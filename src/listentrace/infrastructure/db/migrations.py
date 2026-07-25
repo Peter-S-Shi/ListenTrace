@@ -305,6 +305,67 @@ MIGRATIONS: list[tuple[int, str]] = [
             WHERE status = 'recording';
         """,
     ),
+    (
+        9,
+        """
+        -- Milestone 10 (Quick Practice Mode): an additive model of its own,
+        -- deliberately not forced into the five-stage practice_session/
+        -- session_stage_progress schema (see ARCHITECTURE.md). Quick Practice
+        -- has no exact-step resume, so unlike practice_session there is no
+        -- last_resumed_at column here.
+        CREATE TABLE quick_practice_session (
+            id INTEGER PRIMARY KEY,
+            material_id INTEGER NOT NULL REFERENCES material(id) ON DELETE CASCADE,
+            source_type TEXT NOT NULL DEFAULT 'selected',
+            requested_count INTEGER NOT NULL,
+            actual_count INTEGER NOT NULL,
+            status TEXT NOT NULL DEFAULT 'active',
+            started_at TEXT NOT NULL DEFAULT (datetime('now')),
+            updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+            completed_at TEXT,
+            abandoned_at TEXT
+        );
+
+        CREATE TABLE quick_practice_item (
+            id INTEGER PRIMARY KEY,
+            quick_practice_session_id INTEGER NOT NULL REFERENCES quick_practice_session(id) ON DELETE CASCADE,
+            subtitle_cue_id INTEGER NOT NULL REFERENCES subtitle_cue(id) ON DELETE CASCADE,
+            position INTEGER NOT NULL,
+            recall_result TEXT,
+            heard_fragment TEXT,
+            transcript_revealed INTEGER NOT NULL DEFAULT 0,
+            shadowed_at TEXT,
+            completed_at TEXT,
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+            UNIQUE (quick_practice_session_id, position),
+            UNIQUE (quick_practice_session_id, subtitle_cue_id)
+        );
+
+        -- Mirrors session_diagnosis_evidence's design (Milestone 5): a full
+        -- snapshot plus an optional link to the shared material-level
+        -- Annotation, scoped to a quick_practice_item instead of a
+        -- (practice_session_id, subtitle_cue_id) pair. This is what gives
+        -- diagnosis recorded through Quick Practice its own explicit
+        -- provenance, distinct from Intensive Practice's session_diagnosis_
+        -- evidence, without creating a second copy of annotation truth.
+        CREATE TABLE quick_practice_diagnosis_evidence (
+            id INTEGER PRIMARY KEY,
+            quick_practice_item_id INTEGER NOT NULL REFERENCES quick_practice_item(id) ON DELETE CASCADE,
+            annotation_id INTEGER REFERENCES annotation(id) ON DELETE SET NULL,
+            label_key TEXT NOT NULL,
+            selected_text TEXT NOT NULL,
+            selection_start INTEGER NOT NULL,
+            selection_end INTEGER NOT NULL,
+            heard_as TEXT,
+            note TEXT,
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+            UNIQUE (quick_practice_item_id, label_key, selection_start, selection_end),
+            CHECK (selection_end >= selection_start)
+        );
+        """,
+    ),
 ]
 
 

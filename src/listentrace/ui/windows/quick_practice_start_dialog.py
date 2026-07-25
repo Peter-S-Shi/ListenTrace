@@ -1,0 +1,170 @@
+from __future__ import annotations
+
+import sqlite3
+
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import (
+    QAbstractItemView,
+    QButtonGroup,
+    QComboBox,
+    QDialog,
+    QHBoxLayout,
+    QLabel,
+    QListWidget,
+    QListWidgetItem,
+    QPushButton,
+    QRadioButton,
+    QVBoxLayout,
+    QWidget,
+)
+
+from listentrace.application.errors import QuickPracticeValidationError
+from listentrace.application.services import quick_practice_service as svc
+from listentrace.domain.models.subtitle import SubtitleCue
+from listentrace.domain.services import quick_practice_rules as rules
+from listentrace.ui.windows.player_window import _format_time
+
+_REASON_LABELS: dict[str, str] = {
+    "recent_misheard": "misheard",
+    "recent_known_not_heard": "known but not heard",
+    "recent_connected_reduced_speech": "connected/reduced speech",
+    "incorrect_quiz_evidence": "missed on a quiz",
+    "recurring_diagnosis_history": "recurring diagnosis history",
+    "little_or_no_shadowing_practice": "little/no shadowing practice",
+}
+
+
+def _cue_label(cue: SubtitleCue) -> str:
+    return f"[{_format_time(cue.start_ms)}-{_format_time(cue.end_ms)}] {cue.text}"
+
+
+class QuickPracticeStartDialog(QDialog):
+    """Milestone 10: choose how to start a Quick Practice run — Recommended
+    Practice (a deterministic, reason-based cue list; see `domain/services/
+    quick_practice_recommendation.py`) or Selected Cues (one cue, a
+    continuous range, or an explicit subset, in the order picked)."""
+
+    def __init__(
+        self,
+        connection: sqlite3.Connection,
+        material_id: int,
+        material_title: str,
+        cues: list[SubtitleCue],
+        parent: QWidget | None = None,
+        initial_selected_cue_ids: list[int] | None = None,
+    ) -> None:
+        super().__init__(parent)
+        self.setWindowTitle(f"Quick Practice — {material_title}")
+        self.resize(560, 480)
+        self._connection = connection
+        self._material_id = material_id
+        self._cues = cues
+        self.started_session_id: int | None = None
+
+        layout = QVBoxLayout(self)
+
+        source_row = QHBoxLayout()
+        self._source_group = QButtonGroup(self)
+        self._recommended_radio = QRadioButton("Recommended Practice")
+        self._selected_radio = QRadioButton("Selected Cues")
+        self._source_group.addButton(self._recommended_radio)
+        self._source_group.addButton(self._selected_radio)
+        self._recommended_radio.toggled.connect(self._on_source_changed)
+        source_row.addWidget(self._recommended_radio)
+        source_row.addWidget(self._selected_radio)
+        layout.addLayout(source_row)
+
+        recommended_row = QHBoxLayout()
+        recommended_row.addWidget(QLabel("Number of cues:"))
+        self._count_combo = QComboBox()
+        for count in rules.ALLOWED_RECOMMENDED_COUNTS:
+            self._count_combo.addItem(str(count), count)
+        self._count_combo.setCurrentIndex(rules.ALLOWED_RECOMMENDED_COUNTS.index(rules.DEFAULT_RECOMMENDED_COUNT))
+        self._count_combo.currentIndexChanged.connect(self._refresh_recommended_preview)
+        recommended_row.addWidget(self._count_combo)
+        layout.addLayout(recommended_row)
+
+        layout.addWidget(QLabel("Preview (transparent reasons — never a hidden score):"))
+        self._recommended_preview = QListWidget()
+        layout.addWidget(self._recommended_preview, 1)
+
+        layout.addWidget(QLabel("Cues (select one, a range, or several — order picked is preserved):"))
+        self._cue_list = QListWidget()
+        self._cue_list.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
+        for cue in cues:
+            item = QListWidgetItem(_cue_label(cue))
+            item.setData(Qt.ItemDataRole.UserRole, cue.id)
+            self._cue_list.addItem(item)
+        layout.addWidget(self._cue_list, 1)
+
+        if initial_selected_cue_ids:
+            self._selected_radio.setChecked(True)
+            initial_set = set(initial_selected_cue_ids)
+            for i in range(self._cue_list.count()):
+                item = self._cue_list.item(i)
+                if item.data(Qt.ItemDataRole.UserRole) in initial_set:
+                    item.setSelected(True)
+        else:
+            self._recommended_radio.setChecked(True)
+
+        self._status_label = QLabel("")
+        self._status_label.setStyleSheet("color: red;")
+        self._status_label.setWordWrap(True)
+        layout.addWidget(self._status_label)
+
+        button_row = QHBoxLayout()
+        self._start_button = QPushButton("Start Quick Practice")
+        self._start_button.clicked.connect(self._on_start_clicked)
+        cancel_button = QPushButton("Cancel")
+        cancel_button.clicked.connect(self.reject)
+        button_row.addWidget(self._start_button)
+        button_row.addWidget(cancel_button)
+        layout.addLayout(button_row)
+
+        self._on_source_changed()
+
+    def _on_source_changed(self, *_args) -> None:
+        is_recommended = self._recommended_radio.isChecked()
+        self._count_combo.setEnabled(is_recommended)
+        self._recommended_preview.setEnabled(is_recommended)
+        self._cue_list.setEnabled(not is_recommended)
+        if is_recommended:
+            self._refresh_recommended_preview()
+
+    def _refresh_recommended_preview(self, *_args) -> None:
+        if not self._recommended_radio.isChecked():
+            return
+        count = self._count_combo.currentData()
+        entries = svc.recommend_cues(self._connection, self._material_id, count)
+        self._recommended_preview.clear()
+        cue_by_id = {cue.id: cue for cue in self._cues}
+        for entry in entries:
+            cue = cue_by_id.get(entry.subtitle_cue_id)
+            reasons = ", ".join(_REASON_LABELS.get(r, r) for r in entry.reasons) if entry.reasons else "safe fallback"
+            label = _cue_label(cue) if cue is not None else str(entry.subtitle_cue_id)
+            self._recommended_preview.addItem(f"{label} — {reasons}")
+        if not entries:
+            empty = QListWidgetItem("No usable cues available for Quick Practice.")
+            empty.setFlags(Qt.ItemFlag.NoItemFlags)
+            self._recommended_preview.addItem(empty)
+
+    def _on_start_clicked(self) -> None:
+        self._status_label.setText("")
+        try:
+            if self._recommended_radio.isChecked():
+                session = svc.start_recommended_session(
+                    self._connection, self._material_id, self._count_combo.currentData()
+                )
+            else:
+                # `selectedItems()` order is not guaranteed to match the visual
+                # order in Qt's multi-selection widgets — sort by row instead,
+                # so "preserve cue identity and ordering" means the material's
+                # own timeline order, not whatever order the clicks landed in.
+                selected_rows = sorted(self._cue_list.row(item) for item in self._cue_list.selectedItems())
+                selected_ids = [self._cue_list.item(row).data(Qt.ItemDataRole.UserRole) for row in selected_rows]
+                session = svc.start_selected_session(self._connection, self._material_id, selected_ids)
+        except QuickPracticeValidationError as exc:
+            self._status_label.setText(str(exc))
+            return
+        self.started_session_id = session.id
+        self.accept()

@@ -32,17 +32,20 @@ from listentrace.application.errors import (
     AnnotationNotFoundError,
     AnnotationValidationError,
     CueNotFoundError,
+    QuickPracticeValidationError,
     SavedItemNotFoundError,
     SavedItemValidationError,
 )
 from listentrace.application.services import annotation_service, cue_note_service
 from listentrace.application.services import cue_workspace_service as workspace_service
 from listentrace.application.services import label_preference_service
+from listentrace.application.services import quick_practice_service
 from listentrace.application.services import saved_language_item_service as item_service
 from listentrace.application.services.player_session import PlayerSession
 from listentrace.domain.enums.annotation_label import AnnotationLabel
 from listentrace.domain.enums.saved_item_type import SavedItemType
 from listentrace.domain.services.text_range import whole_cue_range
+from listentrace.infrastructure.appdata import get_recordings_dir
 from listentrace.infrastructure.media.playback import PlaybackController
 from listentrace.ui.annotation_highlighting import apply_range_highlighting
 from listentrace.ui.text_offset_conversion import (
@@ -94,6 +97,7 @@ class PlayerWindow(QMainWindow):
         self._seeking_via_slider = False
         self._playback_usable = True
         self._editing_cue_index: int | None = None
+        self._quick_practice_window: QWidget | None = None
 
         central = QWidget(self)
         layout = QVBoxLayout(central)
@@ -160,6 +164,15 @@ class PlayerWindow(QMainWindow):
         ):
             transport_row.addWidget(button)
         layout.addLayout(transport_row)
+
+        quick_practice_row = QHBoxLayout()
+        self._quick_practice_this_cue_button = QPushButton("Quick Practice This Cue")
+        self._quick_practice_this_cue_button.clicked.connect(self._on_quick_practice_this_cue_clicked)
+        self._quick_practice_selected_button = QPushButton("Quick Practice Selected Cues")
+        self._quick_practice_selected_button.clicked.connect(self._on_quick_practice_selected_clicked)
+        quick_practice_row.addWidget(self._quick_practice_this_cue_button)
+        quick_practice_row.addWidget(self._quick_practice_selected_button)
+        layout.addLayout(quick_practice_row)
 
         volume_row = QHBoxLayout()
         volume_row.addWidget(QLabel("Volume:"))
@@ -445,6 +458,52 @@ class PlayerWindow(QMainWindow):
         self._playback.play()
         self._play_pause_button.setText("Pause")
         self._show_status("")
+
+    # ---- Quick Practice (Milestone 10) ----
+
+    def _open_quick_practice(self, subtitle_cue_ids: list[int]) -> None:
+        # Imported locally to avoid a circular import: quick_practice_window.py
+        # imports small helpers (_format_time, _color_badge_icon,
+        # _OVERLAP_HIGHLIGHT) from this module.
+        from listentrace.ui.windows.quick_practice_window import QuickPracticeWindow
+
+        try:
+            session = quick_practice_service.start_selected_session(
+                self._connection, self._material.id, subtitle_cue_ids
+            )
+        except QuickPracticeValidationError as exc:
+            self._show_status(str(exc))
+            return
+        assert session.id is not None
+        self._quick_practice_window = QuickPracticeWindow(
+            self._connection,
+            PlayerLoadResult(material=self._material, cues=self._session.cues),
+            session.id,
+            get_recordings_dir(),
+            self,
+        )
+        self._quick_practice_window.show()
+
+    def _on_quick_practice_this_cue_clicked(self) -> None:
+        cue = self._current_editing_cue()
+        if cue is None or cue.id is None:
+            self._show_status("Select a cue to Quick Practice first.")
+            return
+        self._open_quick_practice([cue.id])
+
+    def _on_quick_practice_selected_clicked(self) -> None:
+        indices = self._selected_cue_indices()
+        if not indices:
+            cue = self._current_editing_cue()
+            indices = [self._editing_cue_index] if cue is not None else []
+        if not indices:
+            self._show_status("Select one or more cues to Quick Practice.")
+            return
+        cue_ids = [self._session.cues[i].id for i in indices if self._session.cues[i].id is not None]
+        if not cue_ids:
+            self._show_status("Select one or more cues to Quick Practice.")
+            return
+        self._open_quick_practice(cue_ids)
 
     def _on_toggle_transcript(self) -> None:
         self._session.transcript_visible = not self._session.transcript_visible

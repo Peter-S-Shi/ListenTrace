@@ -4,6 +4,7 @@ import sys
 
 from PySide6.QtWidgets import QApplication, QMessageBox
 
+from listentrace.application.services.quick_practice_service import recover_interrupted_sessions
 from listentrace.application.services.recording_service import recover_interrupted_recordings
 from listentrace.infrastructure.appdata import get_database_path, get_recordings_dir
 from listentrace.infrastructure.db.connection import open_connection
@@ -24,6 +25,11 @@ def main() -> int:
         recovered = recover_interrupted_recordings(connection, recordings_dir)
         if recovered:
             logger.warning("Recovered %d recording(s) left in-progress by a prior run", recovered)
+        recovered_quick_practice = recover_interrupted_sessions(connection)
+        if recovered_quick_practice:
+            logger.warning(
+                "Recovered %d Quick Practice run(s) left in-progress by a prior run", recovered_quick_practice
+            )
     except Exception as exc:
         logger.exception("Failed to initialize the local database")
         QMessageBox.critical(None, "ListenTrace — Startup Error", f"Could not start ListenTrace:\n{exc}")

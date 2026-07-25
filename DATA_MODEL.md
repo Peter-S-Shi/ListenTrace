@@ -2,7 +2,7 @@
 
 This document defines the first domain direction. It is not a frozen database schema.
 
-**Status (through Milestone 8)**: `Material`, `SubtitleTrack`, `SubtitleCue`, `Annotation`, `CueNote`, `SavedLanguageItem`, `AnnotationLabelPreference`, `PracticeSession`, `SessionStageProgress`, `StageResponse`, `KeywordCapture`, `SessionDiagnosisEvidence`, `ShadowingCueProgress`, `QuizAttempt`, `QuizQuestion`, `QuizAnswer`, `Recording`, and `MicrophonePreference` are implemented as actual SQLite tables (schema version 8, unchanged by Milestone 8 — see the Learning History Read Model note below). Migration 2 added `Material.normalized_path`; migration 3 (Milestone 4) added the four learning-evidence tables; migration 4 (Milestone 5, additive, no data loss) added the six guided-session tables; migration 5 (Milestone 6, additive, no data loss) added the three quiz tables; migration 6 (Milestone 6 acceptance correction, additive) added `QuizQuestion.source_cue_text`; migration 7 (Milestone 7, additive, no data loss) added `Recording` and `MicrophonePreference`; migration 8 (Milestone 7 acceptance correction, additive) added the `idx_recording_one_in_progress` partial unique index — see their sections below for the field lists actually implemented, which differ from this document's original design sketch in three deliberate ways: `Annotation` did **not** gain a `practice_session_id` column (see `SessionDiagnosisEvidence` below for why), the quiz design replaced the sketched `QuizSession`/`QuizItemResult` pair with `QuizAttempt`/`QuizQuestion`/`QuizAnswer`, and `RecordingReference` was renamed `Recording` with a `practice_session_id` that is optional and `ON DELETE SET NULL` rather than required — see the `Recording` section below for why.
+**Status (through Milestone 10)**: `Material`, `SubtitleTrack`, `SubtitleCue`, `Annotation`, `CueNote`, `SavedLanguageItem`, `AnnotationLabelPreference`, `PracticeSession`, `SessionStageProgress`, `StageResponse`, `KeywordCapture`, `SessionDiagnosisEvidence`, `ShadowingCueProgress`, `QuizAttempt`, `QuizQuestion`, `QuizAnswer`, `Recording`, `MicrophonePreference`, `QuickPracticeSession`, `QuickPracticeItem`, and `QuickPracticeDiagnosisEvidence` are implemented as actual SQLite tables (schema version 9). Migration 2 added `Material.normalized_path`; migration 3 (Milestone 4) added the four learning-evidence tables; migration 4 (Milestone 5, additive, no data loss) added the six guided-session tables; migration 5 (Milestone 6, additive, no data loss) added the three quiz tables; migration 6 (Milestone 6 acceptance correction, additive) added `QuizQuestion.source_cue_text`; migration 7 (Milestone 7, additive, no data loss) added `Recording` and `MicrophonePreference`; migration 8 (Milestone 7 acceptance correction, additive) added the `idx_recording_one_in_progress` partial unique index; migration 9 (Milestone 10, additive, no data loss) added the three Quick Practice tables — see their sections below for the field lists actually implemented, which differ from this document's original design sketch in three deliberate ways: `Annotation` did **not** gain a `practice_session_id` column (see `SessionDiagnosisEvidence` below for why), the quiz design replaced the sketched `QuizSession`/`QuizItemResult` pair with `QuizAttempt`/`QuizQuestion`/`QuizAnswer`, and `RecordingReference` was renamed `Recording` with a `practice_session_id` that is optional and `ON DELETE SET NULL` rather than required — see the `Recording` section below for why.
 
 ## Learning History Read Model (Milestone 8)
 
@@ -34,6 +34,20 @@ never written back to the database; `export_version` (currently `1`) is a
 field on the export contract itself, tracked independently of `PRAGMA
 user_version`. See `ARCHITECTURE.md`'s "Resolved in Milestone 9" section for
 the privacy-redaction model and the preview/save-equivalence guarantee.
+
+## Quick Practice (Milestone 10)
+
+Milestone 10 (Quick Practice Mode) is additive: three new tables
+(`QuickPracticeSession`, `QuickPracticeItem`, `QuickPracticeDiagnosisEvidence`
+— migration 9, schema version 9), deliberately **not** grafted onto
+`PracticeSession`/`SessionStageProgress`. `PracticeSession.mode` remains
+`intensive`-only; Quick Practice has no five-stage machine, no exact-step
+resume, and progressive per-item persistence instead, so a parallel,
+lighter-weight schema fits it better than a second `mode` value forced
+through the existing five-stage tables. See `ARCHITECTURE.md`'s "Resolved in
+Milestone 10" section for the full set of decisions (recommendation
+evidence sourcing, close-time discard-vs-abandon rule, diagnosis
+provenance, and Learning History/Needs Attention/export integration).
 
 ## Entity Overview
 
@@ -77,6 +91,15 @@ QuizQuestion
 Annotation
   0..1 --- many SessionDiagnosisEvidence  (optional link, `ON DELETE SET NULL` — see below)
   0..1 --- many QuizQuestions              (optional source-evidence link, `ON DELETE SET NULL`)
+  0..1 --- many QuickPracticeDiagnosisEvidence (optional link, `ON DELETE SET NULL`, Milestone 10)
+
+Material
+  1 --- many QuickPracticeSessions    (implemented, Milestone 10 — independent of PracticeSession)
+
+QuickPracticeSession                  (implemented, Milestone 10)
+  1 --- many QuickPracticeItems       (stable position order, one row per cue in the run)
+QuickPracticeItem
+  1 --- many QuickPracticeDiagnosisEvidence
 ```
 
 ## Material
@@ -149,7 +172,7 @@ Implemented fields:
 
 - `id`
 - `material_id` (FK → `material.id`, `ON DELETE CASCADE`)
-- `mode` (only `intensive` so far; a distinct value for Milestone 10 Quick Practice Mode is anticipated but not yet named or implemented)
+- `mode` (only ever `intensive` — Milestone 10 Quick Practice Mode deliberately did not reuse this table or add a new `mode` value; see `QuickPracticeSession` below)
 - `status`
 - `current_stage`
 - `transcript_revealed_at` (`NULL` until Stage 3 is first entered; set at most once — see Constraints)
@@ -470,6 +493,63 @@ Implemented fields:
 
 `recording_service.resolve_preferred_device` never silently substitutes a different device for one that was saved but is no longer connected — it returns no device plus a clear `fallback_reason`, and the UI requires the learner to explicitly choose again.
 
+## QuickPracticeSession
+
+One short, low-friction Quick Practice run. **Implemented (migration 9).** Independent of `PracticeSession` — a Quick Practice run does not require or belong to a guided intensive-listening session, and its own lifecycle has no exact-step resume (see `ARCHITECTURE.md`).
+
+Implemented fields:
+
+- `id`
+- `material_id` (FK → `material.id`, `ON DELETE CASCADE`)
+- `source_type` (`recommended` or `selected` — `domain/enums/quick_practice_source.py`)
+- `requested_count` (what the learner asked for — the count picked for Recommended Practice, or the number of cues selected for Selected Cues)
+- `actual_count` (the number of `QuickPracticeItem` rows actually created — always equal to `requested_count` for Selected Cues; may be smaller for Recommended Practice only if the material itself has fewer usable cues than requested)
+- `status` (`domain/enums/quick_practice_status.py`: `active`, `completed`, `abandoned` — same three values as `PracticeSession`, but its own independent enum)
+- `started_at` / `updated_at` / `completed_at` / `abandoned_at`
+
+Deliberately **no** `last_resumed_at` and **no** `current_stage`/stage-progress tables: Quick Practice has no exact-step resume and no stage machine, so there is nothing to resume into and nothing to track a "current stage" for. Its date-anchor convention for reporting purposes (Learning History, Needs Attention) is therefore `COALESCE(completed_at, abandoned_at, started_at)`, not the `..., last_resumed_at` pattern `PracticeSession`/`QuizAttempt` use.
+
+Allowed transitions (`domain/services/quick_practice_rules.py`): `active -> completed` and `active -> abandoned` only, mirroring `PracticeSession`.
+
+**Close-time rule** (`application/services/quick_practice_service.py::close_session`, and its startup counterpart `recover_interrupted_sessions`): closing an `active` run with at least one completed item transitions it to `abandoned` (evidence preserved as read-only history); closing one with zero completed items **hard-deletes the row** (`DELETE FROM quick_practice_session`, cascading its items and diagnosis evidence) so a run nothing was actually recorded for never appears as misleading history. This is the one place in the schema where normal application flow deletes rather than soft-marks a session row.
+
+## QuickPracticeItem
+
+One cue's result within a `QuickPracticeSession` — created for every selected/recommended cue up front, in stable position order, then filled in progressively as the learner works through it. **Implemented (migration 9).**
+
+Implemented fields:
+
+- `id`
+- `quick_practice_session_id` (FK → `quick_practice_session.id`, `ON DELETE CASCADE`)
+- `subtitle_cue_id` (FK → `subtitle_cue.id`, `ON DELETE CASCADE`)
+- `position` (0-based stable order; `UNIQUE (quick_practice_session_id, position)`; also `UNIQUE (quick_practice_session_id, subtitle_cue_id)` — a cue cannot appear twice in the same run)
+- `recall_result` (`NULL` until Step 2; `domain/enums/recall_result.py`: `understood`, `partly_understood`, `missed`)
+- `heard_fragment` (optional free-text guess captured at Step 2, before the transcript is revealed)
+- `transcript_revealed` (boolean; set together with `recall_result` by `record_recall` — revealing never by itself creates diagnosis evidence)
+- `shadowed_at` (`NULL` until an explicit "Mark Shadowed" action at Step 4 — never inferred from playback alone, matching `ShadowingCueProgress`'s own explicit-action rule; idempotent, set once)
+- `completed_at` (`NULL` until the learner moves past this cue; requires `recall_result` to be set first — diagnosis and shadowing/recording remain optional and never gate it)
+- `created_at` / `updated_at`
+
+## QuickPracticeDiagnosisEvidence
+
+A Quick Practice snapshot of one Step 3 diagnosis action. **Implemented (migration 9).** Mirrors `SessionDiagnosisEvidence`'s design exactly (a full snapshot plus an optional find-or-create link to the shared material-level `Annotation`), scoped to a `quick_practice_item_id` instead of a `(practice_session_id, subtitle_cue_id)` pair — this is what gives diagnosis recorded through Quick Practice its own explicit, distinct provenance without creating a second copy of annotation truth.
+
+Implemented fields:
+
+- `id`
+- `quick_practice_item_id` (FK → `quick_practice_item.id`, `ON DELETE CASCADE`)
+- `annotation_id` (FK → `annotation.id`, `ON DELETE SET NULL` — nullable; a snapshot survives its linked annotation being deleted)
+- `label_key`
+- `selected_text`
+- `selection_start` / `selection_end` (same canonical offset semantics as `Annotation`/`SessionDiagnosisEvidence`)
+- `heard_as` (only ever populated when `label_key = 'misheard'`)
+- `note`
+- `created_at` / `updated_at`
+
+Constraints actually enforced: `UNIQUE (quick_practice_item_id, label_key, selection_start, selection_end)`; `CHECK (selection_end >= selection_start)`.
+
+Find-or-create linkage (`quick_practice_service.record_item_diagnosis`): identical rule to `practice_session_service.record_session_diagnosis` — validates using the same domain rules (label validity, range bounds, Misheard-requires-`heard_as`), reuses an existing `Annotation` for the exact cue/label/range if one exists rather than creating a duplicate, and always creates a new, independent `QuickPracticeDiagnosisEvidence` row. Deleting a snapshot (`delete_item_diagnosis`) touches only that row; the linked `Annotation`, if any, is never mutated or cascaded. Diagnosis is only ever added (or deleted), never edited in place — the UI's compact per-cue flow does not offer an edit affordance, matching Quick Practice's forward-only, no-exact-step-resume design.
+
 ## Future Progress Events
 
 Analytics should be derived from reliable session, annotation, quiz, and review evidence. A generic event table may be introduced later only when concrete reporting needs justify it.
@@ -481,4 +561,4 @@ Analytics should be derived from reliable session, annotation, quiz, and review 
 - Source media, subtitle files, recordings, databases, and exports are local user data.
 - Database migrations must be additive and tested.
 - Display colors never replace semantic label keys.
-- Migrations 1→2→3→4→5→6→7→8 have each been additive only (no table rewritten or dropped) and are each covered by an automated upgrade test starting from the prior version's schema with real data present. Migration 6 adds `quiz_question.source_cue_text` and backfills it from the live `subtitle_cue.text` for any pre-existing rows. Migration 7 adds `recording` and `microphone_preference`. Migration 8 adds `idx_recording_one_in_progress` (a partial unique index enforcing at most one `recording`-status row), defensively recovering any pre-existing duplicate first so the index creation itself cannot fail against real data.
+- Migrations 1→2→3→4→5→6→7→8→9 have each been additive only (no table rewritten or dropped) and are each covered by an automated upgrade test starting from the prior version's schema with real data present. Migration 6 adds `quiz_question.source_cue_text` and backfills it from the live `subtitle_cue.text` for any pre-existing rows. Migration 7 adds `recording` and `microphone_preference`. Migration 8 adds `idx_recording_one_in_progress` (a partial unique index enforcing at most one `recording`-status row), defensively recovering any pre-existing duplicate first so the index creation itself cannot fail against real data. Migration 9 adds `quick_practice_session`, `quick_practice_item`, and `quick_practice_diagnosis_evidence` (Milestone 10).
