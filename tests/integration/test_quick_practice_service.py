@@ -10,7 +10,6 @@ from listentrace.application.errors import (
     QuickPracticeValidationError,
 )
 from listentrace.application.services import quick_practice_service as svc
-from listentrace.application.services import recording_service
 from listentrace.domain.enums.quick_practice_source import QuickPracticeSource
 from listentrace.domain.enums.quick_practice_status import QuickPracticeStatus
 from listentrace.domain.models.material import Material
@@ -107,7 +106,7 @@ def test_recommend_cues_prefers_cues_with_misheard_evidence(conn):
     insert_annotations(conn, cues[2].id, [("misheard", "wrong word")], cues[2].text, 0, 5, None)
     entries = svc.recommend_cues(conn, material_id, 2)
     assert entries[0].subtitle_cue_id == cues[2].id
-    assert "recent_misheard" in entries[0].reasons
+    assert "marked_misheard" in entries[0].reasons
 
 
 def test_recommend_cues_prefers_cues_with_incorrect_quiz_evidence(conn):
@@ -133,6 +132,52 @@ def test_recommend_cues_prefers_cues_with_incorrect_quiz_evidence(conn):
     entries = svc.recommend_cues(conn, material_id, 2)
     assert entries[0].subtitle_cue_id == cues[1].id
     assert "incorrect_quiz_evidence" in entries[0].reasons
+
+
+def test_recommend_cues_little_shadowing_reason_clears_after_explicit_quick_practice_shadowing(conn):
+    """Explicit Quick Practice shadowing (`shadowed_at`) is real shadowing
+    evidence and must count the same as Intensive Practice shadowing for
+    the "little or no shadowing practice" reason — while the cue's own
+    independent qualifying reason (here, `marked_misheard`) stays intact."""
+    material_id, cues = _make_material_with_cues(conn)
+    cue = cues[0]
+    insert_annotations(conn, cue.id, [("misheard", "wrong word")], cue.text[0:7], 0, 7, None)
+
+    before = svc.recommend_cues(conn, material_id, 1)
+    assert before[0].subtitle_cue_id == cue.id
+    assert "marked_misheard" in before[0].reasons
+    assert "little_or_no_shadowing_practice" in before[0].reasons
+
+    session = svc.start_selected_session(conn, material_id, [cue.id])
+    item_id = svc.load_session_state(conn, session.id).items[0].item.id
+    svc.record_recall(conn, item_id, "understood")
+    svc.mark_item_shadowed(conn, item_id)
+    svc.complete_item(conn, item_id)
+    svc.complete_session(conn, session.id)
+
+    after = svc.recommend_cues(conn, material_id, 1)
+    assert after[0].subtitle_cue_id == cue.id
+    assert "marked_misheard" in after[0].reasons
+    assert "little_or_no_shadowing_practice" not in after[0].reasons
+
+
+def test_recommend_cues_does_not_count_shadowing_from_an_incomplete_quick_practice_item(conn):
+    """An item that was shadowed but never completed (the run is still
+    active, or was discarded/abandoned before this item finished) is not
+    "completed Quick Practice" evidence yet."""
+    material_id, cues = _make_material_with_cues(conn)
+    cue = cues[0]
+    insert_annotations(conn, cue.id, [("misheard", "wrong word")], cue.text[0:7], 0, 7, None)
+
+    session = svc.start_selected_session(conn, material_id, [cue.id])
+    item_id = svc.load_session_state(conn, session.id).items[0].item.id
+    svc.record_recall(conn, item_id, "understood")
+    svc.mark_item_shadowed(conn, item_id)
+    # deliberately not completed
+
+    entries = svc.recommend_cues(conn, material_id, 1)
+    assert entries[0].subtitle_cue_id == cue.id
+    assert "little_or_no_shadowing_practice" in entries[0].reasons
 
 
 # ---- Step 2: recall ----
@@ -239,15 +284,53 @@ def test_diagnosis_rejects_an_unknown_cue_range(conn):
 # ---- Step 4: shadowing ----
 
 
+def test_mark_item_shadowed_is_rejected_before_recall_is_recorded(conn):
+    """Shadowing is Step 4 of the per-cue cycle and cannot precede Recall
+    (Step 2) / Reveal (Step 3) — mirrors the same revealed-item guard
+    diagnosis uses."""
+    material_id, cues = _make_material_with_cues(conn)
+    session = svc.start_selected_session(conn, material_id, [cues[0].id])
+    item_id = svc.load_session_state(conn, session.id).items[0].item.id
+    with pytest.raises(QuickPracticeValidationError) as excinfo:
+        svc.mark_item_shadowed(conn, item_id)
+    assert excinfo.value.category == "transcript_not_revealed"
+    assert svc.load_session_state(conn, session.id).items[0].item.shadowed_at is None
+
+
+def test_mark_item_shadowed_succeeds_once_recall_has_revealed_the_transcript(conn):
+    material_id, cues = _make_material_with_cues(conn)
+    session = svc.start_selected_session(conn, material_id, [cues[0].id])
+    item_id = svc.load_session_state(conn, session.id).items[0].item.id
+    svc.record_recall(conn, item_id, "understood")
+    svc.mark_item_shadowed(conn, item_id)
+    assert svc.load_session_state(conn, session.id).items[0].item.shadowed_at is not None
+
+
 def test_mark_item_shadowed_is_idempotent(conn):
     material_id, cues = _make_material_with_cues(conn)
     session = svc.start_selected_session(conn, material_id, [cues[0].id])
     item_id = svc.load_session_state(conn, session.id).items[0].item.id
+    svc.record_recall(conn, item_id, "understood")
     svc.mark_item_shadowed(conn, item_id)
     first = svc.load_session_state(conn, session.id).items[0].item.shadowed_at
     svc.mark_item_shadowed(conn, item_id)
     second = svc.load_session_state(conn, session.id).items[0].item.shadowed_at
     assert first == second
+
+
+def test_mark_item_shadowed_is_rejected_on_an_abandoned_session(conn):
+    material_id, cues = _make_material_with_cues(conn)
+    session = svc.start_selected_session(conn, material_id, [cues[0].id, cues[1].id])
+    items = svc.load_session_state(conn, session.id).items
+    svc.record_recall(conn, items[0].item.id, "understood")
+    svc.complete_item(conn, items[0].item.id)
+    outcome = svc.close_session(conn, session.id)  # one item completed -> abandoned, not discarded
+    assert outcome == "abandoned"
+
+    assert svc.get_session(conn, session.id).status == QuickPracticeStatus.ABANDONED.value
+    with pytest.raises(QuickPracticeValidationError) as excinfo:
+        svc.mark_item_shadowed(conn, items[1].item.id)
+    assert excinfo.value.category == "session_not_active"
 
 
 # ---- item / session completion ----
@@ -365,31 +448,6 @@ def test_build_completion_summary_counts_are_accurate(conn):
     assert summary.diagnoses_created == 1
     assert summary.shadowing_actions == 1
     assert summary.cues_worth_revisiting == [cues[0].id]  # missed + diagnosed cue only
-
-
-def test_build_completion_summary_counts_recordings_created_during_the_run(conn, tmp_path):
-    material_id, cues = _make_material_with_cues(conn)
-    session = svc.start_selected_session(conn, material_id, [cues[0].id])
-    item_id = svc.load_session_state(conn, session.id).items[0].item.id
-    svc.record_recall(conn, item_id, "understood")
-    svc.complete_item(conn, item_id)
-    svc.complete_session(conn, session.id)
-
-    recordings_dir = tmp_path / "recordings"
-    recording, absolute_path = recording_service.begin_recording(
-        conn, recordings_dir, material_id, cues[0].id, "device-1", "Mic"
-    )
-    import wave
-
-    with wave.open(str(absolute_path), "w") as wf:
-        wf.setnchannels(1)
-        wf.setsampwidth(2)
-        wf.setframerate(8000)
-        wf.writeframes(b"\x00\x00" * 8000)
-    recording_service.finish_recording(conn, recordings_dir, recording.id)
-
-    summary = svc.build_completion_summary(conn, session.id)
-    assert summary.recordings_created == 1
 
 
 # ---- not-found errors ----

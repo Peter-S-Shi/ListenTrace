@@ -23,7 +23,7 @@ def test_little_shadowing_practice_never_qualifies_alone():
 def test_little_shadowing_practice_amplifies_a_genuine_reason():
     stats = _stats(1, 0, annotation_labels=frozenset({"misheard"}), shadowing_practice_count=0)
     reasons = recommendation.evaluate_cue(stats)
-    assert recommendation.REASON_RECENT_MISHEARD in reasons
+    assert recommendation.REASON_MARKED_MISHEARD in reasons
     assert recommendation.REASON_LITTLE_SHADOWING_PRACTICE in reasons
 
 
@@ -32,9 +32,9 @@ def test_each_annotation_label_maps_to_its_own_reason():
         1, 0, annotation_labels=frozenset({"misheard", "known_not_heard", "connected_reduced_speech"})
     )
     reasons = recommendation.evaluate_cue(stats)
-    assert recommendation.REASON_RECENT_MISHEARD in reasons
-    assert recommendation.REASON_RECENT_KNOWN_NOT_HEARD in reasons
-    assert recommendation.REASON_RECENT_CONNECTED_REDUCED_SPEECH in reasons
+    assert recommendation.REASON_MARKED_MISHEARD in reasons
+    assert recommendation.REASON_MARKED_KNOWN_NOT_HEARD in reasons
+    assert recommendation.REASON_MARKED_CONNECTED_REDUCED_SPEECH in reasons
 
 
 def test_incorrect_quiz_evidence_reason():

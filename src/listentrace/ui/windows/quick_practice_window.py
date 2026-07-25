@@ -277,11 +277,16 @@ class QuickPracticeWindow(QMainWindow):
         self._status_label.setText(message)
 
     def closeEvent(self, event) -> None:
-        self._recording_panel.abort_active_recording()
-        self._recording_panel.release_take_playback()
-        self._playback.stop()
+        """Decide-then-act: whether confirmation is needed is determined
+        purely by reading state, and nothing about the active recording,
+        take playback, source playback, or Quick Practice session is
+        touched until after the learner has confirmed (or no confirmation
+        was needed). Cancelling must leave every one of those untouched —
+        an active recording must not be aborted just because the learner
+        opened (and then dismissed) the close prompt."""
         session = svc.get_session(self._connection, self._session_id)
-        if session is not None and session.status == QuickPracticeStatus.ACTIVE.value:
+        session_is_active = session is not None and session.status == QuickPracticeStatus.ACTIVE.value
+        if session_is_active:
             completed_count = sum(
                 1 for item_state in (self._state.items if self._state else []) if item_state.item.completed_at is not None
             )
@@ -296,6 +301,11 @@ class QuickPracticeWindow(QMainWindow):
                 if answer != QMessageBox.StandardButton.Yes:
                     event.ignore()
                     return
+
+        self._recording_panel.abort_active_recording()
+        self._recording_panel.release_take_playback()
+        self._playback.stop()
+        if session_is_active:
             svc.close_session(self._connection, self._session_id)
         super().closeEvent(event)
 
@@ -667,7 +677,6 @@ class QuickPracticeWindow(QMainWindow):
             f"Missed: {summary.missed_count}",
             f"Diagnoses created: {summary.diagnoses_created}",
             f"Explicit shadowing actions: {summary.shadowing_actions}",
-            f"Recordings created during this run: {summary.recordings_created}",
         ]
         if summary.cues_worth_revisiting:
             texts = []

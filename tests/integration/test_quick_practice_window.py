@@ -7,8 +7,10 @@ import pytest
 from PySide6.QtWidgets import QMessageBox
 
 from listentrace.application.services import quick_practice_service as svc
+from listentrace.application.services import recording_service
 from listentrace.application.services.material_import_service import import_material
 from listentrace.application.services.player_loading_service import load_material_for_player
+from listentrace.infrastructure.db import recording_repository
 from listentrace.infrastructure.db.connection import open_connection
 from listentrace.infrastructure.db.migrations import migrate
 from listentrace.ui.windows.quick_practice_window import (
@@ -162,6 +164,44 @@ def test_close_with_progress_prompts_and_abandons_on_confirm(qapp, conn, tmp_pat
 
     session_after = svc.get_session(conn, session.id)
     assert session_after.status == "abandoned"
+
+
+def test_close_cancelled_does_not_touch_active_recording_take_playback_or_session(qapp, conn, tmp_path, monkeypatch):
+    """Acceptance correction: closeEvent must decide-then-act — nothing
+    about the active recording, take playback, source playback, or Quick
+    Practice session may be mutated until after the learner has confirmed.
+    Cancelling the close prompt must leave an in-progress recording
+    untouched and the session `active`."""
+    load_result = _import_material(conn, tmp_path)
+    session = svc.start_selected_session(conn, load_result.material.id, [load_result.cues[0].id, load_result.cues[1].id])
+    window = QuickPracticeWindow(conn, load_result, session.id, tmp_path / "recordings")
+    window._recall_radio_buttons["understood"].setChecked(True)
+    window._on_step_action_clicked()  # reveal
+    window._on_step_action_clicked()  # -> replay
+    window._on_step_action_clicked()  # -> complete item 1, advance to item 2
+
+    recording, _absolute_path = recording_service.begin_recording(
+        conn, tmp_path / "recordings", load_result.material.id, load_result.cues[1].id, "fake-device", "Fake Mic"
+    )
+    window._recording_panel._active_recording = recording
+
+    abort_calls = []
+    monkeypatch.setattr(window._recording_panel, "abort_active_recording", lambda: abort_calls.append(True))
+    release_calls = []
+    monkeypatch.setattr(window._recording_panel, "release_take_playback", lambda: release_calls.append(True))
+    stop_calls = []
+    monkeypatch.setattr(window._playback, "stop", lambda: stop_calls.append(True))
+    monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.StandardButton.No)
+
+    accepted = window.close()
+
+    assert accepted is False
+    assert abort_calls == []
+    assert release_calls == []
+    assert stop_calls == []
+    assert svc.get_session(conn, session.id).status == "active"
+    still_recording = recording_repository.get_recording(conn, recording.id)
+    assert still_recording.status == "recording"  # never aborted/failed by the cancelled close
 
 
 def test_close_with_progress_cancelled_keeps_the_window_open(qapp, conn, tmp_path, monkeypatch):

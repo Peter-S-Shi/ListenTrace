@@ -271,11 +271,15 @@ def count_item_diagnosis(conn: sqlite3.Connection, item_id: int) -> int:
     return int(row["n"])
 
 
-# ---- recommendation evidence (read-only, from existing Milestone 4-7 evidence) ----
+# ---- recommendation evidence (read-only) ----
 #
 # "Recommended Practice" (see `domain/services/quick_practice_recommendation.py`)
-# reads only pre-existing local evidence — never Quick Practice's own history —
-# to avoid a circular "recommendations feeding on themselves" dependency.
+# reads pre-existing Milestone 4-7 evidence plus one deliberate exception:
+# explicit Quick Practice shadowing (`shadowed_at`) is real shadowing
+# evidence and is folded into the same shadowing-practice count Intensive
+# Practice contributes to. It still never reads Quick Practice's own recall
+# outcomes, diagnosis evidence, or session history — only that one signal —
+# so recommendations do not feed on their own outcomes.
 
 
 def list_annotation_labels_by_cue(conn: sqlite3.Connection, material_id: int) -> dict[int, frozenset[str]]:
@@ -295,13 +299,34 @@ def list_annotation_labels_by_cue(conn: sqlite3.Connection, material_id: int) ->
     return {cue_id: frozenset(labels) for cue_id, labels in result.items()}
 
 
-def list_diagnosis_counts_by_cue(conn: sqlite3.Connection, material_id: int) -> dict[int, int]:
-    """Session-scoped diagnosis evidence (Milestone 5), counted per cue
-    across every session on this material — deliberately not combined with
-    Quick Practice's own diagnosis evidence (see module docstring)."""
+def list_annotation_recency_by_cue(conn: sqlite3.Connection, material_id: int) -> dict[int, str]:
+    """Per cue: the most recent `created_at` among this cue's material
+    annotations — a real timestamp, used only for tie-break ordering
+    (annotation *presence*, not recency, is what qualifies a `marked_*`
+    reason; see `quick_practice_recommendation.py`)."""
     rows = conn.execute(
         """
-        SELECT session_diagnosis_evidence.subtitle_cue_id AS subtitle_cue_id, COUNT(*) AS n
+        SELECT annotation.subtitle_cue_id AS subtitle_cue_id, MAX(annotation.created_at) AS most_recent_at
+        FROM annotation
+        JOIN subtitle_cue ON subtitle_cue.id = annotation.subtitle_cue_id
+        JOIN subtitle_track ON subtitle_track.id = subtitle_cue.subtitle_track_id
+        WHERE subtitle_track.material_id = ?
+        GROUP BY annotation.subtitle_cue_id
+        """,
+        (material_id,),
+    ).fetchall()
+    return {row["subtitle_cue_id"]: row["most_recent_at"] for row in rows}
+
+
+def list_diagnosis_counts_by_cue(conn: sqlite3.Connection, material_id: int) -> dict[int, tuple[int, str | None]]:
+    """Session-scoped diagnosis evidence (Milestone 5), per cue across every
+    session on this material: (count, most recent `created_at`) —
+    deliberately not combined with Quick Practice's own diagnosis evidence
+    (see module docstring)."""
+    rows = conn.execute(
+        """
+        SELECT session_diagnosis_evidence.subtitle_cue_id AS subtitle_cue_id, COUNT(*) AS n,
+               MAX(session_diagnosis_evidence.created_at) AS most_recent_at
         FROM session_diagnosis_evidence
         JOIN practice_session ON practice_session.id = session_diagnosis_evidence.practice_session_id
         WHERE practice_session.material_id = ?
@@ -309,7 +334,7 @@ def list_diagnosis_counts_by_cue(conn: sqlite3.Connection, material_id: int) -> 
         """,
         (material_id,),
     ).fetchall()
-    return {row["subtitle_cue_id"]: row["n"] for row in rows}
+    return {row["subtitle_cue_id"]: (row["n"], row["most_recent_at"]) for row in rows}
 
 
 def list_incorrect_quiz_evidence_by_cue(conn: sqlite3.Connection, material_id: int) -> dict[int, str]:
@@ -343,6 +368,33 @@ def list_shadowing_stats_by_cue(conn: sqlite3.Connection, material_id: int) -> d
         JOIN practice_session ON practice_session.id = shadowing_cue_progress.practice_session_id
         WHERE practice_session.material_id = ? AND shadowing_cue_progress.practice_count > 0
         GROUP BY shadowing_cue_progress.subtitle_cue_id
+        """,
+        (material_id,),
+    ).fetchall()
+    return {row["subtitle_cue_id"]: (row["total_count"], row["most_recent_at"]) for row in rows}
+
+
+def list_quick_practice_shadowing_counts_by_cue(
+    conn: sqlite3.Connection, material_id: int
+) -> dict[int, tuple[int, str | None]]:
+    """Per cue: (count of completed Quick Practice items with explicit
+    shadowing, most recent `shadowed_at`) — the one piece of Quick
+    Practice's own history "Recommended Practice" is allowed to read (see
+    module docstring): an explicit `shadowed_at` is real shadowing
+    evidence, on the same footing as Intensive Practice's. Quick Practice
+    recall outcomes are still never read here. Source replay or recording
+    alone is never counted — only the explicit "Mark Shadowed" action."""
+    rows = conn.execute(
+        """
+        SELECT quick_practice_item.subtitle_cue_id AS subtitle_cue_id,
+               COUNT(*) AS total_count,
+               MAX(quick_practice_item.shadowed_at) AS most_recent_at
+        FROM quick_practice_item
+        JOIN quick_practice_session ON quick_practice_session.id = quick_practice_item.quick_practice_session_id
+        WHERE quick_practice_session.material_id = ?
+          AND quick_practice_item.completed_at IS NOT NULL
+          AND quick_practice_item.shadowed_at IS NOT NULL
+        GROUP BY quick_practice_item.subtitle_cue_id
         """,
         (material_id,),
     ).fetchall()

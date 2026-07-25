@@ -10,10 +10,20 @@ from listentrace.domain.enums.annotation_label import AnnotationLabel
 # `needs_attention_rules.py`'s "transparent reasons, never one composite
 # score" pattern) — there is no hidden ability/difficulty/priority number
 # anywhere in this module.
+#
+# Reason-key naming: the label-derived reasons describe *current material
+# annotation state*, not recency — a material annotation carries no
+# reliable claim of "recent" on its own (it is queried without being
+# filtered or ranked by its own timestamp). They are named `marked_*`
+# accordingly. Genuine timestamp-based recency is still used, but only for
+# tie-break ordering (`most_recent_evidence_at`), and only from evidence
+# that actually carries a timestamp: annotation/diagnosis creation time,
+# incorrect-quiz-answer time, and shadowing-practice time (both Intensive
+# Practice and explicit Quick Practice shadowing).
 
-REASON_RECENT_MISHEARD = "recent_misheard"
-REASON_RECENT_KNOWN_NOT_HEARD = "recent_known_not_heard"
-REASON_RECENT_CONNECTED_REDUCED_SPEECH = "recent_connected_reduced_speech"
+REASON_MARKED_MISHEARD = "marked_misheard"
+REASON_MARKED_KNOWN_NOT_HEARD = "marked_known_not_heard"
+REASON_MARKED_CONNECTED_REDUCED_SPEECH = "marked_connected_reduced_speech"
 REASON_INCORRECT_QUIZ_EVIDENCE = "incorrect_quiz_evidence"
 REASON_RECURRING_DIAGNOSIS = "recurring_diagnosis_history"
 REASON_LITTLE_SHADOWING_PRACTICE = "little_or_no_shadowing_practice"
@@ -24,9 +34,9 @@ RECURRING_DIAGNOSIS_THRESHOLD = 2
 history"."""
 
 _LABEL_REASON_BY_KEY: dict[str, str] = {
-    AnnotationLabel.MISHEARD.value: REASON_RECENT_MISHEARD,
-    AnnotationLabel.KNOWN_NOT_HEARD.value: REASON_RECENT_KNOWN_NOT_HEARD,
-    AnnotationLabel.CONNECTED_REDUCED_SPEECH.value: REASON_RECENT_CONNECTED_REDUCED_SPEECH,
+    AnnotationLabel.MISHEARD.value: REASON_MARKED_MISHEARD,
+    AnnotationLabel.KNOWN_NOT_HEARD.value: REASON_MARKED_KNOWN_NOT_HEARD,
+    AnnotationLabel.CONNECTED_REDUCED_SPEECH.value: REASON_MARKED_CONNECTED_REDUCED_SPEECH,
 }
 
 

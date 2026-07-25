@@ -25,9 +25,9 @@ from listentrace.domain.services import quick_practice_rules as rules
 from listentrace.ui.windows.player_window import _format_time
 
 _REASON_LABELS: dict[str, str] = {
-    "recent_misheard": "misheard",
-    "recent_known_not_heard": "known but not heard",
-    "recent_connected_reduced_speech": "connected/reduced speech",
+    "marked_misheard": "marked misheard",
+    "marked_known_not_heard": "marked known but not heard",
+    "marked_connected_reduced_speech": "marked connected/reduced speech",
     "incorrect_quiz_evidence": "missed on a quiz",
     "recurring_diagnosis_history": "recurring diagnosis history",
     "little_or_no_shadowing_practice": "little/no shadowing practice",

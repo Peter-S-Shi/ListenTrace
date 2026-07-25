@@ -43,7 +43,6 @@ class QuickPracticeCompletionSummary:
     missed_count: int
     diagnoses_created: int
     shadowing_actions: int
-    recordings_created: int
     cues_worth_revisiting: list[int] = field(default_factory=list)
     """subtitle_cue_ids with a Missed recall result or at least one
     diagnosis recorded during this run — evidence for the learner to

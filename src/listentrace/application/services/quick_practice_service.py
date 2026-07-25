@@ -15,12 +15,10 @@ from listentrace.application.errors import (
     QuickPracticeNotFoundError,
     QuickPracticeValidationError,
 )
-from listentrace.application.services import recording_service
 from listentrace.domain.enums.annotation_label import AnnotationLabel
 from listentrace.domain.enums.quick_practice_source import QuickPracticeSource
 from listentrace.domain.enums.quick_practice_status import QuickPracticeStatus
 from listentrace.domain.enums.recall_result import RecallResult
-from listentrace.domain.enums.recording_status import RecordingStatus
 from listentrace.domain.models.quick_practice_diagnosis_evidence import QuickPracticeDiagnosisEvidence
 from listentrace.domain.models.quick_practice_item import QuickPracticeItem
 from listentrace.domain.models.quick_practice_session import QuickPracticeSession
@@ -101,8 +99,12 @@ def _require_active_revealed_item(
 def recommend_cues(conn: sqlite3.Connection, material_id: int, count: int) -> list[RecommendedCueEntry]:
     """Deterministic, transparent cue recommendation — read-only, callable
     before a session is created (used by the start dialog's preview) and
-    reused internally by `start_recommended_session`. Reads only existing
-    Milestone 4/5/6/7 evidence, never Quick Practice's own history."""
+    reused internally by `start_recommended_session`. Reads existing
+    Milestone 4/5/6/7 evidence, plus one deliberate exception: explicit
+    Quick Practice shadowing (`shadowed_at`), which is real shadowing
+    evidence and is folded into the same shadowing-practice count. Quick
+    Practice's own recall outcomes and diagnosis evidence are still never
+    read here (see `quick_practice_repository.py`)."""
     track = get_subtitle_track_for_material(conn, material_id)
     if track is None or track.id is None:
         return []
@@ -111,24 +113,38 @@ def recommend_cues(conn: sqlite3.Connection, material_id: int, count: int) -> li
         return []
 
     labels_by_cue = repo.list_annotation_labels_by_cue(conn, material_id)
+    annotation_recency = repo.list_annotation_recency_by_cue(conn, material_id)
     diagnosis_counts = repo.list_diagnosis_counts_by_cue(conn, material_id)
     incorrect_quiz = repo.list_incorrect_quiz_evidence_by_cue(conn, material_id)
     shadowing_stats = repo.list_shadowing_stats_by_cue(conn, material_id)
+    quick_practice_shadowing_stats = repo.list_quick_practice_shadowing_counts_by_cue(conn, material_id)
 
     stats: list[recommendation.CueEvidenceStats] = []
     for position, cue in enumerate(cues):
         if cue.id is None:
             continue
+        diagnosis_count, diagnosis_recent = diagnosis_counts.get(cue.id, (0, None))
         shadow_count, shadow_recent = shadowing_stats.get(cue.id, (0, None))
-        recency_candidates = [v for v in (incorrect_quiz.get(cue.id), shadow_recent) if v]
+        qp_shadow_count, qp_shadow_recent = quick_practice_shadowing_stats.get(cue.id, (0, None))
+        recency_candidates = [
+            v
+            for v in (
+                annotation_recency.get(cue.id),
+                diagnosis_recent,
+                incorrect_quiz.get(cue.id),
+                shadow_recent,
+                qp_shadow_recent,
+            )
+            if v
+        ]
         stats.append(
             recommendation.CueEvidenceStats(
                 subtitle_cue_id=cue.id,
                 position=position,
                 annotation_labels=labels_by_cue.get(cue.id, frozenset()),
-                diagnosis_evidence_count=diagnosis_counts.get(cue.id, 0),
+                diagnosis_evidence_count=diagnosis_count,
                 has_incorrect_quiz_evidence=cue.id in incorrect_quiz,
-                shadowing_practice_count=shadow_count,
+                shadowing_practice_count=shadow_count + qp_shadow_count,
                 most_recent_evidence_at=max(recency_candidates) if recency_candidates else None,
             )
         )
@@ -307,8 +323,11 @@ def list_item_diagnosis(conn: sqlite3.Connection, item_id: int) -> list[QuickPra
 
 def mark_item_shadowed(conn: sqlite3.Connection, item_id: int) -> None:
     """Explicit-action-only, idempotent — mirrors Milestone 5's "Mark
-    Practiced" (never inferred from playback alone)."""
-    _require_active_item(conn, item_id)
+    Practiced" (never inferred from playback alone). Requires Recall to
+    have been recorded and the transcript revealed first: shadowing is
+    Step 4 of the per-cue cycle and cannot precede Steps 2-3 (reuses the
+    same revealed-item guard `record_item_diagnosis` uses)."""
+    _require_active_revealed_item(conn, item_id)
     repo.set_item_shadowed(conn, item_id)
 
 
@@ -373,7 +392,7 @@ def recover_interrupted_sessions(conn: sqlite3.Connection) -> int:
 
 
 def build_completion_summary(conn: sqlite3.Connection, session_id: int) -> QuickPracticeCompletionSummary:
-    session = _require_session(conn, session_id)
+    _require_session(conn, session_id)
     items = repo.list_items(conn, session_id)
     completed_items = [item for item in items if item.completed_at is not None]
 
@@ -393,23 +412,6 @@ def build_completion_summary(conn: sqlite3.Connection, session_id: int) -> Quick
     revisit_ids = missed_cue_ids | diagnosis_cue_ids
     cues_worth_revisiting = [item.subtitle_cue_id for item in items if item.subtitle_cue_id in revisit_ids]
 
-    # A best-effort correlation, not a persisted link (see ARCHITECTURE.md):
-    # any retained recording on one of this run's cues, created no earlier
-    # than the run started. Mirrors the honest-approximation pattern
-    # already used for Learning History's shadowing-practice-count.
-    recordings_created = 0
-    if items and session.started_at is not None:
-        cue_id_set = {item.subtitle_cue_id for item in items}
-        takes = recording_service.list_takes_for_material(conn, session.material_id)
-        recordings_created = sum(
-            1
-            for take in takes
-            if take.subtitle_cue_id in cue_id_set
-            and take.status == RecordingStatus.READY.value
-            and take.created_at is not None
-            and take.created_at >= session.started_at
-        )
-
     return QuickPracticeCompletionSummary(
         cues_completed=len(completed_items),
         understood_count=understood,
@@ -417,6 +419,5 @@ def build_completion_summary(conn: sqlite3.Connection, session_id: int) -> Quick
         missed_count=missed,
         diagnoses_created=len(diagnosis_rows),
         shadowing_actions=shadowing_actions,
-        recordings_created=recordings_created,
         cues_worth_revisiting=cues_worth_revisiting,
     )
