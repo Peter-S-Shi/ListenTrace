@@ -384,22 +384,20 @@ An acceptance closeout pass corrected the wording above (the no-developer-Python
 
 See `ARCHITECTURE.md`'s "Resolved in Post-M10 Phase B" section and `packaging/README.md` for full detail and validation evidence.
 
-## Phase C — Clean-Machine Testing
+## Phase C — Clean-Machine Testing (Partially Complete)
 
 Testing on a clean Windows environment covering:
 
-- no preinstalled Python;
-- fresh user account;
-- non-English user and path names;
-- install, launch, upgrade, and uninstall;
-- data preservation;
-- legacy database upgrade;
-- playback and microphone;
-- Intensive Practice;
-- Quiz;
-- Learning History;
-- Export;
-- Quick Practice.
+- no preinstalled Python: **not verified** — every check below ran on this project's development machine, which already has Python, Git, an IDE, FFmpeg, and other developer tooling installed. Whether the packaged build runs on a machine with none of that requires an actual clean machine or VM;
+- fresh user account: **not verified** — same reason;
+- non-English user and path names: partially covered — the packaged exe was launched successfully from a Unicode (Chinese-character) install path, but this was still on this development machine, not a genuinely non-English Windows installation;
+- install, launch, upgrade, and uninstall: **preflighted on the development machine** — a fresh silent install, a reinstall over the same install (upgrade-in-place via the same AppId), a silent uninstall, each launch in between, all completed cleanly;
+- data preservation: **preflighted** — a real material row survived install → data creation → reinstall → uninstall intact;
+- legacy database upgrade: **preflighted** — a real pre-Milestone-10 (schema version 8) database with real material/session/recording rows, opened directly by the compiled exe, upgraded cleanly to version 10 with all data intact;
+- playback and microphone: **preflighted for audio** — real WAV playback loads correctly through the bundled FFmpeg-based Qt Multimedia plugin, and a real ~1-second capture from a real physical microphone in this environment produced a valid WAV file with no errors; video (MP4/H.264) playback was **not** tested with a real file, since no H.264 encoder was available in this environment to produce one — the bundled `ffmpegmediaplugin.dll` was confirmed present and non-trivial in size, which is structural evidence only, not a substitute for an actual playback check;
+- Intensive Practice / Quiz / Learning History / Export / Quick Practice: **preflighted at the service level, not via GUI clicks** — a real, scripted walkthrough exercised every one of these five feature areas end-to-end through the actual application services (the same source frozen into the build), producing one database that the compiled exe then opened and ran against without error. This is not equivalent to a person clicking through the packaged app's actual windows; no native Windows GUI-automation tool was available in this session to do that.
+
+**This preflight pass does not constitute Phase C acceptance.** Real clean-machine testing — a genuinely clean Windows 11 x64 Home/Pro machine or VM with no Python, Git, IDE, FFmpeg, codec packs, or other development environment installed — is still required before Phase C can be marked complete. Phase D does not begin until that real verification happens.
 
 ## Phase D — v1.0 Release Candidate
 
