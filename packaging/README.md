@@ -18,11 +18,14 @@ not to finalize release engineering — Phase B (hardening), Phase C
   separate pipelines.
 - **Installer tool: Inno Setup**, installed locally via
   `winget install JRSoftware.InnoSetup` (per-user, no admin rights consumed
-  by the install itself). `packaging/installer.iss` installs **per-user by
-  default** (`PrivilegesRequired=lowest`, `DefaultDirName={autopf}\ListenTrace`,
+  by the install itself). `packaging/installer.iss` installs **per-user
+  only** (`PrivilegesRequired=lowest`, `DefaultDirName={autopf}\ListenTrace`,
   which resolves to `%LOCALAPPDATA%\Programs\ListenTrace` without admin
-  rights) but still lets the installer offer a machine-wide install via
-  `PrivilegesRequiredOverridesAllowed=dialog`.
+  rights). This is a **v1.0 release-scope decision, not just a default**:
+  machine-wide install is out of scope for v1.0, so
+  `PrivilegesRequiredOverridesAllowed` is deliberately left unset, which
+  disables Inno Setup's per-user/machine-wide choice entirely rather than
+  merely defaulting it.
 - **Icon: a generated placeholder**, not a final design. See
   `assets/generate_icon.py` — a simple flat rounded-square-and-waveform
   glyph, regenerable at any time; swapping in a real icon later requires no

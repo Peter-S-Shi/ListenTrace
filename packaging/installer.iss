@@ -23,11 +23,14 @@ AppVersion={#MyAppVersion}
 AppPublisher={#MyAppName}
 DefaultDirName={autopf}\{#MyAppName}
 DefaultGroupName={#MyAppName}
-; Per-user install by default (no UAC prompt), but lets the learner choose a
-; machine-wide install instead -- appropriate for an unsigned indie app with
-; no admin-only resource requirements.
+; Per-user install only for v1.0 -- no UAC prompt, and no machine-wide
+; install option offered. This is a deliberate v1.0 release-scope decision
+; (not merely a default): PrivilegesRequiredOverridesAllowed is intentionally
+; left unset, which means Inno Setup does not offer a per-user/machine-wide
+; choice at all -- omitting it, rather than setting it to a value, is what
+; disables the choice (its default is "no overrides allowed"). Revisit only
+; as an explicit future release-scope decision, not as a packaging default.
 PrivilegesRequired=lowest
-PrivilegesRequiredOverridesAllowed=dialog
 OutputDir=dist
 OutputBaseFilename=ListenTrace-Setup-{#MyAppVersion}
 SetupIconFile=assets\listentrace.ico

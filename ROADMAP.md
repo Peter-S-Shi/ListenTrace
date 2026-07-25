@@ -356,7 +356,7 @@ Decided and validated:
 - Windows-first release target;
 - packaging technology: PyInstaller, one onedir build;
 - that same onedir build serves both distribution forms — an Inno Setup installer and a portable ZIP, not two separate pipelines;
-- per-user install by default (no admin rights required to install), with a machine-wide install still offered as an option;
+- per-user install only (no admin rights required to install) — machine-wide install is out of scope for v1.0, a release-scope decision, not just a default;
 - application icon and version metadata: a placeholder icon (regenerable, not a final design) and version/publisher metadata that names only "ListenTrace" — no separate individual or company name;
 - application-data and recording locations: unchanged — the existing `%APPDATA%\ListenTrace` location (database, recordings, logs) is preserved exactly as before packaging;
 - preservation of SQLite data during upgrades: the install/upgrade path never touches `%APPDATA%\ListenTrace`;
