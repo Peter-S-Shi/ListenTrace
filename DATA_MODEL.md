@@ -149,7 +149,7 @@ Implemented fields:
 
 - `id`
 - `material_id` (FK → `material.id`, `ON DELETE CASCADE`)
-- `mode` (only `intensive` so far; `speed` is future/Milestone 10 direction, not implemented)
+- `mode` (only `intensive` so far; a distinct value for Milestone 10 Quick Practice Mode is anticipated but not yet named or implemented)
 - `status`
 - `current_stage`
 - `transcript_revealed_at` (`NULL` until Stage 3 is first entered; set at most once — see Constraints)

@@ -316,6 +316,12 @@ Requirements:
 - Quiz question/answer exports read only each attempt's immutable generation-time snapshot, never live cue or annotation text, so an export remains accurate even after the source material is later edited. Incomplete (active or abandoned) quiz attempts are excluded from export the same way they are excluded from Learning History's own averages. Session diagnosis history and current material annotations are exported under separate keys and are never merged or added together.
 - No network request occurs anywhere in the export flow; no account, API key, cloud upload, scheduled export, or embedded AI submission exists.
 
+## Release Scope
+
+- Quick Practice (Milestone 10) is in scope for the first release; its roadmap-level definition is locked in `ROADMAP.md`. After its acceptance the project enters feature freeze.
+- Milestone 11's optional assisted features (speech recognition, pronunciation feedback, translation assistance, subtitle generation, question generation) are outside first-release scope and remain deferred until after a packaged, tested, successfully used v1.0.
+- Windows-first packaging and release validation (packaging spike, release hardening, clean-machine testing, release-candidate validation) follow feature completion, not before it — see `ROADMAP.md`'s Post-M10 sequence.
+
 ## Copyright and Source Policy
 
 ListenTrace does not download protected streaming content or circumvent access controls.

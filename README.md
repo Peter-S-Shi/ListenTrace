@@ -79,6 +79,8 @@ A global **Learning History** view (opens with no material selected, or preselec
 
 From Learning History, **Export Learning Evidence** builds a local, user-controlled Markdown or JSON export of the same stored evidence: choose a scope (All Materials / One Material / Selected Materials), a date range (the same presets and local-time rules as Learning History), which evidence categories to include, and which privacy-sensitive fields (transcript excerpts, learner notes, mishearing text, vocabulary meanings, source labels, local file names) to include or redact — an unchecked field is redacted in place, never silently dropped along with its whole record. Absolute paths, original media/subtitle/recording paths, and raw audio are never included, regardless of any selection. A preview (Markdown, JSON, and a separate reusable external-evaluation instruction template) is generated before anything is saved or copied, and the exact same generated text is what gets written to disk (atomically, with overwrite confirmation) or copied to the clipboard — nothing is ever regenerated between preview and save. The JSON export carries a stable `export_version` (currently `1`), independent of the database schema version. No network request is made anywhere in the export flow.
 
+Milestone 10 — Quick Practice Mode remains before feature freeze; it is the final planned user-feature milestone for the first release. Milestone 11's optional assisted features (speech recognition, pronunciation feedback, translation, and similar) are deferred beyond v1.0. After Milestone 10 is accepted, work shifts to packaging, release hardening, clean-machine testing, and v1.0 delivery — see `ROADMAP.md`.
+
 See:
 
 - `ROADMAP.md` for milestone sequencing

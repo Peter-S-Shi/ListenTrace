@@ -1,6 +1,6 @@
 # ListenTrace Project Status
 
-Last updated: 2026-07-24 (Milestone 9 acceptance correction)
+Last updated: 2026-07-24 (post-Milestone-9 roadmap update)
 
 ## Project Purpose
 
@@ -156,8 +156,9 @@ Launch and open a valid material; confirm Milestone 3 playback still works; sele
 
 ## Planned Next Work
 
-- Milestone 10 — Speed Practice Mode: per `ROADMAP.md`, this is still an unspecified concept with open decisions (session length, which intensive stages are retained, whether it produces the same evidence, how it differs from replaying selected cues) — no implementation should begin until those questions are resolved.
-- Milestone 11 — Optional Assisted Features (speech recognition, pronunciation feedback, translation, etc.) remains further out and explicitly optional/local-first-preserving per `ROADMAP.md`.
+- Milestone 10 — Quick Practice Mode is the final planned user-feature milestone for the first release. Its roadmap-level definition is now locked in `ROADMAP.md` (short, low-friction, cue-based practice; ~5-10 minutes with no time scoring; 3/5/10 cues, default 5; Recommended Practice and Selected Cues entry points; per-cue Listen → Recall → Reveal/Diagnose → Replay/Shadow flow; progressive evidence saving; no exact-step resume; its own distinct history and export evidence; no AI, pronunciation score, adaptive difficulty, countdown, or game mechanics). This is the next engineering objective; implementation has not started.
+- After Milestone 10 is accepted, the project enters feature freeze. Remaining work before v1.0 is release engineering — see `ROADMAP.md`'s "Post-M10 — Release Engineering and v1.0 Delivery" (Phase A Packaging Spike, Phase B Release Hardening, Phase C Clean-Machine Testing, Phase D v1.0 Release Candidate).
+- Milestone 11 — Optional Assisted Features (speech recognition, pronunciation feedback, translation, etc.) is deferred beyond v1.0 per `ROADMAP.md`: it has no current implementation plan and is not the next active engineering objective.
 
 ## Known Risks
 
@@ -195,4 +196,4 @@ Launch and open a valid material; confirm Milestone 3 playback still works; sele
 
 ## Next Engineering Objective
 
-Milestone 10 — Speed Practice Mode is next in `ROADMAP.md`'s sequence, but it is an explicitly unspecified concept with open product decisions (intended session length, which intensive stages are retained, whether it produces the same evidence, how it differs from simply replaying selected cues) — no implementation should begin until those are resolved with the user. Until then, remaining engineering effort is corrective/quality passes on Milestones 1-9 as needed.
+Milestone 10 — Quick Practice Mode is next in `ROADMAP.md`'s sequence and is now roadmap-locked (see `ROADMAP.md`); it is the final planned user-feature milestone for the first release. Implementation has not yet started and awaits the detailed milestone-10 development instructions. After Milestone 10 is accepted, the project enters feature freeze and remaining work becomes release engineering — packaging, hardening, clean-machine testing, and release-candidate validation — per `ROADMAP.md`'s Post-M10 sequence. Milestone 11 (Optional Assisted Features) is deferred beyond v1.0 and is not part of that sequence or the next engineering objective.

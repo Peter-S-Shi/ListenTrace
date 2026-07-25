@@ -291,34 +291,41 @@ Requires stable data contracts and learning records.
 
 ---
 
-# Milestone 10 — Speed Practice Mode
+# Milestone 10 — Quick Practice Mode
 
 ## Goal
 
-Introduce a shorter workflow only after its educational behavior is explicitly defined.
+Provide a short, low-friction, cue-based practice mode as a companion to the full five-stage Intensive Practice session, and the final planned user-feature milestone for the first release.
 
-## Current Status
+## Locked Definition
 
-Planned concept, not yet specified.
+- Short, low-friction, cue-based practice.
+- Normally about 5–10 minutes, with no time scoring.
+- 3, 5, or 10 cues per session, defaulting to 5.
+- Two entry points: Recommended Practice and Selected Cues.
+- Per-cue flow: Listen → Recall → Reveal/Diagnose → Replay/Shadow.
+- Progressive evidence saving as the session proceeds.
+- No exact-step resume if a session is interrupted.
+- Produces its own distinct Quick Practice history and export evidence, kept separate from Intensive Practice and Quiz evidence.
+- Out of scope: AI assistance, pronunciation scoring, adaptive difficulty, a countdown timer, or game mechanics.
 
-## Decision Required
+## Boundary
 
-Clarify:
+Quick Practice is a companion workflow, not a replacement for Milestone 5's five-stage Intensive Practice session; it is not required to reproduce every stage or produce identical evidence.
 
-- intended session length;
-- which intensive stages are retained;
-- whether it creates the same evidence;
-- how it differs from simply replaying selected cues.
+## Dependencies
 
-No implementation should begin until these questions are resolved.
+Requires stable cues, annotations, quiz, and shadowing/recording behavior from earlier milestones.
+
+After Milestone 10 is accepted, the project enters feature freeze for the first release (see "Post-M10 — Release Engineering and v1.0 Delivery" below).
 
 ---
 
-# Milestone 11 — Optional Assisted Features
+# Milestone 11 — Optional Assisted Features (Deferred Beyond v1.0)
 
-## Goal
+## Status
 
-Evaluate optional services without weakening the local-first core.
+Deferred beyond v1.0. There is no current implementation plan, and it is not part of the first release. It may be reconsidered only after the local-first desktop product is packaged, tested, and used successfully — it is not the next active engineering objective.
 
 ## Possible Scope
 
@@ -331,10 +338,77 @@ Evaluate optional services without weakening the local-first core.
 
 ## Boundary
 
-- Must be optional.
-- Must disclose what leaves the device.
-- Must not be required for the core practice workflow.
+- Every future assisted feature must remain optional.
+- Any data leaving the device must be disclosed.
+- The core practice workflow must never depend on it.
 - Credentials must not be stored in source control.
+
+---
+
+# Post-M10 — Release Engineering and v1.0 Delivery
+
+Once Milestone 10 is accepted, remaining work before v1.0 is release engineering rather than new user features, organized into four phases. No packaging technology, installer format, or release date is chosen yet — that decision belongs to Phase A.
+
+## Phase A — Packaging Spike
+
+Decide and validate:
+
+- Windows-first release target;
+- packaging technology;
+- installer versus portable build;
+- application icon and version metadata;
+- application-data and recording locations;
+- preservation of SQLite data during upgrades;
+- uninstall behavior.
+
+## Phase B — Release Hardening
+
+Corrective work for:
+
+- startup and shutdown failures;
+- missing or moved media;
+- Unicode and non-English paths;
+- long Windows paths;
+- missing microphone;
+- codec and playback failures;
+- interrupted recording;
+- migration failure;
+- export failure;
+- large-history behavior;
+- operation without a developer Python environment.
+
+## Phase C — Clean-Machine Testing
+
+Testing on a clean Windows environment covering:
+
+- no preinstalled Python;
+- fresh user account;
+- non-English user and path names;
+- install, launch, upgrade, and uninstall;
+- data preservation;
+- legacy database upgrade;
+- playback and microphone;
+- Intensive Practice;
+- Quiz;
+- Learning History;
+- Export;
+- Quick Practice.
+
+## Phase D — v1.0 Release Candidate
+
+Completion of:
+
+- versioning;
+- About page;
+- privacy and local-data explanation;
+- installation and usage documentation;
+- known limitations;
+- release notes;
+- final privacy audit;
+- complete regression run;
+- installable release candidate;
+- small real-user acceptance test;
+- v1.0 release decision.
 
 ---
 
