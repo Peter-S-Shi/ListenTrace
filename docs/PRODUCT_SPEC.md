@@ -337,9 +337,9 @@ A short, low-friction, cue-based practice mode — a companion to Guided Intensi
 
 ## Release Scope
 
-- Quick Practice (Milestone 10) is implemented; the project is now in feature freeze for the first release. No further user-feature milestones are planned before v1.0.
-- Milestone 11's optional assisted features (speech recognition, pronunciation feedback, translation assistance, subtitle generation, question generation) are outside first-release scope and remain deferred until after a packaged, tested, successfully used v1.0.
-- Windows-first packaging and release validation follows feature completion — see `ROADMAP.md`'s Post-M10 sequence. Phase A (packaging spike) is complete; release hardening, clean-machine testing, and release-candidate validation remain and are the project's next engineering objective.
+- Quick Practice (Milestone 10) is implemented; the project is now in Functional Feature Freeze for the first release. No further *functional*-feature milestones are planned before v1.0 — **Milestone 11 — UI/UX Presentation Refresh** is a presentation-only milestone that does not reopen freeze (see `ROADMAP.md`).
+- The optional assisted features once numbered "Milestone 11" (speech recognition, pronunciation feedback, translation assistance, subtitle generation, question generation) are outside first-release scope, carry no milestone number, and remain deferred until after a packaged, tested, successfully used v1.0 — see `ROADMAP.md`'s "Deferred Beyond v1.0" section.
+- Windows-first packaging and release validation follows functional feature completion — see `ROADMAP.md`'s "v1.0 Release Engineering" sequence. Phase A (packaging spike), Phase B (release hardening), and Phase C1 (release preflight) are complete; Milestone 11, then Phase C2 (clean-machine acceptance) and Phase D (release-candidate validation), remain and are the project's next engineering objectives.
 
 ## Copyright and Source Policy
 

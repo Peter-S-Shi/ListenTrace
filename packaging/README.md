@@ -1,11 +1,15 @@
 # Packaging (Post-M10 Phase A — Packaging Spike, plus a Phase B addition)
 
 This directory holds the build recipe validated during Phase A of
-`ROADMAP.md`'s "Post-M10 — Release Engineering and v1.0 Delivery" sequence.
-Phase A's job was to **decide and validate** a Windows packaging approach,
-not to finalize release engineering — Phase B (hardening) has since added
-one packaging-level fix of its own (the manifest addition below); Phase C
-(clean-machine testing) and Phase D (release candidate) still remain.
+`ROADMAP.md`'s "v1.0 Release Engineering" sequence (previously named
+"Post-M10 — Release Engineering and v1.0 Delivery"; renamed once Milestone
+11 — UI/UX Presentation Refresh was introduced after M10). Phase A's job
+was to **decide and validate** a Windows packaging approach, not to
+finalize release engineering — Phase B (hardening) has since added one
+packaging-level fix of its own (the manifest addition below), and Phase C1
+(release preflight, on this development machine) is also complete. Phase
+C2 (clean-machine acceptance, scheduled after Milestone 11) and Phase D
+(release candidate) still remain.
 
 ## Decisions made in Phase A
 
@@ -135,8 +139,11 @@ because the fix lives in application code rather than here:
 - Clean-machine verification of anything in this file — every validation
   here (build, launch, install, uninstall, the long-path reproduction) ran
   on this development machine, which already has Python and other developer
-  tooling installed. Genuinely clean-machine testing (no preinstalled
-  Python, fresh user account, non-English paths) is Phase C's job.
+  tooling installed (Phase C1 — Release Preflight, completed). Genuinely
+  clean-machine testing (no preinstalled Python, fresh user account,
+  non-English paths) is Phase C2's job, scheduled after Milestone 11 so it
+  tests the actual release UI rather than the presentation layer it
+  replaces.
 - Everything else Phase B fixed lives in application code, not this
   directory (migration atomicity, startup-crash ordering, crash logging,
   large-history indexes) — see `ARCHITECTURE.md`'s "Resolved in Post-M10

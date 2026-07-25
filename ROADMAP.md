@@ -317,15 +317,50 @@ Quick Practice is a companion workflow, not a replacement for Milestone 5's five
 
 Requires stable cues, annotations, quiz, and shadowing/recording behavior from earlier milestones.
 
-After Milestone 10 is accepted, the project enters feature freeze for the first release (see "Post-M10 — Release Engineering and v1.0 Delivery" below).
+After Milestone 10 is accepted, the project enters Functional Feature Freeze for the first release.
+
+## Functional Feature Freeze
+
+Functional Feature Freeze means:
+
+- no new learning workflow;
+- no new domain capability;
+- no new analytics concept;
+- no new user-data semantics;
+- no AI/cloud feature;
+- no expansion of first-release product scope.
+
+It does **not** mean the UI can no longer be redesigned — presentation work continues in Milestone 11, below.
 
 ---
 
-# Milestone 11 — Optional Assisted Features (Deferred Beyond v1.0)
+# Milestone 11 — UI/UX Presentation Refresh
 
-## Status
+## Goal
 
-Deferred beyond v1.0. There is no current implementation plan, and it is not part of the first release. It may be reconsidered only after the local-first desktop product is packaged, tested, and used successfully — it is not the next active engineering objective.
+Transform the functionally complete ListenTrace into a visually coherent, low-cognitive-load desktop product without changing its learning logic, evidence semantics, or data model.
+
+M11 is a first-release milestone, but it is **not** a new functional-feature milestone and does not reopen Functional Feature Freeze: Milestone 10 ended functional feature development; Milestone 11 is presentation-only release work that happens after it.
+
+## Main Scope
+
+M11 may redesign presentation-level concerns: overall visual language, layout hierarchy, application navigation, spacing and density, typography hierarchy, color system, button hierarchy and states, forms and controls, cards/panels, dialogs, empty states, icons, status presentation, player presentation, transcript workspace presentation, Intensive Practice presentation, Quiz presentation, Learning History presentation, Export presentation, Quick Practice presentation, and visual consistency across windows.
+
+The existing Daily Canvas project may be used as a visual/product-design reference where useful (hierarchy, restrained color usage, whitespace, card grouping, visual rhythm, a friendly but focused learning/productivity aesthetic) — its web technology stack is not relevant and must not be copied merely for visual similarity. ListenTrace remains Python, PySide6, a Qt desktop application. The preferred v1.0 direction is to improve the existing Qt Widgets UI through reusable presentation components, centralized QSS/theme rules, consistent design tokens, icons/assets, and layout refinement, rather than a React or full-QML rewrite. A full UI-framework rewrite is outside M11 scope unless a separately approved architectural decision is made later. M11's detailed implementation plan will be defined separately; this roadmap entry only fixes its scope and boundaries.
+
+## Boundary
+
+M11 must preserve Functional Feature Freeze. It must not introduce new learning modes, quiz types, diagnosis semantics, analytics, recommendation logic, export semantics, or recording behavior; it must not introduce speech recognition, pronunciation scoring, translation, subtitle generation, question generation, AI services, cloud accounts, or synchronization; it must not introduce new domain entities created merely for presentation, or unnecessary schema migrations. M11 should normally require no database schema change. Existing behavior from Milestones 1-10 remains authoritative — presentation refactoring must not silently alter session lifecycle, quiz scoring, recording safety, recommendation logic, privacy rules, Learning History calculations, export contracts, Quick Practice evidence, or data ownership/deletion behavior.
+
+## Dependencies
+
+Requires the functionally complete, feature-frozen application from Milestones 1-10. Phase C2 — Clean-Machine Acceptance (see "v1.0 Release Engineering" below) is scheduled after M11 so the actual release UI is what gets validated, not the presentation layer it replaces.
+
+---
+
+# Deferred Beyond v1.0 — Optional Assisted Features
+
+Not a numbered milestone. There is no current implementation plan, and it is not part of the first release and not the next milestone after M11. It may be reconsidered only after the local-first v1.0 product is released and evaluated.
 
 ## Possible Scope
 
@@ -345,9 +380,9 @@ Deferred beyond v1.0. There is no current implementation plan, and it is not par
 
 ---
 
-# Post-M10 — Release Engineering and v1.0 Delivery
+# v1.0 Release Engineering
 
-Once Milestone 10 is accepted, remaining work before v1.0 is release engineering rather than new user features, organized into four phases. Phase A's packaging decisions are locked and Phase B's hardening pass is complete (see below); a v1.0 release date is still not chosen.
+Release engineering began once Milestone 10 was accepted and functional feature development entered freeze, organized into phases: A (packaging spike), B (release hardening), C1 (release preflight), C2 (clean-machine acceptance), D (release candidate). This section was previously named "Post-M10 — Release Engineering and v1.0 Delivery"; it is renamed here only because Milestone 11 now exists after M10, which made a "Post-M10" heading historically awkward — the Phase A/B/C history and decisions below are preserved, not rewritten. Phase A's packaging decisions are locked and Phase B's hardening pass is complete (see below). The former single Phase C is now represented as two distinct stages: Phase C1 — Release Preflight (completed on the development machine) and Phase C2 — Clean-Machine Acceptance (pending, scheduled after Milestone 11 so the actual release UI is validated rather than the presentation layer it replaces). A v1.0 release date is still not chosen.
 
 ## Phase A — Packaging Spike (Completed)
 
@@ -384,36 +419,71 @@ An acceptance closeout pass corrected the wording above (the no-developer-Python
 
 See `ARCHITECTURE.md`'s "Resolved in Post-M10 Phase B" section and `packaging/README.md` for full detail and validation evidence.
 
-## Phase C — Clean-Machine Testing (Partially Complete)
+## Phase C1 — Release Preflight (Completed)
 
-Testing on a clean Windows environment covering:
+Represents all validation already performed on the development machine, formerly recorded as the single Phase C. Covers:
 
-- no preinstalled Python: **not verified** — every check below ran on this project's development machine, which already has Python, Git, an IDE, FFmpeg, and other developer tooling installed. Whether the packaged build runs on a machine with none of that requires an actual clean machine or VM;
-- fresh user account: **not verified** — same reason;
-- non-English user and path names: partially covered — the packaged exe was launched successfully from a Unicode (Chinese-character) install path, but this was still on this development machine, not a genuinely non-English Windows installation;
-- install, launch, upgrade, and uninstall: **preflighted on the development machine** — a fresh silent install, a reinstall over the same install (upgrade-in-place via the same AppId), a silent uninstall, each launch in between, all completed cleanly;
-- data preservation: **preflighted** — a real material row survived install → data creation → reinstall → uninstall intact;
-- legacy database upgrade: **preflighted** — a real pre-Milestone-10 (schema version 8) database with real material/session/recording rows, opened directly by the compiled exe, upgraded cleanly to version 10 with all data intact;
-- playback and microphone: **preflighted for audio** — real WAV playback loads correctly through the bundled FFmpeg-based Qt Multimedia plugin, and a real ~1-second capture from a real physical microphone in this environment produced a valid WAV file with no errors; video (MP4/H.264) playback was **not** tested with a real file, since no H.264 encoder was available in this environment to produce one — the bundled `ffmpegmediaplugin.dll` was confirmed present and non-trivial in size, which is structural evidence only, not a substitute for an actual playback check;
-- Intensive Practice / Quiz / Learning History / Export / Quick Practice: **preflighted at the service level, not via GUI clicks** — a real, scripted walkthrough exercised every one of these five feature areas end-to-end through the actual application services (the same source frozen into the build), producing one database that the compiled exe then opened and ran against without error. This is not equivalent to a person clicking through the packaged app's actual windows; no native Windows GUI-automation tool was available in this session to do that.
+- install, launch, upgrade, and uninstall: a fresh silent install, a reinstall over the same install (upgrade-in-place via the same AppId), a silent uninstall, each launch in between, all completed cleanly;
+- data preservation: a real material row survived install → data creation → reinstall → uninstall intact;
+- legacy database upgrade: a real pre-Milestone-10 (schema version 8) database with real material/session/recording rows, opened directly by the compiled exe, upgraded cleanly to version 10 with all data intact;
+- WAV playback through the packaged Qt Multimedia (FFmpeg) plugin: loads correctly, correct duration, no errors;
+- a real physical microphone recording, producing a valid WAV file with no errors;
+- Unicode executable/path verification: the packaged exe launched successfully from a Chinese-character install path;
+- core application-service walkthroughs (Intensive Practice, Quiz, a standalone recording, Quick Practice), Learning History aggregation, and Markdown export generation, all through the real application services, feeding one database;
+- the latest packaged application opening the resulting database without error.
 
-**This preflight pass does not constitute Phase C acceptance.** Real clean-machine testing — a genuinely clean Windows 11 x64 Home/Pro machine or VM with no Python, Git, IDE, FFmpeg, codec packs, or other development environment installed — is still required before Phase C can be marked complete. Phase D does not begin until that real verification happens.
+**C1 does not prove**: clean Windows behavior, no-Python target-machine behavior, fresh Windows-user behavior, a genuinely non-development environment, broad real-world MP4/H.264 compatibility, or native GUI interaction coverage on another machine — every check above ran on this project's own development machine, which already has Python, Git, an IDE, FFmpeg, and other developer tooling installed. C1 is release preflight, not Clean-Machine Testing; that is Phase C2's job, below.
 
-## Phase D — v1.0 Release Candidate
+## Phase C2 — Clean-Machine Acceptance (Pending)
+
+The remaining final environment-validation gate, occurring **after Milestone 11 — UI/UX Presentation Refresh** so the actual release UI is tested rather than the presentation layer it replaces.
+
+Target baseline: Windows 11 x64, Home or Pro, standard non-N edition, normal Windows system updates, no Python installation, no Git, no IDE, no PyInstaller, no Inno Setup, no project source tree, no developer virtual environment, and no manually installed FFmpeg or codec pack required for ListenTrace.
+
+C2 validates the actual packaged release candidate. At minimum:
+
+- **Runtime foundation**: install, launch, application-data creation, restart, uninstall, data preservation.
+- **Multimedia**: real WAV playback, real MP4/H.264 playback, audio output, microphone detection, real recording, playback of a retained recording.
+- **Data**: fresh schema creation, legacy database upgrade, persistence after restart, upgrade-install preservation, uninstall preservation.
+- **Core workflows**: Material import, Player, Transcript Workspace, Intensive Practice, Quiz, Shadowing/Recording, Learning History, Export, Quick Practice.
+
+Phase C2 is a release gate: it must not be marked completed until a genuinely appropriate clean environment has actually been used.
+
+## Phase D — v1.0 Release Candidate (Pending)
 
 Completion of:
 
 - versioning;
-- About page;
+- About surface;
 - privacy and local-data explanation;
 - installation and usage documentation;
 - known limitations;
 - release notes;
+- final icon and release metadata;
 - final privacy audit;
-- complete regression run;
-- installable release candidate;
-- small real-user acceptance test;
+- complete regression suite;
+- RC installer and RC zip;
+- release checklist;
+- small real-user acceptance test where practical;
 - v1.0 release decision.
+
+Some Phase D planning/preparation may occur earlier if useful, but Phase D must not be marked completed, v1.0 must not be tagged or released, and final release readiness must not be claimed until Phase C2 passes.
+
+## Canonical v1.0 Sequence
+
+```
+Milestones 1-10 — Core Functional Development
+  -> Functional Feature Freeze
+  -> Phase A — Packaging Spike (Completed)
+  -> Phase B — Release Hardening (Completed)
+  -> Phase C1 — Release Preflight (Completed)
+  -> Milestone 11 — UI/UX Presentation Refresh (Next Product Milestone)
+  -> Phase C2 — Clean-Machine Acceptance (Pending)
+  -> Phase D — v1.0 Release Candidate (Pending)
+  -> v1.0 Release
+```
+
+The deferred assisted-feature ideas ("Deferred Beyond v1.0 — Optional Assisted Features", above) sit outside this primary sequence and carry no milestone number.
 
 ---
 
