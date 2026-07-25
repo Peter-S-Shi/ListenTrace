@@ -115,19 +115,29 @@ repository's existing `build/`/`dist/` rules) — only the recipe files
 (`listentrace.spec`, `version_info.txt`, `installer.iss`, `app.manifest`,
 `assets/`) are committed.
 
-## Explicitly not addressed
+## Explicitly out of scope for this directory
+
+Phase A and Phase B are both complete (`ROADMAP.md`) — the items below are
+not unfinished Phase B work, they are things this packaging directory itself
+was never meant to cover, either because they belong to a later phase or
+because the fix lives in application code rather than here:
 
 - Code signing (the exe and installer are unsigned; Windows SmartScreen will
-  warn on first run — a Phase D concern, not resolved here).
+  warn on first run — a Phase D concern).
 - Auto-update.
 - macOS/Linux packaging.
 - CI-driven builds (there is still no continuous-integration configuration
   anywhere in this project).
 - A final, designed application icon (the current one is a placeholder).
 - Full Windows long-path support (see the Phase B addition above — the
-  manifest opt-in is necessary but not sufficient on its own).
-- Everything else listed under `ROADMAP.md`'s Phase B (hardening; most of
-  Phase B's work was in application code, not this directory — see
-  `ARCHITECTURE.md`), Phase C (clean-machine testing on a genuinely clean
-  environment — every validation in this file and in Phase B ran on the
-  existing development machine), and Phase D (release candidate).
+  manifest opt-in is necessary but not sufficient on its own; this is a
+  documented, accepted limitation, not an open task).
+- Clean-machine verification of anything in this file — every validation
+  here (build, launch, install, uninstall, the long-path reproduction) ran
+  on this development machine, which already has Python and other developer
+  tooling installed. Genuinely clean-machine testing (no preinstalled
+  Python, fresh user account, non-English paths) is Phase C's job.
+- Everything else Phase B fixed lives in application code, not this
+  directory (migration atomicity, startup-crash ordering, crash logging,
+  large-history indexes) — see `ARCHITECTURE.md`'s "Resolved in Post-M10
+  Phase B" section for that work.

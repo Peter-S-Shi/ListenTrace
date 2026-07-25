@@ -368,7 +368,7 @@ See `packaging/README.md` for the full build recipe and `ARCHITECTURE.md`'s "Res
 
 Corrective work for:
 
-- startup and shutdown failures: fixed — `QApplication` is now constructed before anything else that could fail, so a startup failure can always show a friendly dialog instead of the process silently terminating; unhandled exceptions during normal use are now logged via a global crash-logging hook;
+- startup and shutdown failures: startup fixed — `QApplication` is now constructed before anything else that could fail, so a startup failure can always show a friendly dialog instead of the process silently terminating; unhandled exceptions during normal use are now logged via a global crash-logging hook. Shutdown audited directly (closeout pass) and found already correct: no explicit database-connection close exists anywhere, which is safe because every write already commits synchronously in SQLite's default (non-WAL) journal mode; a normal window close really aborts an in-progress recording through the real service path, not just in a mocked test; re-opening the database afterward reads back exactly what was left, with nothing dangling for startup crash-recovery to find;
 - missing or moved media: verified already solid — every material-opening entry point already pre-flight-checks the media and subtitle paths with a friendly error;
 - Unicode and non-English paths: verified already solid — a real end-to-end import/load test with CJK characters, spaces, and an emoji in file/folder names succeeded with no code change needed;
 - long Windows paths: partially addressed — `packaging/app.manifest` opts the exe into `longPathAware`, but this alone is not sufficient (Windows also requires an admin-only, off-by-default machine-wide registry policy this app cannot enable itself); documented as a known, accepted limitation, not claimed as fully solved;
@@ -378,7 +378,9 @@ Corrective work for:
 - migration failure: fixed — a real bug was found and reproduced (`migrate()`'s use of `executescript` could leave a failed migration half-applied while `PRAGMA user_version` stayed unbumped, permanently stuck); migrations now run as one explicit transaction per migration, rolling back completely on any failure;
 - export failure: verified already solid (`export_dialog.py`'s existing atomic-write error handling);
 - large-history behavior: fixed — schema version 10 adds nine indexes on foreign-key columns that were previously unindexed full-table-scan targets in the Learning History/Quick-Practice-recommendation/export query layer;
-- operation without a developer Python environment: verified via Phase A's own frozen-build validation.
+- operation without a developer Python environment: structurally addressed by construction (the PyInstaller build embeds the Python runtime and every dependency, with no intended dependency on a separately installed interpreter), but **not yet empirically verified on a machine without Python installed** — every Phase A/B validation so far ran on the development machine, which already has Python installed; that empirical verification belongs to Phase C's "no preinstalled Python" clean-machine criterion.
+
+An acceptance closeout pass corrected the wording above (the no-developer-Python-environment item had originally, and incorrectly, been described as already verified) and completed the shutdown half of the startup/shutdown audit that the original pass had left unaudited.
 
 See `ARCHITECTURE.md`'s "Resolved in Post-M10 Phase B" section and `packaging/README.md` for full detail and validation evidence.
 

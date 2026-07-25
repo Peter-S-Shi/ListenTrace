@@ -219,3 +219,57 @@ def test_close_with_progress_cancelled_keeps_the_window_open(qapp, conn, tmp_pat
     assert accepted is False
     assert svc.get_session(conn, session.id).status == "active"
     window.close()  # cleanup: discard/abandon via a real close for the next test run
+
+
+def test_normal_close_really_aborts_an_in_progress_recording_and_survives_reopening(qapp, tmp_path):
+    """Post-M10 Phase B shutdown audit: every prior close-behavior test
+    mocks `abort_active_recording` itself to prove the *ordering* fix (the
+    Milestone 10 correction) -- none of them let the real
+    `recording_service.fail_recording` path actually run end-to-end during a
+    normal window close, and none of them re-open a fresh connection
+    afterward to prove the result was actually durable, not just correct in
+    the same still-open connection. This test does both: a real in-progress
+    recording row is really aborted (not spied on) by a normal close, and a
+    brand-new connection to the same database file (simulating the next
+    application launch) reads back the exact same failed status."""
+    db_path = tmp_path / "shutdown_audit.db"
+    conn = open_connection(db_path)
+    migrate(conn)
+    recordings_dir = tmp_path / "recordings"
+
+    load_result = _import_material(conn, tmp_path)
+    session = svc.start_selected_session(conn, load_result.material.id, [load_result.cues[0].id])
+    window = QuickPracticeWindow(conn, load_result, session.id, recordings_dir)
+
+    recording, absolute_path = recording_service.begin_recording(
+        conn, recordings_dir, load_result.material.id, load_result.cues[0].id, "fake-device", "Fake Mic"
+    )
+    absolute_path.parent.mkdir(parents=True, exist_ok=True)
+    absolute_path.write_bytes(b"partial-capture")
+    window._recording_panel._active_recording = recording
+
+    accepted = window.close()  # zero completed items -> silent discard, no confirmation prompt
+
+    assert accepted is True
+    assert svc.get_session(conn, session.id) is None  # session discarded, exactly as a normal close should
+    aborted = recording_repository.get_recording(conn, recording.id)
+    assert aborted.status == "failed"  # the real abort path ran, not a mock
+    assert not absolute_path.exists()  # the partial capture file was really cleaned up
+
+    conn.close()  # simulates normal application shutdown -- no explicit flush needed beyond this
+
+    # Simulate the next application launch: an entirely fresh connection to
+    # the same database file must see exactly what the closed session left.
+    reopened = open_connection(db_path)
+    reread = recording_repository.get_recording(reopened, recording.id)
+    assert reread.status == "failed"
+
+    # A normal close must not leave anything for startup crash-recovery to
+    # find -- the close path itself already resolved the recording (failed)
+    # and the session (discarded). If either recovery function found
+    # something here, it would mean the close path left a dangling
+    # 'recording'/'active' row for the *next launch* to clean up instead,
+    # which is exactly what a genuine shutdown defect would look like.
+    assert recording_service.recover_interrupted_recordings(reopened, recordings_dir) == 0
+    assert svc.recover_interrupted_sessions(reopened) == 0
+    reopened.close()
