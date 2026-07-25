@@ -339,7 +339,7 @@ A short, low-friction, cue-based practice mode — a companion to Guided Intensi
 
 - Quick Practice (Milestone 10) is implemented; the project is now in feature freeze for the first release. No further user-feature milestones are planned before v1.0.
 - Milestone 11's optional assisted features (speech recognition, pronunciation feedback, translation assistance, subtitle generation, question generation) are outside first-release scope and remain deferred until after a packaged, tested, successfully used v1.0.
-- Windows-first packaging and release validation (packaging spike, release hardening, clean-machine testing, release-candidate validation) follow feature completion — see `ROADMAP.md`'s Post-M10 sequence, which is the project's next engineering objective.
+- Windows-first packaging and release validation follows feature completion — see `ROADMAP.md`'s Post-M10 sequence. Phase A (packaging spike) is complete; release hardening, clean-machine testing, and release-candidate validation remain and are the project's next engineering objective.
 
 ## Copyright and Source Policy
 
