@@ -1,6 +1,6 @@
 # ListenTrace Project Status
 
-Last updated: 2026-07-25 (Roadmap restructure: Milestone 11 — UI/UX Presentation Refresh added; Phase C split into C1/C2)
+Last updated: 2026-07-25 (Lifecycle roadmap revision: Milestone 12 — Product Hardening & Full Manual Acceptance added; Functional Feature Complete / Presentation Complete gates and post-v1.0 maintenance stages added)
 
 ## Project Purpose
 
@@ -8,7 +8,7 @@ ListenTrace is a local-first desktop application for transcript-guided foreign-l
 
 ## Repository Verification
 
-The remote repository exists, is private, and uses `main` as its default branch. It contains the initial documentation commit, the Milestone 1 application-foundation commit, the Milestone 2 material-library commit, the Milestone 3 synchronized-player commit (plus its acceptance-correction follow-up), the Milestone 4 transcript-workspace commit (plus its acceptance-correction follow-up and a small post-milestone presentation-refresh follow-up), the Milestone 5 guided-session commit (plus its acceptance-correction follow-up), the Milestone 6 quizzes-and-recall-practice commit (plus its acceptance-correction follow-up), the Milestone 7 shadowing-and-local-recording commit (plus its acceptance-correction follow-up), the Milestone 8 learning-history-and-analytics commit (plus its acceptance-correction follow-up), the Milestone 9 structured-export-and-external-evaluation commit (plus its acceptance-correction follow-up), a post-Milestone-9 roadmap documentation update (Quick Practice Mode locked, Milestone 11 repositioned as deferred, Post-M10 release-engineering sequence added), the Milestone 10 Quick Practice Mode commit (plus its acceptance-correction follow-up), the Post-M10 Phase A packaging-spike commit, the Phase A per-user-install-only correction, the Post-M10 Phase B release-hardening commit (plus its acceptance closeout), the Post-M10 Phase C clean-machine-testing preflight commit, and a roadmap-restructure commit (Milestone 11 — UI/UX Presentation Refresh added; the old Milestone 11 — Optional Assisted Features repositioned as a deferred, unnumbered section; the former single Phase C split into Phase C1 — Release Preflight and Phase C2 — Clean-Machine Acceptance; the release-engineering section renamed from "Post-M10" to "v1.0 Release Engineering"); no pull requests; no continuous-integration configuration.
+The remote repository exists, is private, and uses `main` as its default branch. It contains the initial documentation commit, the Milestone 1 application-foundation commit, the Milestone 2 material-library commit, the Milestone 3 synchronized-player commit (plus its acceptance-correction follow-up), the Milestone 4 transcript-workspace commit (plus its acceptance-correction follow-up and a small post-milestone presentation-refresh follow-up), the Milestone 5 guided-session commit (plus its acceptance-correction follow-up), the Milestone 6 quizzes-and-recall-practice commit (plus its acceptance-correction follow-up), the Milestone 7 shadowing-and-local-recording commit (plus its acceptance-correction follow-up), the Milestone 8 learning-history-and-analytics commit (plus its acceptance-correction follow-up), the Milestone 9 structured-export-and-external-evaluation commit (plus its acceptance-correction follow-up), a post-Milestone-9 roadmap documentation update (Quick Practice Mode locked, Milestone 11 repositioned as deferred, Post-M10 release-engineering sequence added), the Milestone 10 Quick Practice Mode commit (plus its acceptance-correction follow-up), the Post-M10 Phase A packaging-spike commit, the Phase A per-user-install-only correction, the Post-M10 Phase B release-hardening commit (plus its acceptance closeout), the Post-M10 Phase C clean-machine-testing preflight commit, a roadmap-restructure commit (Milestone 11 — UI/UX Presentation Refresh added; the old Milestone 11 — Optional Assisted Features repositioned as a deferred, unnumbered section; the former single Phase C split into Phase C1 — Release Preflight and Phase C2 — Clean-Machine Acceptance; the release-engineering section renamed from "Post-M10" to "v1.0 Release Engineering"), and a lifecycle-revision commit (Functional Feature Complete Gate and Presentation Complete Gate added; Milestone 12 — Product Hardening & Full Manual Acceptance added between M11 and Phase C2; Phase B reframed as targeted technical hardening, not final product hardening; v1.0 — Current Version Complete / Maintenance / Next-Version Planning stages added after Phase D); no pull requests; no continuous-integration configuration.
 
 ## Current Engineering State
 
@@ -32,18 +32,78 @@ The remote repository exists, is private, and uses `main` as its default branch.
 | Quick Practice Mode | Implemented and tested: a short, low-friction, cue-based practice mode distinct from Intensive Practice — Recommended Practice (deterministic, reason-based cue selection, 3/5/10 cues default 5, safe material-order fallback when evidence is insufficient) and Selected Cues (one cue, a range, or an explicit selection, order preserved); a forward-only per-cue cycle (Listen -> Recall -> Reveal & Diagnose -> Replay & Shadow) reusing the exact same playback, diagnosis-validation/annotation-reuse, and recording widgets as the rest of the app; progressive persistence with no exact-step resume; closing mid-run either abandons (preserving completed-cue evidence, with confirmation) or discards (zero progress, silent, no trace); a read-only completion summary with no effective-time/pronunciation/ability/difficulty/improvement score anywhere; full Learning History integration (`Quick Practices Completed` overview count, `quick_practice` activity entries, a dedicated history tab with per-cue results), a transparent Needs Attention reason (`repeated_missed_in_quick_practice`, threshold 2), and its own export category |
 | Subtitle parsing | Implemented and tested (Milestone 1, unchanged) |
 | Automated tests | 611 tests passing (14 database/migrations, 3 app startup, 8 import, 8 library, 3 media playback, 7 subtitle parsing, 8 cue index, 9 player session, 5 player loading, 13 player window, 31 UI smoke, 7 text range, 7 text-offset conversion, 25 annotations, 6 cue notes, 19 saved language items, 5 label preferences, 20 player-workspace UI integration, 11 session rules, 49 practice-session service, 9 guided-session window, 16 quiz rules, 44 quiz service, 7 recording rules, 6 comparison sequence, 35 recording service, 10 date range, 12 needs-attention rules, 42 learning-history service, 13 learning-history window, 11 export privacy, 13 export formatters, 7 export io, 41 export service, 15 export dialog, 7 quick-practice rules, 12 quick-practice recommendation, 33 quick-practice service, 9 quick-practice window, 5 quick-practice start dialog, 6 quick-practice entry points) |
-| Build and packaging | Phase A complete (PyInstaller onedir build, an Inno Setup installer, a portable zip, all validated end-to-end) plus a Phase B addition (a `longPathAware` manifest opt-in, a partial mitigation only). Phase C1 — Release Preflight complete (install/upgrade/uninstall, legacy database upgrade, real audio playback/microphone capture, a full feature-area walkthrough, all on the development machine). Phase C2 — Clean-Machine Acceptance is **pending**, scheduled after Milestone 11 so the release UI itself is tested; not code-signed — see `packaging/README.md`/`ROADMAP.md` |
+| Build and packaging | Phase A complete (PyInstaller onedir build, an Inno Setup installer, a portable zip, all validated end-to-end) plus a Phase B targeted-technical-hardening addition (a `longPathAware` manifest opt-in, a partial mitigation only). Phase C1 — Development-Machine Release Preflight complete (install/upgrade/uninstall, legacy database upgrade, real audio playback/microphone capture, a full feature-area walkthrough, all on the development machine). Phase C2 — Clean-Machine Acceptance is **pending**, scheduled after Milestone 11 and Milestone 12 so the final hardened, final-UI release is tested; not code-signed — see `packaging/README.md`/`ROADMAP.md` |
 | Continuous integration | Not configured |
+
+## Current Lifecycle Phase
+
+**Presentation Convergence under Functional Feature Freeze**
+
+The project has passed the Functional Feature Complete Gate (after Milestone 10) and is no longer in general feature expansion — it is in the convergence portion of the v1.0 lifecycle: presentation refresh (M11) → product-wide hardening and manual acceptance (M12) → clean-machine acceptance (Phase C2) → release candidate (Phase D). See `ROADMAP.md`'s "Canonical v1.0 Sequence" for the full ordering.
 
 ## Current Milestone
 
 **Milestone 11 — UI/UX Presentation Refresh**
 
-Status: **Next Product Milestone (not yet started)**
+Status: **Next Product Milestone / Not Yet Started**
 
-Milestone 10 (the final planned *functional*-feature milestone for the first release) is complete and Functional Feature Freeze is in effect. Post-M10 release engineering (now "v1.0 Release Engineering" — see `ROADMAP.md`) has completed Phase A — Packaging Spike, Phase B — Release Hardening, and Phase C1 — Release Preflight (a development-machine preflight pass: a rebuilt installer/portable package, a real install→upgrade-in-place→uninstall cycle with data preservation, a real legacy (schema version 8) database upgraded live through the compiled exe, real WAV playback and real-microphone recording, a Unicode-path launch, and a scripted service-level walkthrough of every major feature area feeding one database the compiled exe then opened without error).
+No UI redesign work has begun; M11's detailed implementation plan is not yet written.
 
-The roadmap has been restructured (this update) to insert **Milestone 11 — UI/UX Presentation Refresh** as the next active product milestone: a presentation-only pass (visual language, layout, navigation, typography, color, component/dialog/empty-state polish across the existing windows) that preserves Functional Feature Freeze and requires no schema change. It is not yet started — no UI redesign work has begun. **Phase C2 — Clean-Machine Acceptance** (the genuinely clean-machine testing Phase C's criteria require — no preinstalled Python, fresh user account, non-English user/path names) is scheduled *after* Milestone 11, so the actual release UI is what gets tested, and remains **pending**. Phase D — v1.0 Release Candidate does not begin until Phase C2 passes.
+## Current Release Scope
+
+The frozen v1.0 functional scope is Milestones 1-10 (material import, synchronized player, transcript workspace, guided Intensive Practice, Quizzes, Shadowing/Recording, Learning History, structured Export, Quick Practice). Remaining v1.0 work is non-functional: Milestone 11 (presentation refresh), Milestone 12 (product-wide hardening and full manual acceptance), Phase C2 (clean-machine acceptance), and Phase D (release candidate). No new functional scope is planned before v1.0.
+
+## Functional Feature Complete Status
+
+Functional feature completion was reached after Milestone 10: every planned local-first learning workflow for v1.0 (Milestones 1-10) is implemented and accepted. Feature Complete is explicitly not the same as Release Ready — release engineering, presentation convergence, and product-wide hardening remain.
+
+## Functional Feature Freeze Status
+
+**Active.** Permitted during freeze: fixing critical defects; fixing data-integrity/privacy/security/core-workflow defects (required, not optional); fixing severe UX defects that prevent reliable use (required); presentation redesign through Milestone 11. Not permitted without an explicit decision and roadmap update: any new learning workflow, domain capability, analytics concept, user-data semantics, or AI/cloud feature.
+
+## Open Release Blockers
+
+- Milestone 11 not implemented or accepted.
+- Presentation Complete Gate not passed.
+- Milestone 12 (product-wide hardening and full manual acceptance) not started — no GUI-level audit has been performed beyond scripted service-level walkthroughs.
+- Full manual GUI acceptance not completed.
+- Phase C2 clean-machine validation pending.
+- Real clean-machine MP4/H.264 validation pending (not tested anywhere yet — Phase C1 had no H.264 encoder available to produce a sample).
+- Phase D not completed.
+- v1.0 not release-ready.
+
+## Hardening Progress
+
+- Phase B — targeted technical release hardening: **completed** (migration atomicity, startup-crash-before-`QApplication`, crash logging, schema version 10 indexes, partial long-path mitigation, shutdown audit — see `ARCHITECTURE.md`'s "Resolved in Post-M10 Phase B").
+- Milestone 12 — final, system-wide product hardening and full manual acceptance: **not started**.
+
+Phase B was a targeted technical pass against eleven specific failure categories, not a product-wide GUI audit; it does not by itself satisfy Milestone 12's exit criteria.
+
+## Verification Status
+
+- **Automated tests**: 611 passing, unaffected by this documentation pass.
+- **Manual GUI QA**: partial — individual milestones were manually smoke-tested through their real windows at delivery time, but no single product-wide, post-M11 GUI acceptance pass has been done; that is Milestone 12's job.
+- **Packaged preflight**: Phase C1 complete (development machine only) — see `ROADMAP.md`.
+- **Migration**: schema version 10, every migration 1→10 covered by an automated upgrade test with real data present.
+- **Privacy/secret scan**: performed and clean on every documentation/code change to date, including this one.
+- **Clean-machine validation**: not started (Phase C2, pending, scheduled after M11 and M12).
+- **MP4/H.264**: not tested with a real file anywhere in this project — only the bundled FFmpeg plugin's presence has been confirmed structurally.
+- **Repository/remote verification**: local `main` and `origin/main` confirmed matching via `git ls-remote` after every push to date.
+
+## Deferred Features
+
+"Deferred Beyond v1.0 — Optional Assisted Features" (speech recognition, pronunciation feedback, translation, subtitle/question generation, pluggable external-service providers) remains outside v1.0, carries no milestone number, and may be reconsidered only after v1.0 is stabilized and used.
+
+## Next Engineering Objective
+
+Plan and implement Milestone 11 — UI/UX Presentation Refresh (detailed implementation plan not yet written). Milestone 12 — Product Hardening & Full Manual Acceptance follows M11's acceptance and the Presentation Complete Gate; Phase C2 and Phase D follow M12.
+
+## Repository State
+
+- Branch: `main`.
+- Latest verified commit: see below.
+- Remote synchronization: local `main` matches `origin/main` (verified via `git ls-remote origin main` after every push).
+- Continuous integration: not configured.
 
 ## Completed
 
@@ -223,16 +283,21 @@ The roadmap has been restructured (this update) to insert **Milestone 11 — UI/
   - `ARCHITECTURE.md`, `README.md`, and `docs/PRODUCT_SPEC.md` updated to remove stale wording (M10 described as the final milestone of any kind; the old Milestone 11 identity; Phase C treated as one undivided stage; a permanent "Post-M10" heading) while preserving all historical evidence.
   - No Phase C2 work, no Phase D completion claim, and no Milestone 11 implementation began in this pass — this was documentation and planning only.
 
+- Lifecycle roadmap revision — Milestone 12 added, gates and post-v1.0 stages added (documentation and lifecycle-planning only; no application code, schema, packaging behavior, or tests changed; the automated suite remains at 611, unaffected):
+  - Added an explicit **Functional Feature Complete Gate** after Milestone 10 (feature-complete reached; explicitly distinct from Release Ready) and expanded **Functional Feature Freeze** to state what is required (data-integrity/privacy/security/core-workflow defect fixes, severe-UX-defect fixes) versus merely allowed (presentation redesign through M11) versus requiring an explicit decision (scope expansion).
+  - Added a **Presentation Complete Gate** after Milestone 11, and a new **Milestone 12 — Product Hardening & Full Manual Acceptance** (not a new-feature milestone) between M11 and Phase C2, organized into five conceptual stages: M12.1 System Audit and Defect Inventory, M12.2 Correctness and Data Integrity, M12.3 Workflow and UX Consistency, M12.4 Robustness/Privacy/Performance, M12.5 Full Regression and Manual Acceptance (the exit stage, with explicit completion criteria). Added a `HARDENING_BACKLOG.md` policy: not created now, only if M12.1's audit finds enough issues to need one.
+  - Reframed **Phase B** (unchanged historical scope) as "a targeted technical release-hardening pass completed before the final UI and product-wide acceptance stages... it does not replace Milestone 12's final, system-wide Product Hardening milestone" — Phase B was not reopened. Corrected the stale "belongs to Phase C's... criterion" wording to specifically "Phase C2's" (not Phase C1, which is development-machine preflight only).
+  - Repositioned **Phase C2 — Clean-Machine Acceptance** to occur after both Milestone 11 and Milestone 12 (previously just "after Milestone 11"), and added an explicit failure loop: `C2 failure -> return to an M12 corrective batch -> regression -> repeat C2`.
+  - Corrected **Phase D**'s gating rule from "Phase D does not begin until Phase C2 passes" to the more accurate "Phase D planning and preparation may proceed earlier where useful, but Phase D cannot be completed, v1.0 cannot be tagged or released, and final Release Ready status cannot be claimed until Milestone 12 and Phase C2 have both passed," plus a corrective loop back to M12 if Phase D finds a blocking problem.
+  - Added explicit post-release lifecycle states after Phase D: **v1.0 — Current Version Complete** (not a claim of permanent completion), **Maintenance / v1.0.x**, and **Next-Version Planning / v1.1+** — Optional Assisted Features remain deferred unless explicitly promoted later.
+  - Updated `ROADMAP.md`'s "Canonical v1.0 Sequence" diagram to the full lifecycle: M1-10 → Functional Feature Complete Gate → Functional Feature Freeze → Phase A → Phase B → Phase C1 → M11 → Presentation Complete Gate → M12 → Phase C2 → Phase D → v1.0 Current Version Complete → Maintenance → Next-Version Planning.
+  - Restructured this file (`PROJECT_STATUS.md`) with new first-class headings (Current Lifecycle Phase, Current Release Scope, Functional Feature Complete Status, Functional Feature Freeze Status, Open Release Blockers, Hardening Progress, Verification Status, Deferred Features, Repository State) so it reads as an authoritative current-state summary rather than only a historical inventory; removed the now-redundant "Planned Next Work" section and a duplicate trailing "Next Engineering Objective" section, consolidating both into the new headings near the top of the file.
+  - `README.md`, `ARCHITECTURE.md`, `docs/PRODUCT_SPEC.md`, `packaging/README.md` reviewed and updated where stale (Feature Complete vs. Release Ready, Phase B as final hardening, C2 following M11 directly, Phase D unable to prepare before C2, no-Python verification belonging to "Phase C" generically) — historical evidence and completed decisions preserved throughout.
+  - No Milestone 11 or 12 implementation, no M12 audit, no `HARDENING_BACKLOG.md` creation, no Phase C2 work, and no Phase D completion/release claim began in this pass — documentation and planning only, per explicit instruction.
+
 ### Manual smoke steps verified
 
 Launch and open a valid material; confirm Milestone 3 playback still works; select an editing cue while a different cue becomes active through playback and confirm the editing cue does not move; select part of a cue and save one label; select a range and save multiple labels atomically; attempt a Misheard annotation without `heard_as` (rejected) then with it (succeeds); edit and delete an annotation; create/edit/delete a Cue Note (empty save deletes it); save all four Saved Language Item types with prefilled editable context; trigger exact-duplicate rejection and the same-text-elsewhere confirmation flow; change a global label color and confirm annotation label/text are unaffected; hide/show the transcript and confirm hidden cue text is not exposed; close and reopen the app and confirm annotations/notes/saved items persisted; remove a material and confirm all four learning-evidence tables cascade to zero rows while the original media and subtitle files remain on disk; start/close/resume a guided session and confirm the same stage and answers return; add/edit/reorder/delete Stage 2 captures; confirm the transcript-reveal warning and the resulting Stage 1/2 read-only lock; record a non-BMP-character diagnosis and a Misheard diagnosis (heard_as required); confirm a repeated diagnosis reuses rather than duplicates the material annotation; practice/skip Stage 4 cues and confirm counts/progress persist across close and reopen; write a transcript-free Stage 5 summary; complete a session and confirm it reopens read-only; start a second session on the same material and confirm repeated diagnosis evidence is allowed; abandon a session and confirm a new attempt can start; confirm the standalone player and Milestone 4 workspace are unaffected; confirm original media/subtitle files are untouched throughout.
-
-## Planned Next Work
-
-- Milestone 10 — Quick Practice Mode is complete. The project is now in Functional Feature Freeze: no further *functional*-feature milestones are planned before v1.0.
-- **Milestone 11 — UI/UX Presentation Refresh** is the next active product milestone (see `ROADMAP.md`) — not yet started. It is presentation-only (visual language, layout, navigation, typography, color, component/dialog/empty-state polish) and must preserve Functional Feature Freeze; its detailed implementation plan is not yet written.
-- v1.0 Release Engineering: Phase A — Packaging Spike, Phase B — Release Hardening, and Phase C1 — Release Preflight are all complete (see Completed, above, `packaging/README.md`, and `ARCHITECTURE.md`'s "Resolved in Post-M10 Phase B" section). **Phase C2 — Clean-Machine Acceptance** is pending and scheduled *after* Milestone 11, so it tests the actual release UI rather than the presentation layer it replaces; Phase D — v1.0 Release Candidate does not begin until Phase C2 passes.
-- "Deferred Beyond v1.0 — Optional Assisted Features" (speech recognition, pronunciation feedback, translation, etc.) remains deferred per `ROADMAP.md`: it has no current implementation plan, carries no milestone number, and is not part of the v1.0 Release Engineering sequence.
 
 ## Known Risks
 
@@ -260,8 +325,10 @@ Launch and open a valid material; confirm Milestone 3 playback still works; sele
 - Quick Practice's "Recommended Practice" reads pre-existing Milestone 4-7 evidence (annotation labels/recency, session-diagnosis counts/recency, incorrect quiz evidence, shadowing stats) plus one deliberate exception, explicit Quick Practice shadowing (`shadowed_at` on a completed item) — it never considers Quick Practice's own recall outcomes or diagnosis evidence when recommending cues, a deliberate scope decision to avoid a circular "recommendations feeding on themselves" dependency (see Architecture).
 - Quick Practice's completion summary does not report a "recordings created" count — Quick Practice recordings are ordinary standalone recordings with no schema-level connection back to the run that created them, so any such count could not be authoritative (see Architecture). Recording activity remains visible through the Replay & Shadow step and through Learning History.
 - The packaged exe and Inno Setup installer are unsigned — Windows SmartScreen is expected to show an "unrecognized app" warning on first run for any real user. Code signing is not addressed by Phase A/B (see `packaging/README.md`); this is a known gap to resolve in a later phase, not an oversight.
-- Phase A/B/C1's packaging, hardening, and preflight validation (build, launch, install/upgrade/uninstall, legacy database upgrade, real audio playback/microphone capture, a Unicode-path launch, a full feature-area walkthrough) all ran on this development machine, which already has a Python environment, Git, an IDE, and other developer tooling installed. None of it has yet been tested on a genuinely clean machine with no preinstalled Python — that real verification is Phase C2's job, scheduled after Milestone 11 so it tests the release UI rather than the presentation layer it replaces.
+- Phase A/B/C1's packaging, hardening, and preflight validation (build, launch, install/upgrade/uninstall, legacy database upgrade, real audio playback/microphone capture, a Unicode-path launch, a full feature-area walkthrough) all ran on this development machine, which already has a Python environment, Git, an IDE, and other developer tooling installed. None of it has yet been tested on a genuinely clean machine with no preinstalled Python — that real verification is Phase C2's job, scheduled after Milestone 11 and Milestone 12 so it tests the final hardened, final-UI release rather than an earlier presentation layer or an unaudited product.
 - Milestone 11 — UI/UX Presentation Refresh has not started: its detailed implementation plan, visual design direction, and QSS/theme/component architecture are not yet defined, only its scope and boundaries (`ROADMAP.md`).
+- Milestone 12 — Product Hardening & Full Manual Acceptance has not started: no product-wide, post-M11 GUI audit has been performed. Phase B's targeted technical hardening pass and the Phase C1 preflight's scripted service-level walkthroughs are real evidence but do not substitute for M12's manual GUI acceptance across every core workflow.
+- Phase B is a targeted technical release-hardening pass against eleven specific failure categories, not a system-wide product-hardening audit — do not read its completion as equivalent to Milestone 12's exit criteria.
 - Windows long-path support (paths over ~260 characters) is only partially addressed: `packaging/app.manifest` opts the exe into `longPathAware`, but Windows also requires an admin-only, off-by-default machine-wide registry policy (`LongPathsEnabled`) that this app cannot enable itself without contradicting the per-user-only install decision. A learner working from a very deeply nested folder structure may still hit import/open failures on a machine where that policy isn't already turned on by an administrator (see Architecture).
 - Migration 10's nine new indexes address a confirmed *structural* full-table-scan risk on foreign-key-filtered queries, but have not been benchmarked against a genuinely large history (many thousands of sessions/quizzes/recordings) — the fix is real and low-risk, but its actual performance impact at scale is unverified (see Unknown or Unverified).
 
@@ -270,7 +337,7 @@ Launch and open a valid material; confirm Milestone 3 playback still works; sele
 - Behavior on macOS and Linux (only Windows has been available so far), including microphone/audio-input device enumeration and capture
 - Playback across the broader range of real-world codecs/containers beyond the one verified H.264/MP4 configuration and uncompressed WAV audio
 - Recording behavior with audio-input devices beyond the three real ones available in the one verified environment (e.g. USB devices that appear/disappear at runtime, exclusive-mode conflicts with other running applications)
-- Packaging on a genuinely clean machine (no preinstalled Python, fresh user account, non-English Windows installation) — a development-machine preflight of everything else in Phase C1's scope is done (see Completed), but the actual Phase C2 clean-machine/VM pass has not happened yet, and is scheduled after Milestone 11
+- Packaging on a genuinely clean machine (no preinstalled Python, fresh user account, non-English Windows installation) — a development-machine preflight of everything else in Phase C1's scope is done (see Completed), but the actual Phase C2 clean-machine/VM pass has not happened yet, and is scheduled after Milestone 11 and Milestone 12
 - Real video (MP4/H.264) playback of the packaged build with an actual file — not tested in the Phase C1 preflight because no H.264 encoder was available in this environment to produce a sample; only the bundled FFmpeg plugin's presence was confirmed structurally
 - A human clicking through the packaged app's actual GUI windows for Intensive Practice/Quiz/Learning History/Export/Quick Practice — the Phase C1 preflight walkthrough drove the real application services directly (not through GUI clicks), since no native Windows GUI-automation tool was available in this session
 - Milestone 11's actual visual/UX design direction, component inventory, and QSS/theme architecture — this roadmap update fixed M11's scope and boundaries only, not its implementation plan
@@ -281,6 +348,4 @@ Launch and open a valid material; confirm Milestone 3 playback still works; sele
 - Export size/performance behavior on a very large library exported at "All Materials, All Time" scope with every evidence category enabled
 - Quick Practice's Recommended Practice behavior on a very large material (many hundreds of cues) is unverified for performance — the recommendation query set (annotation labels, diagnosis counts, incorrect quiz evidence, shadowing stats, all queried per material) has not been exercised at that scale.
 
-## Next Engineering Objective
-
-Milestone 10 — Quick Practice Mode is complete; Functional Feature Freeze is in effect. v1.0 Release Engineering's Phase A — Packaging Spike, Phase B — Release Hardening, and Phase C1 — Release Preflight are all complete (a development-machine preflight pass covered install/upgrade-in-place/uninstall with data preservation, a real legacy (schema version 8) database upgraded live through the compiled exe, real WAV playback and real-microphone capture, a Unicode install-path launch, and a scripted service-level walkthrough of every major feature area). The roadmap now inserts **Milestone 11 — UI/UX Presentation Refresh** as the next active product milestone — a presentation-only pass that must preserve Functional Feature Freeze and requires no schema change; its detailed implementation plan is not yet written and no UI redesign work has begun. **Phase C2 — Clean-Machine Acceptance** (the genuinely clean-machine testing Phase C's criteria require — no preinstalled Python, a fresh user account, a genuinely non-English Windows installation) is scheduled *after* Milestone 11, so it validates the actual release UI rather than the presentation layer it replaces, and remains pending. Phase D — v1.0 Release Candidate does not begin until Phase C2 passes. "Deferred Beyond v1.0 — Optional Assisted Features" remains deferred beyond v1.0, carries no milestone number, and is not part of the v1.0 Release Engineering sequence.
+See "Next Engineering Objective" near the top of this file for the current active objective.

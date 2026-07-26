@@ -5,11 +5,15 @@ This directory holds the build recipe validated during Phase A of
 "Post-M10 — Release Engineering and v1.0 Delivery"; renamed once Milestone
 11 — UI/UX Presentation Refresh was introduced after M10). Phase A's job
 was to **decide and validate** a Windows packaging approach, not to
-finalize release engineering — Phase B (hardening) has since added one
-packaging-level fix of its own (the manifest addition below), and Phase C1
-(release preflight, on this development machine) is also complete. Phase
-C2 (clean-machine acceptance, scheduled after Milestone 11) and Phase D
-(release candidate) still remain.
+finalize release engineering — Phase B (targeted technical hardening) has
+since added one packaging-level fix of its own (the manifest addition
+below), and Phase C1 (development-machine release preflight) is also
+complete. Phase B/C1 are targeted technical passes, not the final,
+system-wide product-hardening audit that Milestone 12 still has to
+perform. Milestone 11 (UI/UX Presentation Refresh), Milestone 12 (Product
+Hardening & Full Manual Acceptance), Phase C2 (clean-machine acceptance,
+scheduled after both M11 and M12), and Phase D (release candidate) all
+still remain — see `ROADMAP.md`'s "Canonical v1.0 Sequence".
 
 ## Decisions made in Phase A
 
@@ -139,11 +143,12 @@ because the fix lives in application code rather than here:
 - Clean-machine verification of anything in this file — every validation
   here (build, launch, install, uninstall, the long-path reproduction) ran
   on this development machine, which already has Python and other developer
-  tooling installed (Phase C1 — Release Preflight, completed). Genuinely
-  clean-machine testing (no preinstalled Python, fresh user account,
-  non-English paths) is Phase C2's job, scheduled after Milestone 11 so it
-  tests the actual release UI rather than the presentation layer it
-  replaces.
+  tooling installed (Phase C1 — Development-Machine Release Preflight,
+  completed). Genuinely clean-machine testing (no preinstalled Python,
+  fresh user account, non-English paths) is Phase C2's job, scheduled
+  after both Milestone 11 and Milestone 12 so it tests the final hardened,
+  final-UI release rather than an earlier presentation layer or an
+  unaudited product.
 - Everything else Phase B fixed lives in application code, not this
   directory (migration atomicity, startup-crash ordering, crash logging,
   large-history indexes) — see `ARCHITECTURE.md`'s "Resolved in Post-M10
