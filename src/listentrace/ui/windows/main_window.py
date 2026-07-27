@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QMessageBox,
     QPushButton,
+    QSizePolicy,
     QVBoxLayout,
     QWidget,
 )
@@ -136,7 +137,13 @@ class MainWindow(QMainWindow):
         history_layout.addStretch(1)
         cards_row.addWidget(history_card, 1)
 
-        outer_layout.addLayout(cards_row)
+        # Milestone 11 revision: the action-card row should be content-sized,
+        # not consume half the window -- cap each card's height at its size
+        # hint and let the list/detail cards below claim the remaining space.
+        for card in (library_card, practice_card, history_card):
+            card.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
+
+        outer_layout.addLayout(cards_row, 0)
 
         content_layout = QHBoxLayout()
 
@@ -167,7 +174,7 @@ class MainWindow(QMainWindow):
 
         content_layout.addWidget(detail_card, 1)
 
-        outer_layout.addLayout(content_layout)
+        outer_layout.addLayout(content_layout, 1)
 
         self._error_label = QLabel("")
         apply_role(self._error_label, "error")
