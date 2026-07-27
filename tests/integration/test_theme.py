@@ -66,13 +66,21 @@ def test_qcolor_handles_a_token_with_alpha():
 def test_product_semantic_tokens_preserve_their_pre_m11_values():
     # These are the exact literals theme.py's docstring says it replaces --
     # a regression here means a semantic color silently changed meaning.
+    # chart_bar is the one deliberate exception: Batch 3's visual-approval
+    # correction replaced its legacy royal blue with the established teal
+    # (matching `secondary`) to fit the approved warm orange/teal system --
+    # see test_chart_bar_uses_the_established_teal_not_the_legacy_blue below.
     assert theme.css("cue_active").upper() == "#FFF3CD"
     assert theme.css("text_overlap").upper() == "#D0D0D0"
     assert theme.css("quiz_correct").upper() == "#16A34A"
     assert theme.css("quiz_incorrect").upper() == "#DC2626"
-    assert theme.css("chart_bar").upper() == "#2563EB"
     assert theme.css("chart_axis").upper() == "#9CA3AF"
     assert theme.css("chart_text").upper() == "#374151"
+
+
+def test_chart_bar_uses_the_established_teal_not_the_legacy_blue():
+    assert theme.css("chart_bar") == theme.css("secondary")
+    assert theme.css("chart_bar").upper() != "#2563EB"
 
 
 def test_get_app_icon_returns_a_real_icon_when_the_packaging_asset_exists():

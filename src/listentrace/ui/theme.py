@@ -69,7 +69,7 @@ _TOKENS: dict[str, tuple[int, int, int, int]] = {
     "quiz_correct": (22, 163, 74, 255),  # was quiz_review_dialog._CORRECT_COLOR
     "quiz_incorrect": (220, 38, 38, 255),  # was quiz_review_dialog._INCORRECT_COLOR
     "chart_background": (255, 253, 249, 255),  # was Qt.GlobalColor.white
-    "chart_bar": (37, 99, 235, 255),  # was simple_bar_chart._BAR_COLOR
+    "chart_bar": (42, 157, 143, 255),  # calmer teal (matches `secondary`) -- was simple_bar_chart._BAR_COLOR's royal blue (#2563EB)
     "chart_axis": (156, 163, 175, 255),  # was simple_bar_chart._AXIS_COLOR
     "chart_text": (55, 65, 81, 255),  # was simple_bar_chart._TEXT_COLOR
 }
@@ -328,7 +328,38 @@ QPushButton[role="success"]:disabled {{
 }}
 
 QTabWidget::pane {{ border: {BORDER_WIDTH}px solid {css('line')}; }}
-QTabBar::tab:selected {{ color: {css('accent_pressed')}; font-weight: bold; }}
+
+/* Milestone 11 (Batch 3 correction): the native tab-bar style painted
+   enabled-but-unselected tabs almost white on this warm page background --
+   nearly unreadable and hard to discover. Every state gets an explicit,
+   centralized definition here rather than per-window styling. */
+QTabBar::tab {{
+    background: {css('surface_soft')};
+    color: {css('ink')};
+    border: {BORDER_WIDTH}px solid {css('line')};
+    border-bottom: none;
+    border-top-left-radius: {RADIUS_CONTROL}px;
+    border-top-right-radius: {RADIUS_CONTROL}px;
+    padding: {SPACE_COMPACT}px {SPACE_NORMAL}px;
+    margin-right: {SPACE_COMPACT}px;
+}}
+QTabBar::tab:selected {{
+    background: {css('surface')};
+    color: {css('accent_pressed')};
+    font-weight: bold;
+}}
+QTabBar::tab:!selected:hover {{
+    background: {css('surface')};
+    color: {css('ink')};
+}}
+QTabBar::tab:disabled {{
+    background: {css('disabled_surface')};
+    color: {css('disabled_text')};
+    border-color: {css('line')};
+}}
+QTabBar::tab:focus {{
+    border: {BORDER_WIDTH}px solid {css('focus')};
+}}
 """
 
 

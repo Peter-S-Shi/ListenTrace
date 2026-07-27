@@ -7,9 +7,11 @@ from PySide6.QtWidgets import QWidget
 from listentrace.application.dto.learning_history import ChartData
 from listentrace.ui import theme
 
-# Milestone 11: sourced from theme.py's dedicated chart_* tokens (same
-# #2563EB/#9CA3AF/#374151 values as before -- never a generic accent color)
-# rather than locally hardcoded QColor literals.
+# Milestone 11: sourced from theme.py's dedicated chart_* tokens rather than
+# locally hardcoded QColor literals -- never a generic accent color. Batch 3's
+# visual-approval correction replaced the legacy royal blue bar color
+# (#2563EB) with the established teal (matching `secondary`); axis/text keep
+# their original #9CA3AF/#374151 values.
 _BACKGROUND_COLOR = theme.qcolor("chart_background")
 _BAR_COLOR = theme.qcolor("chart_bar")
 _AXIS_COLOR = theme.qcolor("chart_axis")
