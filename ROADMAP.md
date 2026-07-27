@@ -340,7 +340,7 @@ It does **not** mean the UI can no longer be redesigned — presentation work co
 
 ---
 
-# Milestone 11 — UI/UX Presentation Refresh
+# Milestone 11 — UI/UX Presentation Refresh (Completed)
 
 ## Goal
 
@@ -362,9 +362,24 @@ M11 must preserve Functional Feature Freeze. It must not introduce new learning 
 
 Requires the functionally complete, feature-frozen application from Milestones 1-10. Milestone 12 — Product Hardening & Full Manual Acceptance (below) follows M11's Presentation Complete Gate; Phase C2 — Clean-Machine Acceptance (see "v1.0 Release Engineering" below) occurs only after M12, so the actual hardened, final-UI release is what gets clean-machine-validated, not an earlier presentation layer.
 
+## Closeout Summary
+
+Delivered on branch `m11-ui-ux-refresh`, merged to `main`, in five batches plus targeted corrections, each gated on the user's visual approval before the next began:
+
+- **Batch 0** — theme foundation (`src/listentrace/ui/theme.py`: brand/semantic/product-semantic color tokens, spacing/shape scale, safe system font stack, a two-layer QSS model, a `primary`/`secondary`/`quiet`/`danger`/`success` button-role system, a shared `make_card()` card helper), runtime window-icon resolution across all four execution contexts, and the first two migrated windows (`MainWindow`, `PlayerWindow`).
+- **Batch 1** — `GuidedSessionWindow` (all 5 stages) and `SessionHistoryDialog`.
+- **Batch 2** — `QuizWindow`, `QuizReviewDialog`, `QuizHistoryDialog` — correctness-hiding-before-submission and non-color-only correctness signaling preserved and verified.
+- **Batch 3** — `LearningHistoryWindow` (all 7 tabs), `SimpleBarChart`, `ExportDialog` — plus a centralized `QTabBar` state-contrast fix and a `chart_bar` color correction (teal, replacing a legacy saturated blue).
+- **Batch 4** — `QuickPracticeStartDialog`, `QuickPracticeWindow`, `ShadowingPracticeWindow`, `RecordingPanel`, `LabelColorDialog` (chrome only — the learner's own annotation-label colors were never touched), `ImportDialog` — plus a centralized `QRadioButton` checked-state visibility fix.
+- **Closeout** — a cross-window consistency and control-inventory audit (no unthemed buttons or stray inline styles found outside the one documented `LabelColorDialog` exception), an added `QPushButton:focus` ring for keyboard navigation, a rebuilt-and-relaunched packaged onedir build with the runtime icon and full theme confirmed visually, and icon-resolution confirmed programmatically from a portable-ZIP-style relocated path.
+
+Two genuine, pre-existing functional defects were found during visual review and fixed as separate, explicitly-flagged, regression-tested corrective commits (not folded into presentation commits): `PlayerWindow`'s crash when constructed with a non-`None` `initial_cue_index` (Learning History's "Jump to Cue"), and `RecordingPanel.set_context()` never refreshing recording-button enabled state (most visible in `ShadowingPracticeWindow`, which has no `set_read_only()` call to mask it).
+
+**Known limitations, reported rather than silently accepted:** this development machine only ever exercises 100% Windows display scaling (`devicePixelRatio` 1.0, 96 logical DPI) — a 125%/150% scaled-DPI pass was never available and remains unverified. The installed-application icon context (post-Inno-Setup-install, launched from Program Files) was not freshly rebuilt or re-verified against the final M11 code in this session, because Inno Setup is not installed in this environment and installing new software was not authorized; the onedir and portable-ZIP contexts were verified instead, and both share the identical runtime icon-resolution code path Inno Setup's installer would also use (a straight copy of the same onedir tree), so this is a code-level equivalence argument, not a direct re-observation. Native OS-level title-bar screenshots beyond the one clean onedir capture were not repeated for the portable-ZIP context after two attempts intermittently captured an unrelated foreground application instead of the launched window — repeating them further was judged a needless privacy risk given a working code-level check already existed.
+
 ---
 
-# Presentation Complete Gate
+# Presentation Complete Gate (Passed)
 
 The presentation layer becomes complete when:
 
@@ -374,6 +389,8 @@ The presentation layer becomes complete when:
 - the application is ready for product-wide hardening and manual acceptance.
 
 Do not claim presentation completion before M11 is implemented and accepted.
+
+**Passed.** All 14 windows and shared widgets use the centralized theme system consistently; the user visually approved every batch (and every requested correction) before the next began; existing functionality is behaviorally unchanged except the two explicitly-flagged, regression-tested corrective fixes described in Milestone 11's Closeout Summary above. Milestone 12 may begin.
 
 ---
 
@@ -556,9 +573,9 @@ Milestones 1-10 — Core Functional Development
   -> Phase A — Packaging Spike (Completed)
   -> Phase B — Targeted Technical Release Hardening (Completed)
   -> Phase C1 — Development-Machine Release Preflight (Completed)
-  -> Milestone 11 — UI/UX Presentation Refresh
-  -> Presentation Complete Gate
-  -> Milestone 12 — Product Hardening & Full Manual Acceptance
+  -> Milestone 11 — UI/UX Presentation Refresh (Completed)
+  -> Presentation Complete Gate (Passed)
+  -> Milestone 12 — Product Hardening & Full Manual Acceptance (Next)
   -> Phase C2 — Clean-Machine Acceptance
   -> Phase D — v1.0 Release Candidate
   -> v1.0 — Current Version Complete
