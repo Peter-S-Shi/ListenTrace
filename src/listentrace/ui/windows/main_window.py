@@ -31,6 +31,7 @@ from listentrace.application.services import quiz_service
 from listentrace.application.services.player_loading_service import load_material_for_player
 from listentrace.domain.enums.material_status import MaterialStatus
 from listentrace.infrastructure.db.migrations import current_version
+from listentrace.ui.theme import apply_role
 from listentrace.ui.windows.guided_session_window import GuidedSessionWindow
 from listentrace.ui.windows.import_dialog import ImportDialog
 from listentrace.ui.windows.learning_history_window import LearningHistoryWindow
@@ -68,7 +69,7 @@ class MainWindow(QMainWindow):
         outer_layout = QVBoxLayout(central)
 
         title_label = QLabel("ListenTrace — Material Library")
-        title_label.setStyleSheet("font-size: 16px; font-weight: bold;")
+        apply_role(title_label, "title")
         outer_layout.addWidget(title_label)
 
         self._status_label = QLabel(
@@ -153,14 +154,39 @@ class MainWindow(QMainWindow):
         outer_layout.addLayout(content_layout)
 
         self._error_label = QLabel("")
-        self._error_label.setStyleSheet("color: red;")
+        apply_role(self._error_label, "error")
         self._error_label.setWordWrap(True)
         outer_layout.addWidget(self._error_label)
 
         self.setCentralWidget(central)
 
+        self._apply_presentation()
         self._set_action_buttons_enabled(False)
         self.refresh_library()
+
+    def _apply_presentation(self) -> None:
+        """Milestone 11 button-role assignment for this window: `Open Player`
+        is this view's single primary action (the most common next step once
+        a material is selected); the rest of the per-material actions and
+        the quiz row are secondary; navigation/history toggles are quiet
+        (low-priority); `Remove` is the only destructive action here."""
+        apply_role(self._status_label, "caption")
+        apply_role(self._import_button, "secondary")
+        apply_role(self._open_player_button, "primary")
+        apply_role(self._start_intensive_button, "secondary")
+        apply_role(self._resume_intensive_button, "secondary")
+        apply_role(self._session_history_button, "quiet")
+        apply_role(self._shadowing_practice_button, "secondary")
+        apply_role(self._toggle_archived_button, "quiet")
+        apply_role(self._learning_history_button, "quiet")
+        apply_role(self._quick_practice_button, "secondary")
+        apply_role(self._start_material_quiz_button, "secondary")
+        apply_role(self._start_review_quiz_button, "secondary")
+        apply_role(self._resume_quiz_button, "secondary")
+        apply_role(self._quiz_history_button, "quiet")
+        apply_role(self._rename_button, "secondary")
+        apply_role(self._archive_restore_button, "secondary")
+        apply_role(self._remove_button, "danger")
 
     def refresh_library(self) -> None:
         self._material_list.clear()

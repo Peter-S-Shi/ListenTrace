@@ -27,7 +27,11 @@ a = Analysis(
     [str(SRC_DIR / "listentrace" / "ui" / "app.py")],
     pathex=[str(SRC_DIR)],
     binaries=[],
-    datas=[],
+    # Milestone 11: EXE(icon=...) below only sets the compiled .exe's own
+    # file icon -- it does not make the .ico available to the *running*
+    # app. Copy it into the onedir root so ui.theme.get_app_icon() can find
+    # it next to ListenTrace.exe at runtime (frozen-build search path).
+    datas=[(str(PACKAGING_DIR / "assets" / "listentrace.ico"), ".")],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},

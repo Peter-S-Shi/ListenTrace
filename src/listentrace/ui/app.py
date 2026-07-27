@@ -11,6 +11,7 @@ from listentrace.infrastructure.appdata import get_database_path, get_recordings
 from listentrace.infrastructure.db.connection import open_connection
 from listentrace.infrastructure.db.migrations import migrate
 from listentrace.infrastructure.logging_setup import configure_logging
+from listentrace.ui.theme import apply_theme, get_app_icon
 from listentrace.ui.windows.main_window import MainWindow
 
 
@@ -48,6 +49,8 @@ def main() -> int:
     try:
         logger = configure_logging()
         _install_crash_logging(logger)
+        apply_theme(app)
+        app.setWindowIcon(get_app_icon())
 
         db_path = get_database_path()
         recordings_dir = get_recordings_dir()

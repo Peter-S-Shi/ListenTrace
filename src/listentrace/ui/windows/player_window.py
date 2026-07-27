@@ -47,6 +47,7 @@ from listentrace.domain.enums.saved_item_type import SavedItemType
 from listentrace.domain.services.text_range import whole_cue_range
 from listentrace.infrastructure.appdata import get_recordings_dir
 from listentrace.infrastructure.media.playback import PlaybackController
+from listentrace.ui import theme
 from listentrace.ui.annotation_highlighting import apply_range_highlighting
 from listentrace.ui.text_offset_conversion import (
     SurrogatePairOffsetError,
@@ -56,8 +57,13 @@ from listentrace.ui.text_offset_conversion import (
 from listentrace.ui.windows.label_color_dialog import LabelColorDialog
 
 _SEEK_STEP_MS = 5000
-_ACTIVE_CUE_HIGHLIGHT = QColor("#FFF3CD")
-_OVERLAP_HIGHLIGHT = QColor("#D0D0D0")
+# Milestone 11: sourced from theme.py's dedicated product-semantic tokens
+# (never a generic accent color) rather than a locally hardcoded literal --
+# these two names are re-exported unchanged, since guided_session_window.py
+# and quick_practice_window.py import _OVERLAP_HIGHLIGHT/_color_badge_icon
+# directly from this module (see _open_quick_practice's docstring below).
+_ACTIVE_CUE_HIGHLIGHT = theme.qcolor("cue_active")
+_OVERLAP_HIGHLIGHT = theme.qcolor("text_overlap")
 _BADGE_SIZE = 12
 
 
@@ -103,7 +109,7 @@ class PlayerWindow(QMainWindow):
         layout = QVBoxLayout(central)
 
         title_label = QLabel(material.title)
-        title_label.setStyleSheet("font-size: 16px; font-weight: bold;")
+        theme.apply_role(title_label, "title")
         layout.addWidget(title_label)
 
         if material.media_kind == "video":
@@ -117,9 +123,7 @@ class PlayerWindow(QMainWindow):
             self._audio_placeholder = QLabel(f"{material.title}\n00:00 / 00:00")
             self._audio_placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
             self._audio_placeholder.setMinimumHeight(120)
-            self._audio_placeholder.setStyleSheet(
-                "background: #222; color: white; font-size: 14px;"
-            )
+            theme.apply_role(self._audio_placeholder, "media_placeholder")
             layout.addWidget(self._audio_placeholder)
 
         seek_row = QHBoxLayout()
@@ -197,16 +201,17 @@ class PlayerWindow(QMainWindow):
         layout.addWidget(self._workspace_panel)
 
         self._status_label = QLabel("")
-        self._status_label.setStyleSheet("color: red;")
+        theme.apply_role(self._status_label, "error")
         self._status_label.setWordWrap(True)
         layout.addWidget(self._status_label)
 
         self._workspace_status_label = QLabel("")
-        self._workspace_status_label.setStyleSheet("color: red;")
+        theme.apply_role(self._workspace_status_label, "error")
         self._workspace_status_label.setWordWrap(True)
         layout.addWidget(self._workspace_status_label)
 
         return_button = QPushButton("Return to Library")
+        theme.apply_role(return_button, "secondary")
         return_button.clicked.connect(self.close)
         layout.addWidget(return_button)
 
@@ -221,7 +226,42 @@ class PlayerWindow(QMainWindow):
         self._playback.load(material.media_path)
         # No autoplay: playback stays paused at 0 until the user presses Play.
 
+        self._apply_presentation()
         self._set_workspace_form_enabled(False)
+
+    def _apply_presentation(self) -> None:
+        """Milestone 11 button-role assignment: `Play`/`Pause` is this
+        window's single primary action; ordinary transport/navigation/
+        workspace-save actions are secondary; low-priority utility toggles
+        are quiet; every delete action is danger."""
+        theme.apply_role(self._play_pause_button, "primary")
+        for button in (
+            self._previous_button,
+            self._next_button,
+            self._replay_button,
+            self._loop_cue_button,
+            self._loop_range_button,
+            self._transcript_button,
+            self._quick_practice_this_cue_button,
+            self._quick_practice_selected_button,
+        ):
+            theme.apply_role(button, "secondary")
+        for button in (self._mute_button, self._label_colors_button):
+            theme.apply_role(button, "quiet")
+        for button in (
+            self._save_annotation_button,
+            self._update_annotation_button,
+            self._save_note_button,
+            self._save_item_button,
+            self._update_item_button,
+        ):
+            theme.apply_role(button, "secondary")
+        for button in (
+            self._delete_annotation_button,
+            self._delete_note_button,
+            self._delete_item_button,
+        ):
+            theme.apply_role(button, "danger")
 
     # ---- workspace panel construction ----
 
@@ -305,7 +345,7 @@ class PlayerWindow(QMainWindow):
             "is fixed once saved — delete and save again to change what text an item refers to."
         )
         source_lock_note.setWordWrap(True)
-        source_lock_note.setStyleSheet("color: gray; font-size: 11px;")
+        theme.apply_role(source_lock_note, "caption")
         item_column.addWidget(source_lock_note)
 
         item_type_row = QHBoxLayout()
