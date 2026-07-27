@@ -40,6 +40,25 @@ recorded for the future.
 | 9 | Migration statement splitting — latent fragility, not an active defect | **Architecture debt (low, latent)** | `migrate()` splits each migration's SQL on `;` with a naive string split, with no awareness of `;` inside a string literal or comment. None of the 10 current migrations trip this. Not fixed tonight (nothing is broken today); noted so a future migration author writing a migration containing a literal semicolon in string data doesn't get silently mis-split. |
 | 10 | Quick Practice: crash after ≥1 completed cue, before explicit close | **Pass** | `recover_interrupted_sessions` runs unconditionally on every startup (`ui/app.py`, right after `recover_interrupted_recordings`) and applies the same discard/abandon rule as an explicit close to every session left `status='active'` — zero completed items is hard-deleted, ≥1 completed item becomes `abandoned`. No orphaned "active" session or misleading permanent history entry survives past the next launch. |
 
+## Batch 4 — M12.3 workflow/UX consistency
+
+Audit method: read-only trace of terminology, confirmation dialogs, disabled-
+control explanations, and status-label wording across all 14 windows. Per
+M12.3's boundary, only targeted corrective changes were made — no visual
+redesign.
+
+| # | Finding | File | Severity | Status |
+|---|---|---|---|---|
+| 11 | `QuickPracticeWindow._on_delete_diagnosis_clicked` deleted a diagnosis with **no confirmation dialog**, while the identical action in `GuidedSessionWindow._on_delete_diagnosis_clicked` does confirm. | `ui/windows/quick_practice_window.py` | Medium (destructive action, no confirmation — inconsistent with every other delete in the app) | **Fixed** — added a matching confirmation dialog. Regression test verified to fail pre-fix (no prompt appeared). |
+| 12 | Quick Practice's close-with-progress confirmation dialog was titled "Close Quick Practice" while it actually marks the run `abandoned` — GuidedSessionWindow/QuizWindow use "Abandon Session"/"Abandon Quiz" for the same semantic action, so a user trained on those two windows could be surprised that "Close" here is actually an abandon. | `ui/windows/quick_practice_window.py` | Low (wording only, body text already explained the abandon) | **Fixed** — retitled to "Abandon Quick Practice Run"; dialog body text (already accurate) unchanged. |
+| 13 | Stage 4 shadowing status was shown as the raw enum value (`Status: not_started`) instead of a human-readable label, inconsistent with the title-cased/uppercase convention used a few lines away for session status (`[ABANDONED — read-only]`). | `ui/windows/guided_session_window.py` | Low (cosmetic, within-window inconsistency) | **Fixed** — now renders as `NOT STARTED` / `PRACTICED` / `SKIPPED`, matching the existing convention. No test asserted the old raw string. |
+| 14 | Stage 1/2 controls go grey with no on-screen explanation when the transcript-reveal lock kicks in — a user has no cue why beyond recalling a one-time dialog shown earlier. | `ui/windows/guided_session_window.py` | Low (a real UX gap, not a redesign) | **Fixed** — added a small hint label to each stage's panel, shown only while locked ("Read-only: the transcript has been revealed for this session."). Regression test verified to fail pre-fix (`AttributeError`, label didn't exist). |
+| 15 | MainWindow's Resume Intensive Practice / Resume Quiz buttons disable with no tooltip explaining why (no material selected vs. no active session/quiz for the selected material). | `ui/windows/main_window.py` | Low | **Fixed** — added context-appropriate tooltips for both disabled cases. No dedicated test added (trivial `setToolTip` call, already exercised indirectly by existing button-state tests; screenshotting tooltip text is not practical in offscreen tests). |
+
+Verified but not changed: quiz submission's confirmation + service-level status-
+transition guard already safely handles double-submission; no fix needed
+(see Batch 2's Quiz scoring-atomicity verification, same audit pass).
+
 ## Repair rules applied
 
 - Existing external call sites of the four touched repository functions
@@ -50,4 +69,4 @@ recorded for the future.
 - Both fixes were verified to actually change test outcomes: each new
   regression test fails against the pre-fix source (confirmed via
   `git stash` of just the fix files) and passes after.
-- Full automated suite: 631 passed (628 through Milestone 11, + 2 from Batch 1, + 1 from Batch 3), no regressions.
+- Full automated suite: 632 passed (628 through Milestone 11, + 2 from Batch 1, + 1 from Batch 3, + 1 from Batch 4), no regressions.

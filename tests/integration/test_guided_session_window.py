@@ -76,6 +76,9 @@ def test_transcript_reveal_requires_confirmation_and_locks_stage1_2(qapp, conn, 
     monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.StandardButton.Yes)
 
     window, _, session_id = _open_guided_window(conn, tmp_path)
+    assert window._stage1_lock_hint.isHidden() is True
+    assert window._stage2_lock_hint.isHidden() is True
+
     window._stage1_edits["where"].setPlainText("A cafe")
     window._on_save_and_continue_clicked()  # -> stage 2
     window._on_skip_stage_clicked()  # -> stage 3, triggers reveal confirmation (auto-Yes)
@@ -85,8 +88,11 @@ def test_transcript_reveal_requires_confirmation_and_locks_stage1_2(qapp, conn, 
     assert session.transcript_revealed_at is not None
     assert window._diagnosis_cue_list.count() == 2
 
-    # Stage 1 is now read-only.
+    # Stage 1 is now read-only, and the UI now explains why (M12.3 regression:
+    # previously the controls just went grey with no on-screen explanation).
     assert window._stage1_edits["where"].isReadOnly() is True
+    assert window._stage1_lock_hint.isHidden() is False
+    assert window._stage2_lock_hint.isHidden() is False
     window.close()
 
 

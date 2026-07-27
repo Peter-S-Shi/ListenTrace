@@ -137,6 +137,35 @@ def test_full_two_cue_run_reaches_summary(qapp, conn, tmp_path):
     window.close()
 
 
+def test_delete_diagnosis_prompts_for_confirmation(qapp, conn, tmp_path, monkeypatch):
+    """M12.3 regression: deleting a Quick Practice diagnosis must be confirmed like
+    every other destructive action in the app (GuidedSessionWindow's equivalent
+    already does; this window previously deleted with no prompt at all)."""
+    load_result = _import_material(conn, tmp_path)
+    session = svc.start_selected_session(conn, load_result.material.id, [load_result.cues[0].id])
+    window = QuickPracticeWindow(conn, load_result, session.id, tmp_path / "recordings")
+
+    window._recall_radio_buttons["missed"].setChecked(True)
+    window._on_step_action_clicked()  # -> reveal & diagnose
+    window._diagnosis_label_checkboxes["misheard"].setChecked(True)
+    window._diagnosis_heard_as_edit.setText("bonjoor")
+    window._on_save_diagnosis_clicked()
+    assert window._diagnosis_list.count() == 1
+    window._diagnosis_list.setCurrentRow(0)
+    assert window._editing_diagnosis_id is not None
+
+    asked = []
+    monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: (asked.append(True), QMessageBox.StandardButton.No)[1])
+    window._on_delete_diagnosis_clicked()
+    assert asked  # a confirmation prompt was actually shown
+    assert len(svc.list_item_diagnosis(conn, window._current_item_state().item.id)) == 1  # cancel kept it
+
+    monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.StandardButton.Yes)
+    window._on_delete_diagnosis_clicked()
+    assert svc.list_item_diagnosis(conn, window._current_item_state().item.id) == []
+    window.close()
+
+
 def test_zero_progress_close_discards_without_prompting(qapp, conn, tmp_path, monkeypatch):
     load_result = _import_material(conn, tmp_path)
     session = svc.start_selected_session(conn, load_result.material.id, [load_result.cues[0].id])

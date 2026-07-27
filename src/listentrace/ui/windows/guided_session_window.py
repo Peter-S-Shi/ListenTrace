@@ -447,6 +447,9 @@ class GuidedSessionWindow(QMainWindow):
                 "but you'll need to explicitly skip this stage if you leave everything blank."
             )
         )
+        self._stage1_lock_hint = QLabel("Read-only: the transcript has been revealed for this session.")
+        self._stage1_lock_hint.setVisible(False)
+        layout.addWidget(self._stage1_lock_hint)
         self._stage1_edits: dict[str, QTextEdit] = {}
         for prompt_key, label_text in _STAGE1_PROMPTS:
             layout.addWidget(QLabel(label_text))
@@ -467,6 +470,7 @@ class GuidedSessionWindow(QMainWindow):
         enabled = state.session.status == SessionStatus.ACTIVE.value and not locked
         for edit in self._stage1_edits.values():
             edit.setReadOnly(not enabled)
+        self._stage1_lock_hint.setVisible(locked)
 
     def _save_stage1_inputs(self) -> None:
         for prompt_key, edit in self._stage1_edits.items():
@@ -487,6 +491,9 @@ class GuidedSessionWindow(QMainWindow):
                 "need to be exact. At least one capture is required to complete this stage."
             )
         )
+        self._stage2_lock_hint = QLabel("Read-only: the transcript has been revealed for this session.")
+        self._stage2_lock_hint.setVisible(False)
+        layout.addWidget(self._stage2_lock_hint)
 
         add_row = QHBoxLayout()
         self._capture_type_combo = QComboBox()
@@ -545,6 +552,7 @@ class GuidedSessionWindow(QMainWindow):
         locked = state.session.transcript_revealed_at is not None
         enabled = state.session.status == SessionStatus.ACTIVE.value and not locked
         self._stage2_locked = not enabled
+        self._stage2_lock_hint.setVisible(locked)
         self._capture_type_combo.setEnabled(enabled)
         self._capture_text_edit.setEnabled(enabled)
         self._capture_add_button.setEnabled(enabled)
@@ -1040,7 +1048,8 @@ class GuidedSessionWindow(QMainWindow):
         self._shadowing_index = max(0, min(self._shadowing_index, len(self._cues) - 1))
         cue = self._cues[self._shadowing_index]
         progress = progress_by_cue.get(cue.id)
-        status_text = progress.status if progress else ShadowingStatus.NOT_STARTED.value
+        raw_status = progress.status if progress else ShadowingStatus.NOT_STARTED.value
+        status_text = raw_status.replace("_", " ").upper()
         count_text = progress.practice_count if progress else 0
         self._shadowing_cue_label.setText(
             f"[{_format_time(cue.start_ms)}-{_format_time(cue.end_ms)}] {cue.text}\n"

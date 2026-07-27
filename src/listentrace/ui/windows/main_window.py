@@ -317,11 +317,19 @@ class MainWindow(QMainWindow):
         if material_id is None or self._showing_archived:
             self._resume_intensive_button.setEnabled(False)
             self._resume_quiz_button.setEnabled(False)
+            self._resume_intensive_button.setToolTip("Select a material to check for an active session.")
+            self._resume_quiz_button.setToolTip("Select a material to check for an active quiz.")
             return
         active = practice_session_service.find_active_session(self._connection, material_id)
         self._resume_intensive_button.setEnabled(active is not None)
+        self._resume_intensive_button.setToolTip(
+            "" if active is not None else "No active Intensive Practice session for this material."
+        )
         active_quizzes = quiz_service.find_active_quizzes_for_material(self._connection, material_id)
         self._resume_quiz_button.setEnabled(len(active_quizzes) > 0)
+        self._resume_quiz_button.setToolTip(
+            "" if active_quizzes else "No active quiz for this material."
+        )
 
     def _on_import_clicked(self) -> None:
         dialog = ImportDialog(self._connection, self)

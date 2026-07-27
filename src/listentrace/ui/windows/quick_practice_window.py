@@ -317,7 +317,7 @@ class QuickPracticeWindow(QMainWindow):
             if completed_count > 0:
                 answer = QMessageBox.question(
                     self,
-                    "Close Quick Practice",
+                    "Abandon Quick Practice Run",
                     "Close this Quick Practice run? Completed cues are kept as read-only history; "
                     "the run will be marked abandoned.",
                     QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
@@ -577,6 +577,14 @@ class QuickPracticeWindow(QMainWindow):
     def _on_delete_diagnosis_clicked(self) -> None:
         item_state = self._current_item_state()
         if item_state is None or item_state.item.id is None or self._editing_diagnosis_id is None:
+            return
+        answer = QMessageBox.question(
+            self,
+            "Delete Diagnosis",
+            "Delete this diagnosis? The shared material annotation, if any, is not affected.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        )
+        if answer != QMessageBox.StandardButton.Yes:
             return
         try:
             svc.delete_item_diagnosis(self._connection, item_state.item.id, self._editing_diagnosis_id)
