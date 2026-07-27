@@ -1,0 +1,39 @@
+1
+00:00:00,000 --> 00:00:02,500
+Good morning! How are you today?
+
+2
+00:00:02,500 --> 00:00:05,200
+I am doing well, thank you.
+
+3
+00:00:05,200 --> 00:00:08,000
+Would you like a cup of coffee?
+
+4
+00:00:08,000 --> 00:00:10,800
+Yes, please. No sugar for me.
+
+5
+00:00:10,800 --> 00:00:13,500
+Here you go. Be careful, it's hot.
+
+6
+00:00:13,500 --> 00:00:16,200
+Thank you very much.
+
+7
+00:00:16,200 --> 00:00:19,000
+What are your plans for this afternoon?
+
+8
+00:00:19,000 --> 00:00:22,000
+I am going to the library to study.
+
+9
+00:00:22,000 --> 00:00:25,000
+That sounds like a good plan.
+
+10
+00:00:25,000 --> 00:00:28,000
+See you later, have a nice day!

@@ -1,0 +1,815 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ListenTrace Manual QA / 人工核查问卷</title>
+<style>
+:root{
+  --bg:#f7f7f5; --panel:#ffffff; --text:#1f2328; --muted:#5b6572; --border:#d9dde2;
+  --accent:#2f6f4f; --accent-contrast:#ffffff; --pass:#2f7d4f; --fail:#b3392c;
+  --blocked:#a5680a; --na:#6b7280; --danger:#b3392c; --focus:#1a5fb4;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#15181c; --panel:#1d2126; --text:#e7ebef; --muted:#9aa5b1; --border:#333a42;
+    --accent:#5fae82; --accent-contrast:#0b120d; --pass:#5fae82; --fail:#e0796b;
+    --blocked:#e0b15f; --na:#9aa5b1; --danger:#e0796b; --focus:#7cb1f2;
+  }
+}
+*{box-sizing:border-box;}
+html,body{margin:0;padding:0;background:var(--bg);color:var(--text);
+  font-family:-apple-system,Segoe UI,PingFang SC,Microsoft YaHei,Helvetica,Arial,sans-serif;
+  line-height:1.5;}
+a{color:var(--focus);}
+button{font-family:inherit;font-size:0.95rem;cursor:pointer;border-radius:6px;
+  border:1px solid var(--border);background:var(--panel);color:var(--text);padding:0.5em 0.9em;}
+button:hover{border-color:var(--accent);}
+button.primary{background:var(--accent);color:var(--accent-contrast);border-color:var(--accent);}
+button.danger{background:var(--danger);color:#fff;border-color:var(--danger);}
+button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, [tabindex]:focus-visible{
+  outline:3px solid var(--focus); outline-offset:2px;
+}
+textarea,input[type=text],input[type=date],select{
+  width:100%;padding:0.45em 0.6em;border:1px solid var(--border);border-radius:6px;
+  background:var(--panel);color:var(--text);font-family:inherit;font-size:0.95rem;
+}
+textarea{min-height:4.5em;resize:vertical;}
+.app{max-width:1180px;margin:0 auto;padding:0 1rem 3rem;}
+header.top{position:sticky;top:0;z-index:20;background:var(--bg);border-bottom:1px solid var(--border);
+  padding:0.7rem 0;display:flex;flex-wrap:wrap;gap:0.6rem;align-items:center;justify-content:space-between;}
+header.top h1{font-size:1.15rem;margin:0;}
+.top-actions{display:flex;flex-wrap:wrap;gap:0.4rem;align-items:center;}
+.badge{display:inline-block;padding:0.15em 0.6em;border-radius:999px;font-size:0.8rem;border:1px solid var(--border);}
+.badge.pass{color:var(--pass);border-color:var(--pass);}
+.badge.fail{color:var(--fail);border-color:var(--fail);}
+.badge.blocked{color:var(--blocked);border-color:var(--blocked);}
+.badge.na{color:var(--na);border-color:var(--na);}
+.panel{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:1rem 1.2rem;margin:1rem 0;}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;}
+@media (max-width:700px){.grid2{grid-template-columns:1fr;}}
+label.field{display:block;font-size:0.85rem;color:var(--muted);margin-bottom:0.2rem;}
+.field-wrap{margin-bottom:0.7rem;}
+.layout{display:flex;gap:1.2rem;align-items:flex-start;}
+nav.modnav{position:sticky;top:60px;flex:0 0 230px;max-height:calc(100vh - 80px);overflow-y:auto;}
+nav.modnav ul{list-style:none;margin:0;padding:0;}
+nav.modnav li{margin-bottom:2px;}
+nav.modnav button{width:100%;text-align:left;border:none;background:transparent;padding:0.45em 0.5em;border-radius:6px;font-size:0.88rem;}
+nav.modnav button.active{background:var(--accent);color:var(--accent-contrast);}
+nav.modnav .modstat{float:right;font-size:0.75rem;color:var(--muted);}
+nav.modnav button.active .modstat{color:var(--accent-contrast);opacity:0.85;}
+main.content{flex:1;min-width:0;}
+.progressbar{height:10px;border-radius:6px;background:var(--border);overflow:hidden;display:flex;margin:0.5rem 0;}
+.progressbar div{height:100%;}
+.progressbar .pb-pass{background:var(--pass);}
+.progressbar .pb-fail{background:var(--fail);}
+.progressbar .pb-blocked{background:var(--blocked);}
+.summary-counts{display:flex;gap:1rem;flex-wrap:wrap;font-size:0.9rem;}
+.item{border:1px solid var(--border);border-radius:8px;padding:0.8rem 1rem;margin-bottom:0.9rem;background:var(--bg);}
+.item h4{margin:0 0 0.3rem;font-size:1rem;}
+.item .expected{color:var(--muted);font-size:0.9rem;margin-bottom:0.5rem;}
+.status-row{display:flex;flex-wrap:wrap;gap:0.4rem;margin-bottom:0.6rem;}
+.status-row label{border:1px solid var(--border);border-radius:999px;padding:0.25em 0.8em;font-size:0.85rem;
+  cursor:pointer;display:inline-flex;align-items:center;gap:0.35em;}
+.status-row input[type=radio]{margin:0;}
+.status-row label[data-checked=true][data-val=pass]{background:var(--pass);color:#fff;border-color:var(--pass);}
+.status-row label[data-checked=true][data-val=fail]{background:var(--fail);color:#fff;border-color:var(--fail);}
+.status-row label[data-checked=true][data-val=blocked]{background:var(--blocked);color:#fff;border-color:var(--blocked);}
+.status-row label[data-checked=true][data-val=na]{background:var(--na);color:#fff;border-color:var(--na);}
+.moduleintro p{margin:0.3rem 0;}
+.moduleintro ol{margin:0.3rem 0 0.3rem 1.2rem;padding:0;}
+.samples-list{font-size:0.9rem;}
+.lang-switch button{padding:0.35em 0.7em;}
+.lang-switch button.active{background:var(--accent);color:var(--accent-contrast);}
+.savebar{font-size:0.8rem;color:var(--muted);}
+.hint{font-size:0.8rem;color:var(--muted);}
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.45);display:flex;align-items:center;justify-content:center;z-index:50;}
+.modal-box{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:1.2rem;max-width:420px;}
+.modal-box .actions{display:flex;gap:0.5rem;justify-content:flex-end;margin-top:1rem;}
+footer.bottombar{position:sticky;bottom:0;background:var(--bg);border-top:1px solid var(--border);
+  padding:0.6rem 0;display:flex;flex-wrap:wrap;gap:0.5rem;justify-content:space-between;align-items:center;}
+.footer-actions{display:flex;flex-wrap:wrap;gap:0.4rem;}
+.severity-select{max-width:220px;}
+details.instructions{margin:0.6rem 0;}
+details.instructions summary{cursor:pointer;font-weight:600;}
+@media print{
+  header.top, footer.bottombar, nav.modnav, .no-print{display:none !important;}
+  .layout{display:block;}
+  main.content{width:100%;}
+  .module-section{display:block !important;page-break-inside:avoid;}
+  body{background:#fff;color:#000;}
+  .panel,.item{border-color:#999;background:#fff;}
+}
+.module-section{display:none;}
+.module-section.active{display:block;}
+</style>
+</head>
+<body>
+<div class="app">
+
+<header class="top">
+  <h1>ListenTrace <span style="font-weight:400;color:var(--muted);">Manual QA</span></h1>
+  <div class="top-actions">
+    <span class="savebar" id="saveStatus"></span>
+    <div class="lang-switch no-print">
+      <button id="langZh" onclick="setLang('zh')">中文</button>
+      <button id="langEn" onclick="setLang('en')">English</button>
+    </div>
+  </div>
+</header>
+
+<div class="panel">
+  <details class="instructions" open id="instructionsBlock">
+    <summary data-t="instrTitle"></summary>
+    <div id="instrBody"></div>
+  </details>
+
+  <div class="grid2">
+    <div class="field-wrap">
+      <label class="field" data-t="fAppVersion"></label>
+      <input type="text" id="metaAppVersion" placeholder="e.g. commit 136326b / v0.1.0">
+    </div>
+    <div class="field-wrap">
+      <label class="field" data-t="fDate"></label>
+      <input type="date" id="metaDate">
+    </div>
+    <div class="field-wrap">
+      <label class="field" data-t="fTesterCode"></label>
+      <input type="text" id="metaTesterCode" placeholder="tester-01">
+    </div>
+    <div class="field-wrap">
+      <label class="field" data-t="fEnv"></label>
+      <input type="text" id="metaEnv" placeholder="Windows 11 23H2 / dev run / packaged installer">
+    </div>
+  </div>
+  <p class="hint" data-t="testerCodeHint"></p>
+</div>
+
+<div class="panel">
+  <div class="summary-counts" id="summaryCounts"></div>
+  <div class="progressbar" id="overallProgress"><div class="pb-pass" id="pbPass"></div><div class="pb-fail" id="pbFail"></div><div class="pb-blocked" id="pbBlocked"></div></div>
+</div>
+
+<div class="layout">
+  <nav class="modnav no-print" id="modNav"></nav>
+  <main class="content" id="modContent"></main>
+</div>
+
+</div>
+
+<footer class="bottombar no-print">
+  <span class="hint" data-t="footerHint"></span>
+  <div class="footer-actions">
+    <button onclick="exportJSON()" data-t="btnExportJson"></button>
+    <button onclick="document.getElementById('importFile').click()" data-t="btnImportJson"></button>
+    <input type="file" id="importFile" accept="application/json" style="display:none" onchange="importJSON(event)">
+    <button onclick="exportMarkdown()" data-t="btnExportMd"></button>
+    <button onclick="window.print()" data-t="btnPrint"></button>
+    <button class="danger" onclick="confirmReset()" data-t="btnReset"></button>
+  </div>
+</footer>
+
+<div id="modalRoot"></div>
+
+<script>
+const META = {
+  project: "ListenTrace",
+  schemaVersion: "1.0.0",
+  questionnaireVersion: "2026-07-27",
+  storageKey: "listentrace_manual_qa_v1"
+};
+
+const STR = {
+  instrTitle: {zh:"使用说明（点击展开/收起）", en:"Instructions (click to expand/collapse)"},
+  instrBody: {zh:`
+    <p><b>用途：</b>本问卷是 ListenTrace 的追补式全产品人工核查基线（M12.1-A），供人工逐模块核查真实功能、记录故障与体验反馈，供 Milestone 12 产品加固与后续 Release 使用。</p>
+    <p><b>如何启动产品：</b>开发环境下运行 <code>.venv/Scripts/python -m listentrace.ui.app</code>（见仓库 README.md）；或使用 packaging/ 下已构建的安装包/便携版。</p>
+    <p><b>如何使用样本：</b>样本位于 <code>manual-qa/samples/</code>，各模块的“要使用的样本”一栏会点名具体文件；详见 <code>manual-qa/samples/README.md</code>。</p>
+    <p><b>如何保存结果：</b>本页所有填写内容会自动保存到浏览器 localStorage（仅本机、仅本问卷）。核查结束后，请点击下方“导出 JSON”保存一份结果文件，需要交给 Agent 分析或与他人交接进度时，发送该 JSON 文件（不要把浏览器 localStorage 当作可交接的存储介质）。也可导出 Markdown 报告便于阅读。</p>
+    <p><b>隐私提醒：</b>请勿在“实际表现/证据”等文本字段中填写真实姓名、真实邮箱、账号、真实客户数据或本机真实绝对路径；截图文件名只记录文件名，不在本页粘贴截图内容本身。</p>
+    <p><b>Schema：</b>问卷 schema/version：<code>${META.schemaVersion}</code>，questionnaire version：<code>${META.questionnaireVersion}</code>。</p>
+  `, en:`
+    <p><b>Purpose:</b> This is ListenTrace's retroactive full-product manual QA baseline (M12.1-A), for module-by-module human verification, defect/UX feedback capture, feeding Milestone 12 hardening and later release work.</p>
+    <p><b>How to launch the product:</b> in a dev environment run <code>.venv/Scripts/python -m listentrace.ui.app</code> (see repo README.md); or use a build already produced under <code>packaging/</code> (installer or portable zip).</p>
+    <p><b>How to use the samples:</b> samples live under <code>manual-qa/samples/</code>; each module's "Samples used" field names the exact files. See <code>manual-qa/samples/README.md</code> for details.</p>
+    <p><b>How results are saved:</b> everything you fill in autosaves to this browser's localStorage (this machine, this questionnaire only). When you finish, click "Export JSON" below to save a result file. To hand off progress to an Agent or another person, send that JSON file (do not treat localStorage itself as a hand-off medium). A Markdown report export is also available for easy reading.</p>
+    <p><b>Privacy reminder:</b> do not put real names, real emails, real account/customer data, or real local absolute paths into "Actual behavior / Evidence" or other text fields; screenshot fields record a filename only — do not paste actual screenshot images into this page.</p>
+    <p><b>Schema:</b> questionnaire schema/version: <code>${META.schemaVersion}</code>, questionnaire version: <code>${META.questionnaireVersion}</code>.</p>
+  `},
+  fAppVersion: {zh:"当前版本 / commit", en:"App version / commit"},
+  fDate: {zh:"核查日期", en:"Review date"},
+  fTesterCode: {zh:"测试者代号", en:"Tester code"},
+  fEnv: {zh:"操作系统 / 运行环境", en:"OS / runtime environment"},
+  testerCodeHint: {zh:"测试者代号用于区分多轮核查，请使用代号（如 tester-01），不要填写真实姓名。", en:"The tester code distinguishes review rounds — use a code (e.g. tester-01), not your real name."},
+  footerHint: {zh:"填写内容会自动保存在本浏览器（localStorage），关闭页面前建议先导出一次 JSON。", en:"Your entries autosave to this browser (localStorage) — export a JSON copy before closing the page."},
+  btnExportJson: {zh:"导出 JSON", en:"Export JSON"},
+  btnImportJson: {zh:"导入 JSON", en:"Import JSON"},
+  btnExportMd: {zh:"导出 Markdown 报告", en:"Export Markdown report"},
+  btnPrint: {zh:"打印 / 保存 PDF", en:"Print / Save PDF"},
+  btnReset: {zh:"清空问卷", en:"Reset questionnaire"},
+  purposeLabel: {zh:"模块目的", en:"Purpose"},
+  preconditionsLabel: {zh:"前置条件", en:"Preconditions"},
+  samplesLabel: {zh:"要使用的样本", en:"Samples used"},
+  stepsLabel: {zh:"操作步骤", en:"Steps"},
+  expectedLabel: {zh:"预期结果", en:"Expected result"},
+  actualLabel: {zh:"实际表现 / 证据", en:"Actual behavior / Evidence"},
+  reproLabel: {zh:"复现步骤（若失败/受阻）", en:"Reproduction steps (if Fail/Blocked)"},
+  screenshotLabel: {zh:"截图/附件文件名", en:"Screenshot / attachment filename"},
+  suggestionLabel: {zh:"改进建议", en:"Suggestion"},
+  severityLabel: {zh:"严重程度", en:"Severity"},
+  sevBlocking: {zh:"发布阻断", en:"Release-blocking"},
+  sevHigh: {zh:"高：数据完整性/隐私/安全", en:"High: data integrity / privacy / security"},
+  sevMedium: {zh:"中：核心工作流/体验缺陷", en:"Medium: core workflow / severe UX"},
+  sevLow: {zh:"低：次要问题", en:"Low: minor issue"},
+  sevNA: {zh:"不适用", en:"N/A"},
+  statusPass: {zh:"通过 Pass", en:"Pass"},
+  statusFail: {zh:"失败 Fail", en:"Fail"},
+  statusBlocked: {zh:"受阻 Blocked", en:"Blocked"},
+  statusNA: {zh:"未测/不适用 Not tested / N/A", en:"Not tested / N/A"},
+  answerLabel: {zh:"回答", en:"Answer"},
+  yes: {zh:"是", en:"Yes"},
+  no: {zh:"否", en:"No"},
+  unsure: {zh:"不确定", en:"Unsure"},
+  overallPass: {zh:"通过", en:"Pass"},
+  overallFail: {zh:"失败", en:"Fail"},
+  overallBlocked: {zh:"受阻", en:"Blocked"},
+  overallNA: {zh:"未测", en:"Not tested"},
+  overallTotal: {zh:"共", en:"Total"},
+  resetConfirmTitle: {zh:"确认清空整份问卷？", en:"Confirm clearing the entire questionnaire?"},
+  resetConfirmBody: {zh:"这会清除本浏览器中保存的所有填写内容（状态、证据、建议、主观反馈），且无法撤销。样本文件和问卷本身不会被删除。建议先导出一份 JSON 备份。", en:"This clears everything saved in this browser (statuses, evidence, suggestions, subjective feedback) and cannot be undone. Sample files and the questionnaire itself are not deleted. Consider exporting a JSON backup first."},
+  cancel: {zh:"取消", en:"Cancel"},
+  confirmClear: {zh:"确认清空", en:"Yes, clear everything"},
+  importInvalid: {zh:"导入失败：文件不是有效的 ListenTrace Manual QA JSON，或 schema 版本不兼容。", en:"Import failed: file is not a valid ListenTrace Manual QA JSON, or its schema version is incompatible."},
+  importOk: {zh:"导入成功。", en:"Import succeeded."},
+  savedAt: {zh:"上次自动保存：", en:"Last autosaved:"},
+  neverSaved: {zh:"尚未保存", en:"Not saved yet"},
+  storageUnavailable: {zh:"警告：浏览器本地存储不可用，填写内容将不会自动保存，请手动导出 JSON。", en:"Warning: browser local storage is unavailable — entries will not autosave. Export JSON manually."}
+};
+
+const TYPE_TEXT = "text";
+const TYPE_CHOICE = "choice";
+
+const MODULES = [
+{ id:"m00", title:{zh:"启动、安装与基础边界", en:"Startup, Install & Basic Boundaries"},
+  purpose:{zh:"确认应用能可靠启动，且启动/关闭/窗口层面的基础边界表现安全。", en:"Confirm the app starts reliably, and startup/shutdown/window-level basic boundaries behave safely."},
+  preconditions:{zh:"已按 README.md 完成开发环境搭建，或已获得 packaging/ 下构建产物（安装包或便携版）。", en:"Dev environment set up per README.md, or a build from packaging/ (installer or portable zip) is available."},
+  samples:{zh:["无需样本文件"], en:["No sample files required"]},
+  steps:{zh:["首次冷启动应用","关闭应用并再次启动（重启）","调整主窗口尺寸至很小与很大","仅用键盘（Tab/Shift+Tab/Enter/Space）操作主窗口"], en:["Cold-start the app for the first time","Close and relaunch it (restart)","Resize the main window to very small and very large","Operate the main window using only the keyboard (Tab/Shift+Tab/Enter/Space)"]},
+  items:[
+    {id:"m00-01", text:{zh:"首次启动应用，主窗口正常打开，没有崩溃或错误弹窗。", en:"Launch the app for the first time; the main window opens normally with no crash or error dialog."}, expected:{zh:"窗口正常打开，素材库为空，无错误对话框。", en:"Window opens normally, material library is empty, no error dialog."}},
+    {id:"m00-02", text:{zh:"检查应用数据目录（数据库/日志所在位置，见 README/ARCHITECTURE）是否被正确创建，无报错。", en:"Check that the app-data directory (where the database/logs live, see README/ARCHITECTURE) is created correctly with no error."}, expected:{zh:"应用数据目录存在，无权限或路径错误。", en:"App-data directory exists; no permission or path error."}},
+    {id:"m00-03", text:{zh:"关闭应用后重新启动，此前的空素材库状态保持一致，没有遗留错误弹窗。", en:"Close the app and relaunch it; the previously-empty library stays consistent, with no leftover error dialogs."}, expected:{zh:"重启后状态一致，无异常弹窗。", en:"State is consistent after restart; no abnormal dialogs."}},
+    {id:"m00-04", text:{zh:"将主窗口调整为很小的尺寸，再调整为很大的尺寸，核心控件不重叠、不被遮挡。", en:"Resize the main window to a very small size, then a very large size; core controls never overlap or get hidden."}, expected:{zh:"两种尺寸下界面都可正常使用。", en:"The UI stays usable at both sizes."}},
+    {id:"m00-05", text:{zh:"仅用 Tab 键在主窗口的控件间移动焦点，确认任意时刻都能看到清晰的键盘焦点框（Milestone 11 已加入 QPushButton:focus 焦点环）。", en:"Tab through the main window's controls using only the keyboard; confirm a clear keyboard-focus ring is always visible (Milestone 11 added a QPushButton:focus ring)."}, expected:{zh:"焦点顺序合理，焦点框始终可见。", en:"Tab order is sensible; the focus ring is always visible."}},
+    {id:"m00-06", text:{zh:"若使用打包后的安装包/便携版：首次运行是否出现 Windows SmartScreen/未签名警告？确认继续运行后应用能正常启动（已知限制：未签名，见 PROJECT_STATUS.md）。", en:"If using a packaged installer/portable build: does Windows SmartScreen / an unsigned-binary warning appear on first run? Confirm choosing to continue still launches the app normally (known limitation: unsigned — see PROJECT_STATUS.md)."}, expected:{zh:"出现预期中的未签名警告；继续后正常启动。", en:"The expected unsigned-binary warning appears; continuing launches normally."}}
+  ]},
+{ id:"m01", title:{zh:"素材导入与库管理", en:"Material Import & Library Management"},
+  purpose:{zh:"验证本地音视频+字幕素材包的导入、校验与库管理（不复制大文件、区分删除记录与删除源文件）。", en:"Verify import/validation of local audio/video + subtitle material packages, and library management (no large-file copying by default, and record-removal vs source-file-deletion stay distinct)."},
+  preconditions:{zh:"素材库为空或已有少量素材。", en:"Material library is empty or has only a few materials."},
+  samples:{zh:["samples/audio/normal_lesson.wav","samples/subtitles/normal_lesson.srt","samples/subtitles/normal_lesson.vtt","samples/subtitles/boundary_stress.srt","samples/subtitles/invalid_non_numeric_index.srt","samples/subtitles/invalid_timing_backwards.srt","samples/subtitles/invalid_missing_webvtt_header.vtt"], en:["samples/audio/normal_lesson.wav","samples/subtitles/normal_lesson.srt","samples/subtitles/normal_lesson.vtt","samples/subtitles/boundary_stress.srt","samples/subtitles/invalid_non_numeric_index.srt","samples/subtitles/invalid_timing_backwards.srt","samples/subtitles/invalid_missing_webvtt_header.vtt"]},
+  steps:{zh:["导入 normal_lesson.wav + normal_lesson.srt，命名为一个描述性名称","再导入一次 normal_lesson.wav + normal_lesson.vtt 作为第二条素材","尝试用三个 invalid_*.srt/vtt 文件分别导入","导入 normal_lesson.wav + boundary_stress.srt（字幕时长超出音频时长的组合）","对其中一条素材执行改名、归档、还原、移除记录"], en:["Import normal_lesson.wav + normal_lesson.srt under a descriptive name","Import normal_lesson.wav + normal_lesson.vtt again as a second material","Try importing each of the three invalid_*.srt/vtt files","Import normal_lesson.wav + boundary_stress.srt (subtitle duration exceeds audio duration)","Rename, archive, restore, and remove one of the materials"]},
+  items:[
+    {id:"m01-01", text:{zh:"导入 normal_lesson.wav + normal_lesson.srt 为新素材，命名一个描述性名称。", en:"Import normal_lesson.wav + normal_lesson.srt as a new material with a descriptive name."}, expected:{zh:"导入成功，出现在素材库列表中。", en:"Import succeeds; the material appears in the library list."}},
+    {id:"m01-02", text:{zh:"用同一段音频配 normal_lesson.vtt（WebVTT 格式）再导入一次，作为第二条素材。", en:"Import the same audio paired with normal_lesson.vtt (WebVTT) as a second material."}, expected:{zh:"导入成功；两条素材的字幕内容一致（后续在播放器中核对，见 M02）。", en:"Import succeeds; the two materials' subtitle content matches (cross-check in the player later, see M02)."}},
+    {id:"m01-03", text:{zh:"分别尝试用 invalid_non_numeric_index.srt、invalid_timing_backwards.srt、invalid_missing_webvtt_header.vtt 导入。", en:"Try importing invalid_non_numeric_index.srt, invalid_timing_backwards.srt, and invalid_missing_webvtt_header.vtt in turn."}, expected:{zh:"应用给出清晰、具体的拒绝/错误提示，而不是静默导入损坏的字幕或崩溃。", en:"The app gives a clear, specific rejection/error rather than silently importing corrupted cues or crashing."}},
+    {id:"m01-04", text:{zh:"导入 normal_lesson.wav + boundary_stress.srt（字幕跑到 45 秒，音频只有 28 秒）。", en:"Import normal_lesson.wav + boundary_stress.srt (subtitle runs to 45s while the audio is only 28s)."}, expected:{zh:"能观察到应用如何处理“字幕超出媒体时长”的情况，且不崩溃。", en:"Observe how the app handles subtitle cues extending beyond media duration, without crashing."}},
+    {id:"m01-05", text:{zh:"给某条已导入素材改名。", en:"Rename an already-imported material."}, expected:{zh:"新名称立即反映在库列表及其他显示该素材标题的位置。", en:"The new name is immediately reflected in the library list and anywhere else the material's title is shown."}},
+    {id:"m01-06", text:{zh:"归档一条素材，再将其还原。", en:"Archive a material, then restore it."}, expected:{zh:"归档状态与活跃素材明显区分，且可以被还原，不是被永久删除。", en:"Archived status is visibly distinct from active materials, and can be restored rather than being permanently deleted."}},
+    {id:"m01-07", text:{zh:"移除一条素材记录（不是删除源文件）。", en:"Remove a material record (not the source file)."}, expected:{zh:"该记录从库中消失，但磁盘上的原始 .wav/.srt 文件保持不变。", en:"The record disappears from the library, but the original .wav/.srt files on disk are untouched."}},
+    {id:"m01-08", text:{zh:"先在磁盘上移动或改名某条素材配对的源文件，再尝试打开该素材。", en:"Move or rename a material's paired source file on disk first, then try opening that material."}, expected:{zh:"出现具体、友好的“文件缺失/已移动”错误提示，而不是崩溃。", en:"A specific, friendly missing/moved-file error appears, not a crash."}}
+  ]},
+{ id:"m02", title:{zh:"同步播放器", en:"Synchronized Player"},
+  purpose:{zh:"验证播放与字幕 cue 的时间同步、导航、循环行为。", en:"Verify playback-to-cue time synchronization, navigation, and looping behavior."},
+  preconditions:{zh:"已完成 M01-01（normal_lesson 素材已导入）；如需边界测试，M01-04 的 boundary_stress 组合也已导入。", en:"M01-01 completed (normal_lesson material imported); the boundary_stress combination from M01-04 also imported if doing the boundary check."},
+  samples:{zh:["由 M01 导入的 normal_lesson 素材","由 M01 导入的 boundary_stress 组合素材"], en:["The normal_lesson material imported in M01","The boundary_stress combination imported in M01"]},
+  steps:{zh:["用按钮和快捷键分别测试播放/暂停","点击进度条跳转到中间某个时间点","使用上一条/下一条 cue 导航","重播当前 cue","开启单条 cue 循环，再开启多条 cue 范围循环","隐藏字幕面板"], en:["Test play/pause via both the button and a keyboard shortcut","Click the progress bar to seek to a mid-point timestamp","Use previous/next-cue navigation","Replay the current cue","Turn on single-cue looping, then multi-cue range looping","Hide the transcript panel"]},
+  items:[
+    {id:"m02-01", text:{zh:"用按钮和快捷键分别播放/暂停，观察当前高亮的 cue 是否随音频播放位置更新（可通过 beep 音效大致判断时间点）。", en:"Play/pause via both the button and a keyboard shortcut; confirm the highlighted active cue tracks the audio position (the beep tones give a rough time reference)."}, expected:{zh:"播放/暂停正常，高亮 cue 与实际播放位置一致。", en:"Play/pause works; the highlighted cue matches the actual playback position."}},
+    {id:"m02-02", text:{zh:"点击进度条跳转到中间某个时间点。", en:"Click the progress bar to seek to a mid-point timestamp."}, expected:{zh:"当前高亮 cue 立即更新为该时间点对应的正确 cue。", en:"The active cue updates immediately to the correct cue for that position."}},
+    {id:"m02-03", text:{zh:"使用上一条/下一条 cue 导航按钮。", en:"Use the previous/next-cue navigation buttons."}, expected:{zh:"精确跳转到相邻 cue 边界，没有跳过或重复。", en:"Jumps exactly to the adjacent cue boundary, with no skipped or duplicated cue."}},
+    {id:"m02-04", text:{zh:"点击“重播本句”。", en:"Click Replay Cue."}, expected:{zh:"只重播当前 cue 的音频范围一次，播放位置不会漂移进下一条 cue。", en:"Only that cue's audio range replays once; playback position doesn't drift into the next cue."}},
+    {id:"m02-05", text:{zh:"开启单条 cue 循环，等待几个循环周期。", en:"Turn on single-cue looping and wait through a few cycles."}, expected:{zh:"音频持续重复该 cue 的范围，直到关闭循环，期间从不会短暂播放到下一条 cue 的音频。", en:"Audio keeps repeating that cue's range until looping is turned off; the next cue's audio is never briefly heard during looping."}},
+    {id:"m02-06", text:{zh:"选择跨越多条 cue 的范围并开启范围循环。", en:"Select a range spanning multiple cues and turn on range looping."}, expected:{zh:"到达范围终点后循环回到范围起点。", en:"On reaching the range end, playback loops back to the range start."}},
+    {id:"m02-07", text:{zh:"关闭字幕面板显示。", en:"Toggle the transcript panel off."}, expected:{zh:"整个字幕工作区面板（包括文本和任何编辑状态）被隐藏，不只是视觉上变灰。", en:"The whole transcript workspace panel — text and any editing state — is hidden, not just visually greyed out."}},
+    {id:"m02-08", text:{zh:"在 boundary_stress 组合素材中，测试第 4 条约 30 秒的长 cue 循环，以及第 1 条仅 80 毫秒的极短 cue 是否仍可被选中/导航。", en:"In the boundary_stress combination, test looping over cue #4 (~30s long) and confirm cue #1 (only 80ms) is still selectable/navigable despite its very short duration."}, expected:{zh:"长 cue 循环不失步；极短 cue 依然可正常导航。", en:"Looping the long cue stays in sync; the very short cue is still navigable normally."}}
+  ]},
+{ id:"m03", title:{zh:"字幕工作区与听力诊断", en:"Transcript Workspace & Listening Diagnosis"},
+  purpose:{zh:"验证语义标签标注、Cue Note、保存的词汇/语块条目等听力诊断证据的正确性。", en:"Verify semantic-label annotation, Cue Notes, and saved vocabulary/chunk items as listening-diagnosis evidence."},
+  preconditions:{zh:"normal_lesson 素材已导入并打开播放器，字幕可见。", en:"normal_lesson material imported and the player open with the transcript visible."},
+  samples:{zh:["由 M01 导入的 normal_lesson 素材","由 M01 导入的 boundary_stress 组合素材（含 emoji/中文的 cue）"], en:["The normal_lesson material imported in M01","The boundary_stress combination (emoji/CJK cue) imported in M01"]},
+  steps:{zh:["选中某条 cue 内的一段文字，打上“Misheard”标签","在同一条 cue 的重叠范围内打上两个不同标签","为一条 cue 保存 Cue Note","保存一个词汇/语块条目","在 Label Colors 中修改某个标签的颜色"], en:["Select a text range inside a cue and apply the Misheard label","Apply two different labels to an overlapping range in the same cue","Save a Cue Note for one cue","Save a vocabulary/chunk item","Change one label's color in Label Colors"]},
+  items:[
+    {id:"m03-01", text:{zh:"选中一段文字并打上“Misheard”标签，尝试不填写“听成了什么”（heard_as）直接保存。", en:"Select a text range and apply the Misheard label; try saving without filling in \"what I thought I heard\" (heard_as)."}, expected:{zh:"缺少 heard_as 时应用拒绝保存或明确要求填写。", en:"The app rejects saving, or clearly requires heard_as, when it's missing."}},
+    {id:"m03-02", text:{zh:"在同一条 cue 内，对两个重叠的文字范围分别打上不同标签（例如 Keyword + Unknown Word/Chunk）。", en:"Apply two different labels (e.g. Keyword + Unknown Word/Chunk) to overlapping text ranges in the same cue."}, expected:{zh:"两个标注都被保存，之后各自仍可单独选中/编辑，并有各自独立的颜色徽章。", en:"Both annotations save; each remains individually selectable/editable afterward, each with its own colored badge."}},
+    {id:"m03-03", text:{zh:"为一条 cue 保存一条 Cue Note（自由文本），关闭素材后重新打开。", en:"Save a free-text Cue Note for one cue; close the material and reopen it."}, expected:{zh:"重新打开后该 cue 仍显示同一条笔记。", en:"The same note is still attached to that cue after reopening."}},
+    {id:"m03-04", text:{zh:"保存一个带释义和备注的词汇/语块条目（Saved Language Item）。", en:"Save a vocabulary/chunk item (Saved Language Item) with a meaning and a note."}, expected:{zh:"条目出现在已保存列表中，来源上下文正确取自该 cue。", en:"The item appears in the saved-items list, with source context correctly copied from that cue."}},
+    {id:"m03-05", text:{zh:"从另一条 cue 再次保存文本完全相同（规范化后）的词汇条目。", en:"Save a vocabulary item with identical (normalized) text from a different cue."}, expected:{zh:"应用要求显式确认，而不是静默创建重复条目。", en:"The app asks for explicit confirmation rather than silently creating a duplicate."}},
+    {id:"m03-06", text:{zh:"打开 Label Colors，修改某个标签的颜色。", en:"Open Label Colors and change one label's color."}, expected:{zh:"所有已使用该标签的标注的徽章/高亮颜色立即更新，但不改变实际存储的标签本身。", en:"Every existing annotation using that label immediately updates its badge/highlight color, without changing the stored label itself."}},
+    {id:"m03-07", text:{zh:"在 boundary_stress 中含 emoji/中文混排的 cue 内选中一段文字并标注。", en:"In the boundary_stress cue containing emoji/CJK mixed text, select a range and annotate it."}, expected:{zh:"高亮准确落在选中的字符上，不因 emoji 出现偏移。", en:"The highlight lands exactly on the selected characters, with no offset caused by the emoji."}},
+    {id:"m03-08", text:{zh:"编辑一个已有标注，同时修改它的标签和文字范围。", en:"Edit an existing annotation, changing both its label and its text range together."}, expected:{zh:"更新被当作真正的编辑保存，而不只是暗中改了备注/heard_as。", en:"The update saves as a genuine edit, not a hidden notes-only change."}}
+  ]},
+{ id:"m04", title:{zh:"引导式精听会话", en:"Guided Intensive Listening Session"},
+  purpose:{zh:"验证五阶段可恢复精听会话的完整生命周期。", en:"Verify the full lifecycle of the resumable, five-stage guided intensive-listening session."},
+  preconditions:{zh:"normal_lesson 素材已导入。", en:"normal_lesson material imported."},
+  samples:{zh:["由 M01 导入的 normal_lesson 素材"], en:["The normal_lesson material imported in M01"]},
+  steps:{zh:["开始精听会话，完成 Stage 1","进入 Stage 2 采集关键词并重新排序","进入 Stage 3 揭示字幕并诊断","进入 Stage 4 录音/跳过","完成 Stage 5 总结","中途关闭并恢复会话","放弃一次会话后重新开始"], en:["Start the session, complete Stage 1","Enter Stage 2, capture keywords and reorder them","Enter Stage 3, reveal the transcript and diagnose","Enter Stage 4, record or skip","Complete Stage 5's summary","Close and resume mid-session","Abandon one session, then start a new attempt"]},
+  items:[
+    {id:"m04-01", text:{zh:"点击“开始精听练习”，确认 Stage 1（整体理解）打开时字幕是隐藏的。", en:"Click Start Intensive Practice; confirm Stage 1 (global comprehension) opens with the transcript hidden."}, expected:{zh:"Stage 1 打开，字幕不可见。", en:"Stage 1 opens with the transcript not visible."}},
+    {id:"m04-02", text:{zh:"回答 Stage 1 后进入 Stage 2，采集两个关键词并调整它们的顺序，再进入 Stage 3。", en:"Answer Stage 1, move to Stage 2, capture two keywords and reorder them, then move to Stage 3."}, expected:{zh:"进入 Stage 3 后，Stage 2 中关键词的顺序仍保持你调整后的结果。", en:"After moving to Stage 3, the keyword order from Stage 2 is preserved exactly as reordered."}},
+    {id:"m04-03", text:{zh:"进入 Stage 3（揭示字幕），尝试返回 Stage 1 修改已提交的答案。", en:"Enter Stage 3 (reveal transcript), then try going back to edit an already-submitted Stage 1 answer."}, expected:{zh:"Stage 1/2 变为只读锁定，无法再修改。", en:"Stages 1/2 become read-only/locked and can no longer be edited."}},
+    {id:"m04-04", text:{zh:"在 Stage 3 中，对一条已在独立字幕工作区标注过的 cue 记录诊断。", en:"In Stage 3, record a diagnosis on a cue that already has an annotation from the standalone Transcript Workspace."}, expected:{zh:"会话复用/关联到同一条已有标注，而不是盲目重复创建一条新标注。", en:"The session reuses/links to that same existing annotation rather than blindly creating a duplicate."}},
+    {id:"m04-05", text:{zh:"在 Stage 4 为一条 cue 录制跟读音频，将另一条 cue 标记为跳过。", en:"In Stage 4, record a shadowing take for one cue and mark another cue as skipped."}, expected:{zh:"每条 cue 的“已练习/已跳过”状态被分别正确记录。", en:"Each cue's practiced/skipped state is tracked correctly and independently."}},
+    {id:"m04-06", text:{zh:"完成 Stage 5 的无字幕总结。", en:"Complete Stage 5's transcript-free summary."}, expected:{zh:"Stage 5 期间字幕始终不显示。", en:"The transcript is never shown during Stage 5."}},
+    {id:"m04-07", text:{zh:"在 Stage 2 完成后关闭应用/会话窗口，之后用“恢复精听练习”重新打开。", en:"Close the app/session window after completing Stage 2, then reopen it via Resume Intensive Practice."}, expected:{zh:"Stage 1/2 的答案被完整保留。", en:"Stage 1/2 answers are preserved exactly."}},
+    {id:"m04-08", text:{zh:"放弃一次会话，再对同一素材开始一次新的精听会话。", en:"Abandon a session, then start a fresh Intensive Practice attempt on the same material."}, expected:{zh:"被放弃的会话仍以只读形式保留在会话历史中，新会话可以独立开始。", en:"The abandoned session remains visible read-only in Session History; the new session starts independently."}}
+  ]},
+{ id:"m05", title:{zh:"测验与回顾练习", en:"Quizzes & Recall Practice"},
+  purpose:{zh:"验证四种确定性测验题型、两种测验模式与提交评分的原子性。", en:"Verify the four deterministic question types, both quiz modes, and the atomicity of submission/scoring."},
+  preconditions:{zh:"normal_lesson 素材已导入；建议已完成 M03/M04 留下一些诊断证据，便于 Review Quiz 有内容可用。", en:"normal_lesson material imported; ideally M03/M04 already left some diagnosis evidence so Review Quiz has content to draw on."},
+  samples:{zh:["由 M01/M03/M04 产生证据的 normal_lesson 素材"], en:["The normal_lesson material with evidence produced by M01/M03/M04"]},
+  steps:{zh:["开始 Material Quiz 并作答一部分后关闭再恢复","提交测验查看统一回顾","从测验历史重新打开一份已完成的测验","开始 Review Quiz","对内容很少的素材请求测验"], en:["Start a Material Quiz, answer part of it, close and resume","Submit the quiz and view the consolidated review","Reopen a completed quiz from history","Start a Review Quiz","Request a quiz on a material with very little content"]},
+  items:[
+    {id:"m05-01", text:{zh:"开始 Material Quiz，观察题型是否混合出现（听写/填空、关键词识别、音频转文字选择），提交前不显示任何正确性。", en:"Start a Material Quiz; confirm a mix of question types appears (dictation/fill-in-the-blank, keyword recognition, audio-to-transcript choice) and no correctness is shown before submission."}, expected:{zh:"题型混合出现；提交前完全不暴露正确性。", en:"Question types are mixed; correctness is never revealed before submission."}},
+    {id:"m05-02", text:{zh:"作答一部分后关闭测验窗口，再恢复该测验。", en:"Answer part of the quiz, close the window, then resume that quiz."}, expected:{zh:"之前已填写的答案仍然保留。", en:"Previously entered answers are still there."}},
+    {id:"m05-03", text:{zh:"提交整份测验。", en:"Submit the entire quiz."}, expected:{zh:"一次性出现统一的回顾界面：每道题都显示你的答案、正确答案、正确/错误、来源 cue 与评分规则说明。", en:"A single consolidated review appears at once, showing every question's your-answer, correct-answer, correct/incorrect, source cue, and a scoring-rule explanation."}},
+    {id:"m05-04", text:{zh:"从测验历史（Quiz History）重新打开这份已提交的测验。", en:"Reopen this already-submitted quiz from Quiz History."}, expected:{zh:"以严格只读方式打开，没有任何可编辑字段。", en:"Opens strictly read-only, with no editable fields."}},
+    {id:"m05-05", text:{zh:"在已有“Misheard”/“Unknown Word”诊断证据的素材上开始 Review Quiz。", en:"Start a Review Quiz on a material with prior Misheard/Unknown Word diagnosis evidence."}, expected:{zh:"生成的题目优先来自 misheard 证据。", en:"Generated questions are prioritized toward the misheard evidence first."}},
+    {id:"m05-06", text:{zh:"对内容很少/刚导入的素材请求测验。", en:"Request a quiz on a material with very little/newly-imported content."}, expected:{zh:"生成规模更小的测验，或明确拒绝，而不是用重复/弱题目凑数。", en:"Produces a smaller quiz, or explicitly refuses, rather than padding with weak or duplicate questions."}},
+    {id:"m05-07", text:{zh:"用与原文大小写/标点/多余空格不同的答案作答文本题，再用真正拼写不同的词作答。", en:"Answer a text question with different case/punctuation/extra whitespace than the transcript, then answer with a genuinely different spelling."}, expected:{zh:"前者仍判定正确（忽略大小写/标点/空白），后者判定错误。", en:"The former is still scored correct (case/punctuation/whitespace-insensitive); the latter is scored incorrect."}}
+  ]},
+{ id:"m06", title:{zh:"跟读与本地录音", en:"Shadowing & Local Recording"},
+  purpose:{zh:"验证麦克风录音、多次录音保留、源音频与录音对比、删除与崩溃恢复。", en:"Verify microphone recording, multi-take retention, source-vs-take comparison, deletion, and crash recovery."},
+  preconditions:{zh:"有可用麦克风；normal_lesson 素材已导入。", en:"A working microphone is available; normal_lesson material imported."},
+  samples:{zh:["由 M01 导入的 normal_lesson 素材"], en:["The normal_lesson material imported in M01"]},
+  steps:{zh:["打开 Shadowing Practice，选择麦克风，为一条 cue 录音","播放该录音","运行“对比”（源音频 vs 录音）","为同一条 cue 再录一次","尝试同时进行两次录音","删除单条/整条 cue 的所有录音","移除整个素材"], en:["Open Shadowing Practice, pick a microphone, record a take for one cue","Play that take back","Run Compare (source vs. take)","Record a second take for the same cue","Try starting two recordings at once","Delete a single take, then all takes for a cue","Remove the entire material"]},
+  items:[
+    {id:"m06-01", text:{zh:"打开独立的 Shadowing Practice，选择一个麦克风，为一条 cue 录音。", en:"Open standalone Shadowing Practice, select a microphone, and record a take for one cue."}, expected:{zh:"录音只有在完成并通过校验后才出现在录音列表中。", en:"The take appears in the take list only after recording finishes and is validated."}},
+    {id:"m06-02", text:{zh:"单独播放这条录音。", en:"Play back that recorded take alone."}, expected:{zh:"音频正常播放。", en:"The audio plays correctly."}},
+    {id:"m06-03", text:{zh:"运行“对比”（源音频 vs. 你的录音）。", en:"Run Compare (source audio vs. your take)."}, expected:{zh:"先播放原始 cue 音频，短暂停顿后播放录音，两者从不混音/重叠播放。", en:"The original cue audio plays first, then (after a short pause) the take plays; the two are never mixed or overlapped."}},
+    {id:"m06-04", text:{zh:"为同一条 cue 再录一次，形成第二条录音。", en:"Record a second take for the same cue."}, expected:{zh:"两条录音都被保留，可各自独立播放/删除，直至被显式删除。", en:"Both takes are kept and individually playable/deletable until explicitly deleted."}},
+    {id:"m06-05", text:{zh:"尝试在一条录音进行中启动第二条录音。", en:"Try starting a second recording while one is already in progress."}, expected:{zh:"应用阻止同时进行两次录音。", en:"The app prevents two simultaneous captures."}},
+    {id:"m06-06", text:{zh:"先删除单条录音，再对该 cue 执行“删除全部录音”。", en:"Delete a single take, then run \"delete all takes for this cue\"."}, expected:{zh:"两种删除范围都按预期生效，录音列表立即更新。", en:"Both deletion scopes work as expected; the take list updates immediately."}},
+    {id:"m06-07", text:{zh:"选择一个不可用/已断开的麦克风（或在没有麦克风的环境下操作）。", en:"Select an unavailable/disconnected microphone (or operate in an environment with none)."}, expected:{zh:"应用不会静默切换到另一个设备，而是清楚地提示问题。", en:"The app does not silently fall back to a different device; it clearly surfaces the problem."}},
+    {id:"m06-08", text:{zh:"移除整个素材记录。", en:"Remove the entire material record."}, expected:{zh:"该素材的所有录音文件随数据库行一起被删除，不留下孤立文件。", en:"All of that material's recording files are deleted along with its database rows — no orphaned files remain."}}
+  ]},
+{ id:"m07", title:{zh:"Quick Practice 模式", en:"Quick Practice Mode"},
+  purpose:{zh:"验证短时低摩擦的 cue 级练习模式：推荐练习/选定 cue、前进式循环、渐进式保存、中断行为。", en:"Verify the short, low-friction cue-based practice mode: Recommended/Selected Cues, the forward-only per-cue cycle, progressive saving, and interruption behavior."},
+  preconditions:{zh:"normal_lesson 素材已导入；若已有 M03-M06 产生的证据，Recommended Practice 会更有代表性。", en:"normal_lesson material imported; Recommended Practice is more representative if evidence from M03-M06 already exists."},
+  samples:{zh:["由 M01 导入的 normal_lesson 素材"], en:["The normal_lesson material imported in M01"]},
+  steps:{zh:["用 Recommended Practice（默认 5 条）开始","用 Selected Cues 选定一个范围开始","完成一条 cue 的 Listen→Recall→Reveal & Diagnose→Replay & Shadow 循环","完成至少一条 cue 后关闭运行","未完成任何 cue 就关闭运行","在两次运行中把同一条 cue 都标记为 Missed"], en:["Start via Recommended Practice (default 5 cues)","Start via Selected Cues choosing a range","Complete one cue's Listen -> Recall -> Reveal & Diagnose -> Replay & Shadow cycle","Close the run after completing at least one cue","Close the run before completing any cue","Mark the same cue Missed across two separate runs"]},
+  items:[
+    {id:"m07-01", text:{zh:"用 Recommended Practice（默认 5 条）开始，即使素材上历史证据很少。", en:"Start via Recommended Practice with the default 5 cues, even on a material with little prior evidence."}, expected:{zh:"仍能自动选出 cue 并给出选择理由（安全的按素材顺序回退）。", en:"Cues are still auto-selected with a stated reason (safe material-order fallback)."}},
+    {id:"m07-02", text:{zh:"用 Selected Cues 选择一个具体范围开始。", en:"Start via Selected Cues, choosing a specific range."}, expected:{zh:"练习严格按选中的 cue 和顺序进行。", en:"The run proceeds through exactly the chosen cues in the chosen order."}},
+    {id:"m07-03", text:{zh:"完整走一遍 Listen→Recall→Reveal & Diagnose→Replay & Shadow，Recall 阶段选择“Missed”。", en:"Complete the full Listen -> Recall -> Reveal & Diagnose -> Replay & Shadow cycle, choosing \"Missed\" at Recall."}, expected:{zh:"结果被记录，并出现在最终的完成总结里。", en:"The result is recorded and appears in the completion summary."}},
+    {id:"m07-04", text:{zh:"完成至少一条 cue 后关闭本次运行。", en:"Close the run after completing at least one cue."}, expected:{zh:"出现确认提示，随后保存为只读的“已放弃”记录，保留已完成 cue 的证据。", en:"A confirmation prompt appears, then it saves as a read-only \"abandoned\" run preserving that cue's evidence."}},
+    {id:"m07-05", text:{zh:"开始新一轮练习，未完成任何 cue 就关闭。", en:"Start a new run and close it before completing any cue."}, expected:{zh:"这次运行在历史中不留任何痕迹。", en:"This run leaves no trace in history at all."}},
+    {id:"m07-06", text:{zh:"在两次独立的 Quick Practice 运行中，把同一条 cue 都标记为 Missed。", en:"Mark the same cue as Missed in two separate Quick Practice runs."}, expected:{zh:"该 cue 在 Learning History 触发“Quick Practice 中重复 Missed”的 Needs Attention 原因。", en:"It triggers the \"repeated missed in Quick Practice\" Needs Attention reason in Learning History."}},
+    {id:"m07-07", text:{zh:"查看某次运行的完成总结。", en:"View a run's completion summary."}, expected:{zh:"没有任何时间/发音/能力/难度得分，只有真实发生的计数。", en:"No time/pronunciation/ability/difficulty score of any kind — only counts of what actually happened."}}
+  ]},
+{ id:"m08", title:{zh:"学习历史与分析", en:"Learning History & Analytics"},
+  purpose:{zh:"验证全局只读学习证据中心：概览、按日期筛选、会话/诊断/测验分区、Needs Attention。", en:"Verify the global, read-only learning-evidence center: overview, date filtering, session/diagnosis/quiz sections, and Needs Attention."},
+  preconditions:{zh:"已完成前面模块（M03-M07）留下的会话/测验/录音/Quick Practice 证据。", en:"Session/quiz/recording/Quick-Practice evidence already exists from earlier modules (M03-M07)."},
+  samples:{zh:["由 M01/M03-M07 产生证据的素材"], en:["Materials with evidence produced by M01/M03-M07"]},
+  steps:{zh:["不预选素材直接打开 Learning History","切换日期筛选（近7/30/90天、自定义、全部时间）","查看 Continue Learning","查看 Session History","查看 Diagnoses 分区","查看 Needs Attention","从某条历史记录跳转回实际工作流"], en:["Open Learning History with no material preselected","Switch the date filter (Last 7/30/90 Days, Custom, All Time)","Check Continue Learning","Check Session History","Check the Diagnoses section","Check Needs Attention","Navigate back into the live workflow from a history entry"]},
+  items:[
+    {id:"m08-01", text:{zh:"不预选素材，直接打开 Learning History，核对 Overview 的计数（会话数、测验数、Quick Practice 数等）是否与前面模块实际做过的操作一致。", en:"Open Learning History with no material preselected; check that Overview counts (sessions, quizzes, quick practices, etc.) match what was actually done in earlier modules."}, expected:{zh:"计数与实际操作一致。", en:"Counts match actual prior actions."}},
+    {id:"m08-02", text:{zh:"依次切换近7天/30天/90天、自定义范围、全部时间，观察各个分区/图表是否统一应用同一筛选（本地时区）。", en:"Switch across Last 7/30/90 Days, Custom Range, and All Time; confirm every section/chart applies the same filter consistently, in local time."}, expected:{zh:"筛选在所有分区和图表中保持一致。", en:"The filter applies consistently across every section and chart."}},
+    {id:"m08-03", text:{zh:"确认 Continue Learning 始终显示当前活跃（未完成/未放弃）的会话，即使日期筛选原本会排除它。", en:"Confirm Continue Learning always shows any currently active (not completed/abandoned) session, even when the date filter would otherwise exclude it."}, expected:{zh:"活跃会话始终可见，不受日期筛选影响。", en:"Active sessions are always visible, unaffected by the date filter."}},
+    {id:"m08-04", text:{zh:"查看 Session History，确认 Active/Completed/Abandoned 在视觉上明显区分，只有 Completed 计入“已完成”统计。", en:"Check Session History; confirm Active/Completed/Abandoned are visually distinct, and only Completed counts toward any \"completed\" total."}, expected:{zh:"三种状态区分清楚，统计口径正确。", en:"The three statuses are clearly distinguished; totals are counted correctly."}},
+    {id:"m08-05", text:{zh:"查看 Diagnoses 分区，确认会话内的诊断快照与素材当前可编辑的标注是分开展示的（之后修改标注不会反向改写历史快照）。", en:"Check the Diagnoses section; confirm session-scoped diagnosis snapshots are shown separately from the material's live, editable annotations (editing an annotation later doesn't retroactively rewrite the session snapshot)."}, expected:{zh:"两者展示上分开，互不覆盖。", en:"The two are shown separately and never overwrite each other."}},
+    {id:"m08-06", text:{zh:"查看 Needs Attention 列表。", en:"Check the Needs Attention list."}, expected:{zh:"每个被标记的素材都给出具体、独立命名的原因，而不是一个笼统的分数。", en:"Each flagged material shows a specific, independently-named reason, not one opaque score."}},
+    {id:"m08-07", text:{zh:"从某条历史记录（会话/测验/录音）使用其跳转链接。", en:"Use a history entry's (session/quiz/recording) navigation link."}, expected:{zh:"正确打开对应的实时工作流（恢复会话、打开测验回顾、跳转到 cue 等）。", en:"It opens the correct live workflow (resumes the session, opens the quiz review, jumps to the cue, etc.)."}},
+    {id:"m08-08", text:{zh:"检查 Learning History 全部分区，确认任何地方都没有“有效学习时长”“发音得分”或综合“能力/难度”分数。", en:"Check every section of Learning History; confirm nowhere shows an effective study-time total, pronunciation score, or combined ability/difficulty score."}, expected:{zh:"确实没有此类分数。", en:"No such score exists anywhere."}}
+  ]},
+{ id:"m09", title:{zh:"结构化导出", en:"Structured Export"},
+  purpose:{zh:"验证导出范围、隐私字段可选、预览一致性、原子写入与覆盖确认。", en:"Verify export scope, optional privacy fields, preview consistency, atomic writes, and overwrite confirmation."},
+  preconditions:{zh:"至少一条素材已具备较丰富的证据（来自 M03-M07）。", en:"At least one material already has a reasonable mix of evidence (from M03-M07)."},
+  samples:{zh:["由 M01/M03-M07 产生证据的素材"], en:["Materials with evidence produced by M01/M03-M07"]},
+  steps:{zh:["打开 Export Learning Evidence，选择“单个素材”范围和日期范围","生成预览后更改范围/日期","取消勾选某个隐私字段","分别导出 Markdown 与 JSON","保存后再次保存到同一文件名","生成外部评测说明模板"], en:["Open Export Learning Evidence, choose One Material scope and a date range","Change scope/date range after previewing","Uncheck a privacy-sensitive field","Export both Markdown and JSON","Save, then save again to the same filename","Generate the external-evaluation instruction template"]},
+  items:[
+    {id:"m09-01", text:{zh:"打开 Export Learning Evidence，选择“单个素材”范围和一个日期范围。", en:"Open Export Learning Evidence, choose One Material scope and a date range."}, expected:{zh:"在保存/复制之前先生成一份预览。", en:"A preview is generated before anything is saved or copied."}},
+    {id:"m09-02", text:{zh:"生成预览后更改范围或日期范围。", en:"Change the scope or date range after previewing."}, expected:{zh:"预览被明确标记为失效/重新生成，而不是保留旧内容误导用户。", en:"The preview is clearly invalidated/regenerated, not silently left stale."}},
+    {id:"m09-03", text:{zh:"取消勾选一个隐私敏感字段（例如字幕原文摘录或听错文本）。", en:"Uncheck a privacy-sensitive field (e.g. transcript excerpts or mishearing text)."}, expected:{zh:"该字段在导出记录中被原地打码/删除内容，但记录本身依然存在，不是整条记录被静默丢弃。", en:"That field is redacted in place in the exported record, but the record itself still appears — not silently dropped along with the whole record."}},
+    {id:"m09-04", text:{zh:"对同一份选择分别导出一次 Markdown 和一次 JSON。", en:"Export once as Markdown and once as JSON for the same selection."}, expected:{zh:"两者内容等价；JSON 中带有 export_version 字段。", en:"Both contain equivalent content; the JSON carries an export_version field."}},
+    {id:"m09-05", text:{zh:"保存导出文件后，再次保存到同一个文件名。", en:"Save the export, then save again to the same filename."}, expected:{zh:"覆盖前出现明确的覆盖确认提示。", en:"An overwrite confirmation appears before the existing file is replaced."}},
+    {id:"m09-06", text:{zh:"检查导出文件内容。", en:"Inspect the exported file's content."}, expected:{zh:"没有任何本机绝对路径，没有原始媒体/字幕/录音文件路径，也没有原始音频数据。", en:"No absolute local paths, no original media/subtitle/recording file paths, and no raw audio anywhere in it."}},
+    {id:"m09-07", text:{zh:"生成外部评测说明模板；若条件允许用网络监控工具确认导出流程中没有任何网络请求，否则记录为“仅凭文档/界面观察，未用网络工具核实”。", en:"Generate the external-evaluation instruction template; if possible confirm with a network monitor that no request is made anywhere in the export flow, otherwise note it as \"observed via UI/docs only, not independently verified with a network tool\"."}, expected:{zh:"模板为纯文本/Markdown；导出流程不产生网络请求。", en:"The template is plain text/Markdown; the export flow makes no network request."}}
+  ]},
+{ id:"m10", title:{zh:"跨模块工作流与中断/重启恢复", en:"Cross-Module Workflows & Restart/Interrupt Recovery"},
+  purpose:{zh:"验证多模块串联的真实使用链路，以及中断、崩溃、重启后的恢复行为。", en:"Verify realistic multi-module workflow chains, and recovery behavior after interruption, crash, or restart."},
+  preconditions:{zh:"已完成 M01-M09 各模块基础操作。", en:"Basic operations from M01-M09 already completed."},
+  samples:{zh:["贯穿前面模块使用的 normal_lesson 素材"], en:["The normal_lesson material used throughout earlier modules"]},
+  steps:{zh:["导入→精听会话→测验→跟读录音→Quick Practice→检查 Learning History→导出","录音过程中强制关闭应用（结束任务），再重新启动","精听会话中途不放弃/不完成就关闭应用，重新启动后恢复","从 Learning History 记录跳转到播放器指定 cue","从播放器直接进入 Quick Practice This Cue / Selected Cues","删除/改名素材的源文件后重新打开已有证据的素材"], en:["Import -> Intensive Practice -> Quiz -> Shadowing recording -> Quick Practice -> check Learning History -> Export","Force-close the app (End Task) while actively recording, then relaunch","Close the app mid-session without completing/abandoning, then relaunch and resume","Jump to a specific cue in the Player from a Learning History entry","Enter Quick Practice This Cue / Selected Cues directly from the Player","Delete/rename a material's source file, then reopen it with existing evidence"]},
+  items:[
+    {id:"m10-01", text:{zh:"完整走一遍：导入→精听会话→测验→跟读录音→Quick Practice，然后检查 Learning History 是否同时显示这四类证据，导出是否都包含。", en:"Run the full chain: import -> Intensive Practice -> Quiz -> Shadowing recording -> Quick Practice; confirm Learning History shows all four kinds of evidence, and Export includes all of them."}, expected:{zh:"四类证据均被正确记录并可导出。", en:"All four kinds of evidence are correctly recorded and exportable."}},
+    {id:"m10-02", text:{zh:"开始录音后，在录音进行中强制关闭应用（结束任务/kill），再重新启动应用。", en:"Start recording, then force-close the app (End Task/kill) while it's actively recording, and relaunch."}, expected:{zh:"被中断的录音在重启后被自动清理，没有卡在“录音中”状态的孤立记录。", en:"The interrupted recording is cleaned up automatically on relaunch — no row is stuck \"in progress\"."}},
+    {id:"m10-03", text:{zh:"开始精听会话，做到某个阶段后直接关闭应用（不放弃也不完成），重新启动后用“恢复精听练习”。", en:"Start a session, get partway through, close the app without abandoning or completing, relaunch, then use Resume Intensive Practice."}, expected:{zh:"会话能从原来的进度精确恢复。", en:"The session resumes exactly where it was left off."}},
+    {id:"m10-04", text:{zh:"从 Learning History 的某条记录跳转到播放器的指定 cue。", en:"Jump to a specific cue in the Player directly from a Learning History entry."}, expected:{zh:"准确落在目标 cue 上。", en:"Lands exactly on the intended cue."}},
+    {id:"m10-05", text:{zh:"在播放器中直接使用“Quick Practice This Cue”/“Quick Practice Selected Cues”入口。", en:"Use the Quick Practice This Cue / Quick Practice Selected Cues entry points directly from the Player."}, expected:{zh:"直接从当前上下文开始 Quick Practice，无需额外弹出开始对话框。", en:"Quick Practice starts immediately from that context, without a separate start-dialog detour."}},
+    {id:"m10-06", text:{zh:"先在磁盘上删除或改名素材配对的字幕/媒体文件，再打开一个已有证据的素材。", en:"Delete or rename a material's paired subtitle/media file on disk, then reopen a material that already has recorded evidence."}, expected:{zh:"数据库中已有的标注/会话/测验证据不丢失，即便播放本身会优雅失败。", en:"Existing database evidence (annotations, sessions, quizzes) is not lost, even though playback itself now fails gracefully."}}
+  ]},
+{ id:"m11", title:{zh:"隐私、Secret 与本地数据边界", en:"Privacy, Secrets & Local Data Boundaries"},
+  purpose:{zh:"验证本地优先原则：日志不泄露隐私内容、注入式字符串被当作纯文本、卸载不删除用户数据。", en:"Verify the local-first principle: logs don't leak sensitive content, injection-style strings are treated as plain text, and uninstalling never deletes user data."},
+  preconditions:{zh:"已完成若干前序模块，产生了一些日志和证据。", en:"Some earlier modules already completed, producing some logs and evidence."},
+  samples:{zh:["含中文/emoji 文件名的素材（可复用 M01 已导入的素材，或另建一个中文/emoji 命名的文件夹）"], en:["A material with CJK/emoji in its file name (reuse a material from M01, or create one in a CJK/emoji-named folder)"]},
+  steps:{zh:["检查应用日志文件内容","在 Cue Note 或标注备注中输入公式注入风格字符串","用含空格/中文/emoji 的文件夹名导入素材","导出时取消勾选全部隐私字段","（如条件允许）用网络监控确认应用不发起任何外部请求","（若使用打包安装版）卸载后检查本地数据是否保留"], en:["Check the app log file's content","Type a formula-injection-style string into a Cue Note or annotation note","Import a material from a folder name containing spaces/CJK/emoji","Export with every privacy field unchecked","(If possible) confirm with a network monitor that the app makes no outbound request","(If using a packaged installer) uninstall and check local data is preserved"]},
+  items:[
+    {id:"m11-01", text:{zh:"进行一次正常会话后，检查应用日志文件（位置见 README/ARCHITECTURE）。", en:"After a normal session, check the application log file (location per README/ARCHITECTURE)."}, expected:{zh:"日志不包含完整字幕原文或超出排障必要程度的个人文件路径。", en:"The log does not contain full transcript text, or personal file paths beyond what's necessary for troubleshooting."}},
+    {id:"m11-02", text:{zh:"在 Cue Note 或标注备注中输入类似 `=1+1` 或 `@SUM(A1)` 的公式注入风格字符串。", en:"Type a formula-injection-style string such as `=1+1` or `@SUM(A1)` into a Cue Note or an annotation note."}, expected:{zh:"内容按纯文本存储和显示，绝不会被当作公式自动求值。", en:"It is stored and displayed as plain text, never auto-evaluated as a formula."}},
+    {id:"m11-03", text:{zh:"用包含空格、中文字符和 emoji 的文件/文件夹名导入一条素材。", en:"Import a material whose file/folder name contains spaces, CJK characters, and an emoji."}, expected:{zh:"导入和播放都能正常成功。", en:"Both import and playback succeed."}},
+    {id:"m11-04", text:{zh:"导出时取消勾选所有隐私敏感字段。", en:"Export with every privacy-sensitive field unchecked."}, expected:{zh:"字幕摘录、笔记、听错文本、词汇释义、来源文件名等均不出现在输出中。", en:"None of transcript excerpts, notes, mishearing text, vocabulary meanings, or source file names appear in the output."}},
+    {id:"m11-05", text:{zh:"（如条件允许）在正常使用、导入、导出过程中用网络监控/防火墙确认应用没有发起任何外部请求；若无法核实，记录为“未用工具核实，仅凭观察”。", en:"(If possible) use a network monitor/firewall during normal use, import, and export to confirm the app makes no outbound request; if you cannot verify this, record it as \"not independently verified, observation only\"."}, expected:{zh:"没有发现任何外部网络请求。", en:"No outbound network request is observed."}},
+    {id:"m11-06", text:{zh:"（若使用打包安装版）执行卸载，检查应用数据目录下的数据库、录音、日志是否被保留。", en:"(If using a packaged installer) uninstall, and check that the database, recordings, and logs under the app-data folder are preserved."}, expected:{zh:"卸载只移除程序文件，本地数据库/录音/日志保持原样。", en:"Uninstalling removes only program files; the local database/recordings/logs are left untouched."}}
+  ]},
+{ id:"m12", title:{zh:"可访问性、响应式与可理解性", en:"Accessibility, Responsiveness & Understandability"},
+  purpose:{zh:"验证键盘可达性、窗口自适应、状态提示是否清晰易懂。", en:"Verify keyboard reachability, window responsiveness, and whether status/error messaging is clear."},
+  preconditions:{zh:"已使用过本次核查中打开过的大部分对话框和窗口。", en:"Most dialogs/windows opened during this review session have already been used."},
+  samples:{zh:["无需额外样本"], en:["No additional samples required"]},
+  steps:{zh:["仅用键盘操作本次核查中打开过的每个对话框","调整每个主要窗口的尺寸","回顾本次核查中遇到的所有状态/错误提示","比较不同窗口中同类操作的措辞是否一致"], en:["Operate every dialog opened during this review using only the keyboard","Resize every major window opened during this review","Review every status/error message encountered during this review","Compare wording for similar actions across different windows"]},
+  items:[
+    {id:"m12-01", text:{zh:"仅用键盘（Tab/Shift+Tab/Enter/Esc）操作本次核查中打开过的每个对话框（导入、导出、Label Colors、测验回顾等）。", en:"Using only the keyboard (Tab/Shift+Tab/Enter/Esc), operate every dialog opened during this review (Import, Export, Label Colors, Quiz review, etc.)."}, expected:{zh:"始终有清晰的焦点框，Tab 顺序合理。", en:"A clear focus ring is always visible; Tab order is logical."}},
+    {id:"m12-02", text:{zh:"分别调整每个主要窗口（播放器、Learning History、精听会话）到较小和较大的尺寸。", en:"Resize each major window (Player, Learning History, Guided Session) to a small and a large size."}, expected:{zh:"两种尺寸下文字和控件都保持可读、不重叠。", en:"Text and controls stay readable and non-overlapping at both sizes."}},
+    {id:"m12-03", text:{zh:"回顾本次核查中遇到的所有状态/错误提示文案。", en:"Review every status/error message encountered during this review."}, expected:{zh:"记录任何让你不清楚“发生了什么/该怎么做”的提示。", en:"Note any message that left you unsure what happened or what to do next."}},
+    {id:"m12-04", text:{zh:"比较不同窗口中对同一类操作（如“取消”“关闭”“放弃”）的措辞。", en:"Compare wording across windows for what feels like the same action (e.g. Cancel vs Close vs Discard)."}, expected:{zh:"记录任何术语不一致的地方。", en:"Note any inconsistent terminology for what feels like the same action."}},
+    {id:"m12-05", text:{zh:"（主观）哪个窗口或工作流在第一次使用时感觉最令人困惑？为什么？", en:"(Subjective) Which window or workflow felt the most confusing on first use, and why?"}, expected:{zh:"", en:""}, type:"text"}
+  ]},
+{ id:"m13", title:{zh:"性能、容量与稳定性", en:"Performance, Capacity & Stability"},
+  purpose:{zh:"在较大数据量或高频操作下检查响应速度与稳定性。", en:"Check responsiveness and stability under a larger data volume or rapid repeated actions."},
+  preconditions:{zh:"建议已积累前述模块的素材/会话/测验/录音数据。", en:"Data from earlier modules' materials/sessions/quizzes/recordings has ideally already accumulated."},
+  samples:{zh:["samples/subtitles/boundary_stress.srt（cue 数量与内容压力）"], en:["samples/subtitles/boundary_stress.srt (cue-count/content stress)"]},
+  steps:{zh:["导入多条素材或重复前面模块以积累较多历史记录","快速连续点击播放/暂停或上一条/下一条","让应用长时间保持打开且有会话在进行中","滚动含较多 cue 的字幕列表"], en:["Import several materials, or repeat earlier modules to accumulate more history","Rapidly click Play/Pause or Next/Previous several times in a row","Leave the app open for an extended period with a session in progress","Scroll a subtitle/cue list with a larger number of cues"]},
+  items:[
+    {id:"m13-01", text:{zh:"导入多条素材（10+）或重复前面模块以积累较多会话/测验历史，之后打开 Learning History 和 Export。", en:"Import 10+ materials, or repeat earlier modules to build up more session/quiz history, then open Learning History and Export."}, expected:{zh:"仍在合理时间内加载完成（若明显变慢，记录实际耗时）。", en:"Both still load in a reasonable time (note actual seconds if noticeably slow)."}},
+    {id:"m13-02", text:{zh:"在几秒内快速连续点击播放/暂停或上一条/下一条按钮 10 次以上。", en:"Rapidly click Play/Pause or Next/Previous 10+ times within a couple of seconds."}, expected:{zh:"播放状态保持一致，不崩溃，按钮不卡死。", en:"Playback state stays consistent; no crash; no stuck button."}},
+    {id:"m13-03", text:{zh:"让应用在有会话进行中的状态下空闲较长时间（如 30 分钟以上），之后回来继续操作。", en:"Leave the app idle for an extended period (e.g. 30+ minutes) with a session in progress, then return to it."}, expected:{zh:"恢复操作正常，没有静默超时或状态丢失。", en:"Resuming works normally — no silent timeout or state loss."}},
+    {id:"m13-04", text:{zh:"用 boundary_stress.srt 或其他较大字幕文件测试 cue 列表的滚动与导航。", en:"Test cue-list scrolling and navigation using boundary_stress.srt or another larger subtitle file."}, expected:{zh:"滚动和导航保持流畅响应。", en:"Scrolling and navigation stay responsive."}},
+    {id:"m13-05", text:{zh:"（主观）本次核查中应用是否出现过卡顿、短暂无响应或假死？发生在哪个操作？", en:"(Subjective) Did the app ever feel sluggish, freeze momentarily, or become unresponsive during this review? Under what action?"}, expected:{zh:"", en:""}, type:"text"}
+  ]},
+{ id:"m14", title:{zh:"总体主观评价与发布阻断项", en:"Overall Subjective Assessment & Release Blockers"},
+  purpose:{zh:"汇总本次核查的主观体验与是否存在阻断 v1.0 发布的问题。", en:"Summarize this review's subjective experience and whether any release-blocking issue was found for v1.0."},
+  preconditions:{zh:"已完成或尽量完成前述模块。", en:"Earlier modules completed, or attempted as far as practical."},
+  samples:{zh:["无需样本"], en:["No samples required"]},
+  steps:{zh:["回顾整个核查过程后再回答本模块"], en:["Answer this module after reflecting on the whole review"]},
+  items:[
+    {id:"m14-01", text:{zh:"哪个模块/工作流感觉最成熟、打磨得最好？", en:"Which module/workflow felt the most mature and polished?"}, expected:{zh:"", en:""}, type:"text"},
+    {id:"m14-02", text:{zh:"哪些术语、标签或步骤最让人困惑？为什么？", en:"Which terms, labels, or steps were confusing, and why?"}, expected:{zh:"", en:""}, type:"text"},
+    {id:"m14-03", text:{zh:"哪个工作流相对其带来的价值而言，操作/点击成本最高？", en:"Which workflow required the most effort/clicks for the value it delivered?"}, expected:{zh:"", en:""}, type:"text"},
+    {id:"m14-04", text:{zh:"哪些状态提示或错误信息不够清楚？", en:"Which status/error messages were unclear?"}, expected:{zh:"", en:""}, type:"text"},
+    {id:"m14-05", text:{zh:"作为学习者，哪一个功能对你价值最高？", en:"Which single feature delivers the most value to you as a learner?"}, expected:{zh:"", en:""}, type:"text"},
+    {id:"m14-06", text:{zh:"是否存在任何降低你对应用信任的行为（例如不清楚的数据丢失、静默失败）？", en:"Was there any behavior that reduced your trust in the app (e.g. unclear data loss, silent failure)?"}, expected:{zh:"", en:""}, type:"text"},
+    {id:"m14-07", text:{zh:"列出你最希望优先修复的最多三项。", en:"List up to three things you would fix first."}, expected:{zh:"", en:""}, type:"text"},
+    {id:"m14-08", text:{zh:"本次核查中发现的问题，是否存在你认为会阻断 v1.0 发布的？", en:"Is there any issue found in this session that you consider release-blocking for v1.0?"}, expected:{zh:"", en:""}, type:"choice", options:["yes","no","unsure"]},
+    {id:"m14-09", text:{zh:"其他自由反馈。", en:"Any other free-form feedback."}, expected:{zh:"", en:""}, type:"text"}
+  ]}
+];
+
+let state = {meta:{appVersion:"",date:"",testerCode:"",env:""}, items:{}, lang:"zh", activeModule: MODULES[0].id, savedAt:null};
+let storageOK = true;
+
+function loadState(){
+  try{
+    const raw = localStorage.getItem(META.storageKey);
+    if(raw){
+      const parsed = JSON.parse(raw);
+      if(parsed && parsed.project === META.project){
+        state.meta = Object.assign(state.meta, parsed.meta||{});
+        state.items = parsed.items||{};
+        state.lang = parsed.lang || "zh";
+        state.savedAt = parsed.savedAt || null;
+      }
+    }
+  }catch(e){ storageOK = false; }
+}
+
+function persist(){
+  if(!storageOK) return;
+  state.savedAt = new Date().toISOString();
+  try{
+    localStorage.setItem(META.storageKey, JSON.stringify({
+      project: META.project, schemaVersion: META.schemaVersion,
+      questionnaireVersion: META.questionnaireVersion,
+      meta: state.meta, items: state.items, lang: state.lang, savedAt: state.savedAt
+    }));
+  }catch(e){ storageOK = false; }
+  updateSaveStatus();
+}
+
+function updateSaveStatus(){
+  const el = document.getElementById("saveStatus");
+  if(!storageOK){ el.textContent = t("storageUnavailable"); el.style.color = "var(--danger)"; return; }
+  el.style.color = "";
+  el.textContent = t("savedAt") + " " + (state.savedAt ? new Date(state.savedAt).toLocaleString() : t("neverSaved"));
+}
+
+function t(key){ return (STR[key] && STR[key][state.lang]) || key; }
+function tv(obj){ if(!obj) return ""; return obj[state.lang] !== undefined ? obj[state.lang] : (obj.zh||obj.en||""); }
+
+function setLang(lang){
+  state.lang = lang;
+  document.documentElement.lang = lang;
+  document.getElementById("langZh").classList.toggle("active", lang==="zh");
+  document.getElementById("langEn").classList.toggle("active", lang==="en");
+  renderAll();
+  persist();
+}
+
+function getItemState(id){
+  if(!state.items[id]) state.items[id] = {status:"", actual:"", repro:"", screenshot:"", suggestion:"", severity:"", value:""};
+  return state.items[id];
+}
+
+function itemCounts(){
+  const c = {pass:0, fail:0, blocked:0, na:0, total:0};
+  MODULES.forEach(m => m.items.forEach(it => {
+    if(it.type === TYPE_TEXT || it.type === TYPE_CHOICE) return;
+    c.total++;
+    const s = getItemState(it.id).status;
+    if(s === "pass") c.pass++;
+    else if(s === "fail") c.fail++;
+    else if(s === "blocked") c.blocked++;
+    else c.na++;
+  }));
+  return c;
+}
+
+function moduleCounts(mod){
+  const c = {pass:0, fail:0, blocked:0, na:0, total:0};
+  mod.items.forEach(it => {
+    if(it.type === TYPE_TEXT || it.type === TYPE_CHOICE) return;
+    c.total++;
+    const s = getItemState(it.id).status;
+    if(s === "pass") c.pass++;
+    else if(s === "fail") c.fail++;
+    else if(s === "blocked") c.blocked++;
+    else c.na++;
+  });
+  return c;
+}
+
+function renderSummary(){
+  const c = itemCounts();
+  document.getElementById("summaryCounts").innerHTML =
+    `<span class="badge pass">${t("overallPass")}: ${c.pass}</span>` +
+    `<span class="badge fail">${t("overallFail")}: ${c.fail}</span>` +
+    `<span class="badge blocked">${t("overallBlocked")}: ${c.blocked}</span>` +
+    `<span class="badge na">${t("overallNA")}: ${c.na}</span>` +
+    `<span>${t("overallTotal")}: ${c.total}</span>`;
+  const pct = x => c.total ? (x / c.total * 100) : 0;
+  document.getElementById("pbPass").style.width = pct(c.pass) + "%";
+  document.getElementById("pbFail").style.width = pct(c.fail) + "%";
+  document.getElementById("pbBlocked").style.width = pct(c.blocked) + "%";
+}
+
+function renderNav(){
+  const nav = document.getElementById("modNav");
+  nav.innerHTML = "<ul>" + MODULES.map(m => {
+    const c = moduleCounts(m);
+    const done = c.total ? (c.pass + c.fail + c.blocked + c.na) : 0;
+    return `<li><button class="${m.id===state.activeModule?'active':''}" onclick="showModule('${m.id}')">${m.id.replace('m','')} ${tv(m.title)}<span class="modstat">${c.pass+c.fail+c.blocked >0 ? (c.pass+'/'+c.total) : ''}</span></button></li>`;
+  }).join("") + "</ul>";
+}
+
+function statusRow(item){
+  const s = getItemState(item.id);
+  const opts = [["pass","statusPass"],["fail","statusFail"],["blocked","statusBlocked"],["na","statusNA"]];
+  return `<div class="status-row" role="radiogroup">` + opts.map(([val,key]) =>
+    `<label data-val="${val}" data-checked="${s.status===val}"><input type="radio" name="${item.id}-status" value="${val}" ${s.status===val?'checked':''} onchange="setItemField('${item.id}','status','${val}')">${t(key)}</label>`
+  ).join("") + `</div>`;
+}
+
+function renderCheckItem(item, idx){
+  const s = getItemState(item.id);
+  return `<div class="item" id="row-${item.id}">
+    <h4>${idx}. ${tv(item.text)}</h4>
+    ${tv(item.expected) ? `<div class="expected"><b>${t("expectedLabel")}:</b> ${tv(item.expected)}</div>` : ""}
+    ${statusRow(item)}
+    <div class="field-wrap"><label class="field">${t("actualLabel")}</label>
+      <textarea oninput="setItemField('${item.id}','actual',this.value)">${escapeHtmlAttr(s.actual)}</textarea></div>
+    <div class="grid2">
+      <div class="field-wrap"><label class="field">${t("reproLabel")}</label>
+        <textarea oninput="setItemField('${item.id}','repro',this.value)">${escapeHtmlAttr(s.repro)}</textarea></div>
+      <div class="field-wrap"><label class="field">${t("screenshotLabel")}</label>
+        <input type="text" value="${escapeHtmlAttr(s.screenshot)}" oninput="setItemField('${item.id}','screenshot',this.value)"></div>
+    </div>
+    <div class="field-wrap"><label class="field">${t("suggestionLabel")}</label>
+      <textarea oninput="setItemField('${item.id}','suggestion',this.value)">${escapeHtmlAttr(s.suggestion)}</textarea></div>
+    <div class="field-wrap severity-select"><label class="field">${t("severityLabel")}</label>
+      <select onchange="setItemField('${item.id}','severity',this.value)">
+        <option value="" ${s.severity===''?'selected':''}>--</option>
+        <option value="blocking" ${s.severity==='blocking'?'selected':''}>${t("sevBlocking")}</option>
+        <option value="high" ${s.severity==='high'?'selected':''}>${t("sevHigh")}</option>
+        <option value="medium" ${s.severity==='medium'?'selected':''}>${t("sevMedium")}</option>
+        <option value="low" ${s.severity==='low'?'selected':''}>${t("sevLow")}</option>
+        <option value="na" ${s.severity==='na'?'selected':''}>${t("sevNA")}</option>
+      </select>
+    </div>
+  </div>`;
+}
+
+function renderTextItem(item, idx){
+  const s = getItemState(item.id);
+  return `<div class="item" id="row-${item.id}">
+    <h4>${idx}. ${tv(item.text)}</h4>
+    <div class="field-wrap"><label class="field">${t("answerLabel")}</label>
+      <textarea oninput="setItemField('${item.id}','value',this.value)">${escapeHtmlAttr(s.value)}</textarea></div>
+  </div>`;
+}
+
+function renderChoiceItem(item, idx){
+  const s = getItemState(item.id);
+  const optLabels = {yes:t("yes"), no:t("no"), unsure:t("unsure")};
+  return `<div class="item" id="row-${item.id}">
+    <h4>${idx}. ${tv(item.text)}</h4>
+    <div class="status-row">${(item.options||[]).map(o =>
+      `<label data-val="${o}" data-checked="${s.value===o}"><input type="radio" name="${item.id}-choice" value="${o}" ${s.value===o?'checked':''} onchange="setItemField('${item.id}','value','${o}')">${optLabels[o]||o}</label>`
+    ).join("")}</div>
+    <div class="field-wrap"><label class="field">${t("suggestionLabel")}</label>
+      <textarea oninput="setItemField('${item.id}','suggestion',this.value)">${escapeHtmlAttr(s.suggestion)}</textarea></div>
+  </div>`;
+}
+
+function renderModule(m){
+  const list = tv(m.samples) || [];
+  const stepsList = tv(m.steps) || [];
+  let html = `<div class="panel moduleintro">
+    <h2>${m.id.replace('m','')}. ${tv(m.title)}</h2>
+    <p><b>${t("purposeLabel")}:</b> ${tv(m.purpose)}</p>
+    <p><b>${t("preconditionsLabel")}:</b> ${tv(m.preconditions)}</p>
+    <p><b>${t("samplesLabel")}:</b></p>
+    <ul class="samples-list">${list.map(s => `<li><code>${s}</code></li>`).join("")}</ul>
+    <p><b>${t("stepsLabel")}:</b></p>
+    <ol>${stepsList.map(s => `<li>${s}</li>`).join("")}</ol>
+  </div>`;
+  m.items.forEach((item, i) => {
+    if(item.type === TYPE_TEXT) html += renderTextItem(item, i+1);
+    else if(item.type === TYPE_CHOICE) html += renderChoiceItem(item, i+1);
+    else html += renderCheckItem(item, i+1);
+  });
+  return html;
+}
+
+function renderContent(){
+  const content = document.getElementById("modContent");
+  content.innerHTML = MODULES.map(m =>
+    `<section class="module-section ${m.id===state.activeModule?'active':''}" id="sec-${m.id}">${renderModule(m)}</section>`
+  ).join("");
+}
+
+function showModule(id){
+  state.activeModule = id;
+  renderNav();
+  document.querySelectorAll(".module-section").forEach(el => el.classList.toggle("active", el.id === "sec-" + id));
+  window.scrollTo({top:0, behavior:"instant"});
+  persist();
+}
+
+function setItemField(id, field, value){
+  const s = getItemState(id);
+  s[field] = value;
+  persist();
+  if(field === "status"){
+    renderNav();
+    renderSummary();
+    document.querySelectorAll(`#row-${id} .status-row label`).forEach(l => l.setAttribute("data-checked", String(l.getAttribute("data-val")===value)));
+  }
+}
+
+function escapeHtmlAttr(str){
+  return String(str||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+}
+
+function bindMeta(){
+  const fields = [["metaAppVersion","appVersion"],["metaDate","date"],["metaTesterCode","testerCode"],["metaEnv","env"]];
+  fields.forEach(([elId, key]) => {
+    const el = document.getElementById(elId);
+    el.value = state.meta[key] || "";
+    el.addEventListener("input", () => { state.meta[key] = el.value; persist(); });
+  });
+}
+
+function renderStatic(){
+  document.querySelectorAll("[data-t]").forEach(el => {
+    const key = el.getAttribute("data-t");
+    if(key === "instrBody"){ document.getElementById("instrBody").innerHTML = STR.instrBody[state.lang]; return; }
+    el.textContent = t(key);
+  });
+  document.getElementById("langZh").classList.toggle("active", state.lang==="zh");
+  document.getElementById("langEn").classList.toggle("active", state.lang==="en");
+}
+
+function renderAll(){
+  document.documentElement.lang = state.lang;
+  renderStatic();
+  renderSummary();
+  renderNav();
+  renderContent();
+  updateSaveStatus();
+}
+
+function exportJSON(){
+  const payload = {
+    project: META.project,
+    schemaVersion: META.schemaVersion,
+    questionnaireVersion: META.questionnaireVersion,
+    exportedAt: new Date().toISOString(),
+    meta: state.meta,
+    lang: state.lang,
+    items: state.items,
+    itemDefinitions: MODULES.map(m => ({
+      id: m.id, title: m.title,
+      items: m.items.map(it => ({id: it.id, text: it.text, expected: it.expected, type: it.type||"check"}))
+    }))
+  };
+  downloadFile(`listentrace-manual-qa-${(state.meta.testerCode||'tester').replace(/[^a-z0-9_-]/gi,'_')}-${(state.meta.date||new Date().toISOString().slice(0,10))}.json`,
+    JSON.stringify(payload, null, 2), "application/json");
+}
+
+function importJSON(evt){
+  const file = evt.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    try{
+      const parsed = JSON.parse(reader.result);
+      if(!parsed || parsed.project !== META.project || typeof parsed.items !== "object"){
+        alert(t("importInvalid")); return;
+      }
+      const majorOk = String(parsed.schemaVersion||"").split(".")[0] === META.schemaVersion.split(".")[0];
+      if(!majorOk){ alert(t("importInvalid")); return; }
+      state.meta = Object.assign(state.meta, parsed.meta||{});
+      state.items = Object.assign(state.items, parsed.items||{});
+      persist();
+      bindMeta();
+      renderAll();
+      alert(t("importOk"));
+    }catch(e){ alert(t("importInvalid")); }
+    evt.target.value = "";
+  };
+  reader.readAsText(file);
+}
+
+function exportMarkdown(){
+  const c = itemCounts();
+  let md = `# ListenTrace Manual QA Report\n\n`;
+  md += `- Project: ${META.project}\n- Schema: ${META.schemaVersion} / Questionnaire: ${META.questionnaireVersion}\n`;
+  md += `- App version / commit: ${state.meta.appVersion||"-"}\n- Date: ${state.meta.date||"-"}\n- Tester code: ${state.meta.testerCode||"-"}\n- Environment: ${state.meta.env||"-"}\n`;
+  md += `- Totals: Pass ${c.pass} / Fail ${c.fail} / Blocked ${c.blocked} / Not tested ${c.na} (of ${c.total})\n\n`;
+  MODULES.forEach(m => {
+    md += `## ${m.id.replace('m','')}. ${tv(m.title)} / ${m.title.en}\n\n`;
+    m.items.forEach((it, i) => {
+      const s = getItemState(it.id);
+      md += `### ${i+1}. ${tv(it.text)}\n\n`;
+      if(it.type === TYPE_TEXT){
+        md += `- Answer: ${s.value||"-"}\n\n`; return;
+      }
+      if(it.type === TYPE_CHOICE){
+        md += `- Answer: ${s.value||"-"}\n- Suggestion: ${s.suggestion||"-"}\n\n`; return;
+      }
+      md += `- Expected: ${tv(it.expected)}\n`;
+      md += `- Status: ${s.status || "not tested"}\n`;
+      md += `- Actual / Evidence: ${s.actual||"-"}\n`;
+      md += `- Reproduction: ${s.repro||"-"}\n`;
+      md += `- Screenshot: ${s.screenshot||"-"}\n`;
+      md += `- Suggestion: ${s.suggestion||"-"}\n`;
+      md += `- Severity: ${s.severity||"-"}\n\n`;
+    });
+  });
+  downloadFile(`listentrace-manual-qa-report-${(state.meta.date||new Date().toISOString().slice(0,10))}.md`, md, "text/markdown");
+}
+
+function downloadFile(name, content, mime){
+  const blob = new Blob([content], {type: mime});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = name;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function confirmReset(){
+  const root = document.getElementById("modalRoot");
+  root.innerHTML = `<div class="modal-overlay"><div class="modal-box">
+    <h3>${t("resetConfirmTitle")}</h3>
+    <p>${t("resetConfirmBody")}</p>
+    <div class="actions">
+      <button onclick="document.getElementById('modalRoot').innerHTML=''">${t("cancel")}</button>
+      <button class="danger" onclick="doReset()">${t("confirmClear")}</button>
+    </div>
+  </div></div>`;
+}
+
+function doReset(){
+  state.items = {};
+  state.meta = {appVersion:"",date:"",testerCode:"",env:""};
+  persist();
+  document.getElementById("modalRoot").innerHTML = "";
+  bindMeta();
+  renderAll();
+}
+
+loadState();
+bindMeta();
+renderAll();
+</script>
+</body>
+</html>

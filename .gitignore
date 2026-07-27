@@ -47,6 +47,8 @@ samples/private/
 *.mov
 *.avi
 *.webm
+# Synthetic, privacy-safe manual-QA sample audio (see manual-qa/samples/README.md)
+!/manual-qa/samples/audio/normal_lesson.wav
 
 # IDE and operating-system files
 .vscode/
