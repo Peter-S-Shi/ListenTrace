@@ -190,8 +190,6 @@ class PlayerWindow(QMainWindow):
             self._cue_list.addItem(QListWidgetItem(label))
         self._cue_list.currentItemChanged.connect(self._on_editing_cue_changed)
         layout.addWidget(self._cue_list, 1)
-        if initial_cue_index is not None and 0 <= initial_cue_index < self._cue_list.count():
-            self._cue_list.setCurrentRow(initial_cue_index)
 
         self._workspace_panel = self._build_workspace_panel()
         layout.addWidget(self._workspace_panel)
@@ -222,6 +220,9 @@ class PlayerWindow(QMainWindow):
         # No autoplay: playback stays paused at 0 until the user presses Play.
 
         self._set_workspace_form_enabled(False)
+
+        if initial_cue_index is not None and 0 <= initial_cue_index < self._cue_list.count():
+            self._cue_list.setCurrentRow(initial_cue_index)
 
     # ---- workspace panel construction ----
 
