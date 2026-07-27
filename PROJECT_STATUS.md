@@ -87,7 +87,7 @@ Phase B was a targeted technical pass against eleven specific failure categories
 - **Migration**: schema version 10, every migration 1→10 covered by an automated upgrade test with real data present.
 - **Privacy/secret scan**: performed and clean on every documentation/code change to date, including this one.
 - **Clean-machine validation**: not started (Phase C2, pending, scheduled after M11 and M12).
-- **MP4/H.264**: not tested with a real file anywhere in this project — only the bundled FFmpeg plugin's presence has been confirmed structurally.
+- **MP4/H.264**: a real, locally-generated H.264/MP4 clip was verified at the dev-source level during Milestone 3 (pre-packaging; see `README.md`'s Current Limitations). Real **packaged-build** MP4/H.264 playback has not been tested anywhere — Phase C1's preflight had no H.264 encoder available in that environment to produce a sample, so only the bundled FFmpeg plugin's presence in the packaged build was confirmed structurally, not its actual MP4/H.264 decoding.
 - **Repository/remote verification**: local `main` and `origin/main` confirmed matching via `git ls-remote` after every push to date.
 
 ## Deferred Features
