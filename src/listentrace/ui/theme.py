@@ -30,8 +30,9 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QIcon
-from PySide6.QtWidgets import QApplication, QFrame, QLabel, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QApplication, QFrame, QLabel, QListWidget, QVBoxLayout, QWidget
 
 # ---------------------------------------------------------------------------
 # Tokens
@@ -120,6 +121,17 @@ def make_card(title: str | None = None) -> tuple[QFrame, QVBoxLayout]:
         apply_role(caption, "caption")
         layout.addWidget(caption)
     return frame, layout
+
+
+def configure_long_text_list(list_widget: QListWidget) -> None:
+    """Wrap long row text instead of growing an unnecessary horizontal
+    scrollbar -- the fix established in PlayerWindow's cue list (Batch 0),
+    GuidedSessionWindow's diagnosis cue list (Batch 1), and QuizReviewDialog's
+    question list (Batch 2), promoted here to a shared helper since Batch 3
+    applies it across many list widgets in one window.
+    """
+    list_widget.setWordWrap(True)
+    list_widget.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
 
 
 def apply_role(widget: QWidget, role: str) -> None:

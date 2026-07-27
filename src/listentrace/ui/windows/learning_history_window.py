@@ -11,6 +11,7 @@ from PySide6.QtWidgets import (
     QDateEdit,
     QDialog,
     QHBoxLayout,
+    QHeaderView,
     QLabel,
     QListWidget,
     QListWidgetItem,
@@ -36,6 +37,7 @@ from listentrace.application.services import learning_history_service as history
 from listentrace.application.services import practice_session_service
 from listentrace.application.services.player_loading_service import load_material_for_player
 from listentrace.domain.services import date_range as date_range_rules
+from listentrace.ui import theme
 from listentrace.ui.widgets.simple_bar_chart import SimpleBarChart
 from listentrace.ui.windows.export_dialog import ExportDialog
 from listentrace.ui.windows.guided_session_window import GuidedSessionWindow
@@ -96,7 +98,7 @@ class LearningHistoryWindow(QMainWindow):
         outer_layout = QVBoxLayout(central)
 
         title_label = QLabel("Learning History & Insights")
-        title_label.setStyleSheet("font-size: 16px; font-weight: bold;")
+        theme.apply_role(title_label, "title")
         outer_layout.addWidget(title_label)
 
         filter_row = QHBoxLayout()
@@ -123,17 +125,20 @@ class LearningHistoryWindow(QMainWindow):
 
         self._apply_button = QPushButton("Apply")
         self._apply_button.clicked.connect(self._on_reload_clicked)
+        theme.apply_role(self._apply_button, "secondary")
         filter_row.addWidget(self._apply_button)
         self._quick_practice_button = QPushButton("Quick Practice...")
         self._quick_practice_button.clicked.connect(self._on_quick_practice_clicked)
+        theme.apply_role(self._quick_practice_button, "secondary")
         filter_row.addWidget(self._quick_practice_button)
         self._export_button = QPushButton("Export Learning Evidence...")
         self._export_button.clicked.connect(self._on_export_clicked)
+        theme.apply_role(self._export_button, "secondary")
         filter_row.addWidget(self._export_button)
         outer_layout.addLayout(filter_row)
 
         self._error_label = QLabel("")
-        self._error_label.setStyleSheet("color: red;")
+        theme.apply_role(self._error_label, "error")
         self._error_label.setWordWrap(True)
         outer_layout.addWidget(self._error_label)
 
@@ -226,34 +231,47 @@ class LearningHistoryWindow(QMainWindow):
         widget = QWidget()
         layout = QVBoxLayout(widget)
 
+        stats_card, stats_column = theme.make_card()
         self._overview_label = QLabel("")
         self._overview_label.setWordWrap(True)
-        layout.addWidget(self._overview_label)
+        stats_column.addWidget(self._overview_label)
+        layout.addWidget(stats_card)
 
-        layout.addWidget(QLabel("Continue Learning — active sessions (always shown, regardless of filters):"))
+        continue_card, continue_column = theme.make_card(
+            "Continue Learning — active sessions (always shown, regardless of filters)"
+        )
         self._continue_learning_list = QListWidget()
+        theme.configure_long_text_list(self._continue_learning_list)
         self._continue_learning_list.currentItemChanged.connect(self._on_continue_learning_selection_changed)
-        layout.addWidget(self._continue_learning_list, 1)
+        continue_column.addWidget(self._continue_learning_list, 1)
 
         continue_buttons_row = QHBoxLayout()
         self._resume_button = QPushButton("Resume")
         self._resume_button.clicked.connect(self._on_resume_clicked)
         self._resume_button.setEnabled(False)
+        theme.apply_role(self._resume_button, "primary")
         self._open_material_from_continue_button = QPushButton("Open Material")
         self._open_material_from_continue_button.clicked.connect(self._on_open_material_from_continue_clicked)
         self._open_material_from_continue_button.setEnabled(False)
+        theme.apply_role(self._open_material_from_continue_button, "secondary")
         self._abandon_button = QPushButton("Abandon Session")
         self._abandon_button.clicked.connect(self._on_abandon_clicked)
         self._abandon_button.setEnabled(False)
+        theme.apply_role(self._abandon_button, "danger")
         continue_buttons_row.addWidget(self._resume_button)
         continue_buttons_row.addWidget(self._open_material_from_continue_button)
         continue_buttons_row.addWidget(self._abandon_button)
-        layout.addLayout(continue_buttons_row)
+        continue_column.addLayout(continue_buttons_row)
+        layout.addWidget(continue_card, 1)
 
-        layout.addWidget(QLabel("Needs Attention — transparent reasons, not a ranking (always shown, all materials):"))
+        attention_card, attention_column = theme.make_card(
+            "Needs Attention — transparent reasons, not a ranking (always shown, all materials)"
+        )
         self._needs_attention_list = QListWidget()
+        theme.configure_long_text_list(self._needs_attention_list)
         self._needs_attention_list.itemDoubleClicked.connect(self._on_needs_attention_double_clicked)
-        layout.addWidget(self._needs_attention_list, 1)
+        attention_column.addWidget(self._needs_attention_list, 1)
+        layout.addWidget(attention_card, 1)
 
         return widget
 
@@ -368,9 +386,12 @@ class LearningHistoryWindow(QMainWindow):
             filter_row.addWidget(checkbox)
         layout.addLayout(filter_row)
 
+        activity_card, activity_column = theme.make_card()
         self._activity_list = QListWidget()
+        theme.configure_long_text_list(self._activity_list)
         self._activity_list.itemDoubleClicked.connect(self._on_activity_item_double_clicked)
-        layout.addWidget(self._activity_list, 1)
+        activity_column.addWidget(self._activity_list, 1)
+        layout.addWidget(activity_card, 1)
 
         return widget
 
@@ -427,16 +448,22 @@ class LearningHistoryWindow(QMainWindow):
     def _build_sessions_tab(self) -> QWidget:
         widget = QWidget()
         layout = QVBoxLayout(widget)
-        self._sessions_list = QListWidget()
-        self._sessions_list.itemDoubleClicked.connect(self._on_session_item_double_clicked)
-        layout.addWidget(self._sessions_list, 1)
 
-        layout.addWidget(QLabel("Completed sessions by day:"))
+        list_card, list_column = theme.make_card()
+        self._sessions_list = QListWidget()
+        theme.configure_long_text_list(self._sessions_list)
+        self._sessions_list.itemDoubleClicked.connect(self._on_session_item_double_clicked)
+        list_column.addWidget(self._sessions_list, 1)
+        layout.addWidget(list_card, 1)
+
+        chart_card, chart_column = theme.make_card("Completed sessions by day")
         self._sessions_chart = SimpleBarChart()
-        layout.addWidget(self._sessions_chart)
+        chart_column.addWidget(self._sessions_chart)
         self._sessions_chart_table = QListWidget()
+        theme.configure_long_text_list(self._sessions_chart_table)
         self._sessions_chart_table.setMaximumHeight(100)
-        layout.addWidget(self._sessions_chart_table)
+        chart_column.addWidget(self._sessions_chart_table)
+        layout.addWidget(chart_card)
         return widget
 
     def _populate_sessions(
@@ -475,22 +502,25 @@ class LearningHistoryWindow(QMainWindow):
         widget = QWidget()
         layout = QVBoxLayout(widget)
 
-        layout.addWidget(QLabel("Session Diagnosis History (session-scoped evidence):"))
+        history_card, history_column = theme.make_card("Session Diagnosis History (session-scoped evidence)")
         self._diagnosis_history_list = QListWidget()
-        layout.addWidget(self._diagnosis_history_list, 1)
+        theme.configure_long_text_list(self._diagnosis_history_list)
+        history_column.addWidget(self._diagnosis_history_list, 1)
+        layout.addWidget(history_card, 1)
 
-        layout.addWidget(QLabel("Diagnosis category frequency:"))
+        chart_card, chart_column = theme.make_card("Diagnosis category frequency")
         self._diagnosis_chart = SimpleBarChart()
-        layout.addWidget(self._diagnosis_chart)
+        chart_column.addWidget(self._diagnosis_chart)
+        layout.addWidget(chart_card)
 
-        layout.addWidget(
-            QLabel(
-                "Current Material Annotations (present, editable state — never combined with the "
-                "session history above):"
-            )
+        annotation_card, annotation_column = theme.make_card(
+            "Current Material Annotations (present, editable state — never combined with the "
+            "session history above)"
         )
         self._current_annotation_list = QListWidget()
-        layout.addWidget(self._current_annotation_list)
+        theme.configure_long_text_list(self._current_annotation_list)
+        annotation_column.addWidget(self._current_annotation_list)
+        layout.addWidget(annotation_card)
         return widget
 
     def _populate_diagnoses(
@@ -527,28 +557,42 @@ class LearningHistoryWindow(QMainWindow):
         widget = QWidget()
         layout = QVBoxLayout(widget)
 
-        layout.addWidget(QLabel("Quiz History — completed attempts (double-click to open its review):"))
+        history_card, history_column = theme.make_card(
+            "Quiz History — completed attempts (double-click to open its review)"
+        )
         self._quiz_history_list = QListWidget()
+        theme.configure_long_text_list(self._quiz_history_list)
         self._quiz_history_list.itemDoubleClicked.connect(self._on_quiz_history_double_clicked)
-        layout.addWidget(self._quiz_history_list, 1)
+        history_column.addWidget(self._quiz_history_list, 1)
+        layout.addWidget(history_card, 1)
 
+        trend_card, trend_column = theme.make_card()
         trend_row = QHBoxLayout()
         trend_row.addWidget(QLabel("Attempt Performance trend — one material/mode group at a time:"))
         self._quiz_trend_group_combo = QComboBox()
         self._quiz_trend_group_combo.currentIndexChanged.connect(self._on_quiz_trend_group_changed)
         trend_row.addWidget(self._quiz_trend_group_combo, 1)
-        layout.addLayout(trend_row)
+        trend_column.addLayout(trend_row)
 
         self._quiz_chart = SimpleBarChart()
-        layout.addWidget(self._quiz_chart)
+        trend_column.addWidget(self._quiz_chart)
         self._quiz_chart_table = QListWidget()
+        theme.configure_long_text_list(self._quiz_chart_table)
         self._quiz_chart_table.setMaximumHeight(100)
-        layout.addWidget(self._quiz_chart_table)
+        trend_column.addWidget(self._quiz_chart_table)
+        layout.addWidget(trend_card)
 
-        layout.addWidget(QLabel("Quiz Comparison — grouped by material and mode (never combined across either):"))
+        comparison_card, comparison_column = theme.make_card(
+            "Quiz Comparison — grouped by material and mode (never combined across either)"
+        )
         self._quiz_comparison_tree = QTreeWidget()
         self._quiz_comparison_tree.setHeaderLabels(["Material / Mode / Attempt", "Score", "Accuracy"])
-        layout.addWidget(self._quiz_comparison_tree, 1)
+        # Milestone 11: let the long first column claim the leftover width
+        # instead of truncating with a horizontal scrollbar while Score/
+        # Accuracy sit at their natural (short) width.
+        self._quiz_comparison_tree.header().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        comparison_column.addWidget(self._quiz_comparison_tree, 1)
+        layout.addWidget(comparison_card, 1)
         return widget
 
     def _populate_quizzes(
@@ -643,22 +687,31 @@ class LearningHistoryWindow(QMainWindow):
         widget = QWidget()
         layout = QVBoxLayout(widget)
 
-        layout.addWidget(QLabel("Shadowing Evidence — cumulative explicit practice counts only:"))
+        shadowing_card, shadowing_column = theme.make_card(
+            "Shadowing Evidence — cumulative explicit practice counts only"
+        )
         self._shadowing_list = QListWidget()
+        theme.configure_long_text_list(self._shadowing_list)
         self._shadowing_list.itemDoubleClicked.connect(self._on_shadowing_item_double_clicked)
-        layout.addWidget(self._shadowing_list, 1)
+        shadowing_column.addWidget(self._shadowing_list, 1)
+        layout.addWidget(shadowing_card, 1)
 
-        layout.addWidget(QLabel("High-frequency practiced cues:"))
+        high_frequency_card, high_frequency_column = theme.make_card("High-frequency practiced cues")
         self._high_frequency_list = QListWidget()
+        theme.configure_long_text_list(self._high_frequency_list)
         self._high_frequency_list.itemDoubleClicked.connect(self._on_shadowing_item_double_clicked)
-        layout.addWidget(self._high_frequency_list)
+        high_frequency_column.addWidget(self._high_frequency_list)
+        layout.addWidget(high_frequency_card)
 
-        layout.addWidget(QLabel("Retained Recordings (ready takes only):"))
+        recording_card, recording_column = theme.make_card("Retained Recordings (ready takes only)")
         self._recording_list = QListWidget()
+        theme.configure_long_text_list(self._recording_list)
         self._recording_list.itemDoubleClicked.connect(self._on_recording_item_double_clicked)
-        layout.addWidget(self._recording_list, 1)
+        recording_column.addWidget(self._recording_list, 1)
         self._recording_total_label = QLabel("")
-        layout.addWidget(self._recording_total_label)
+        theme.apply_role(self._recording_total_label, "caption")
+        recording_column.addWidget(self._recording_total_label)
+        layout.addWidget(recording_card, 1)
         return widget
 
     def _shadowing_item_text(self, entry: ShadowingEvidenceEntry) -> str:
@@ -729,15 +782,15 @@ class LearningHistoryWindow(QMainWindow):
     def _build_quick_practice_tab(self) -> QWidget:
         widget = QWidget()
         layout = QVBoxLayout(widget)
-        layout.addWidget(
-            QLabel(
-                "Quick Practice runs — Active/Completed/Abandoned kept visibly distinct, "
-                "never counted as Intensive Sessions or Quiz Attempts (double-click opens the material):"
-            )
+        card, column = theme.make_card(
+            "Quick Practice runs — Active/Completed/Abandoned kept visibly distinct, "
+            "never counted as Intensive Sessions or Quiz Attempts (double-click opens the material)"
         )
         self._quick_practice_list = QListWidget()
+        theme.configure_long_text_list(self._quick_practice_list)
         self._quick_practice_list.itemDoubleClicked.connect(self._on_quick_practice_item_double_clicked)
-        layout.addWidget(self._quick_practice_list, 1)
+        column.addWidget(self._quick_practice_list, 1)
+        layout.addWidget(card, 1)
         return widget
 
     def _quick_practice_entry_text(self, entry: QuickPracticeHistoryEntry) -> str:

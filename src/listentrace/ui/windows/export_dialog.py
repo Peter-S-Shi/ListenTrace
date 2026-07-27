@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
     QDateEdit,
     QDialog,
     QFileDialog,
+    QGridLayout,
     QHBoxLayout,
     QLabel,
     QListWidget,
@@ -36,6 +37,7 @@ from listentrace.application.services import export_formatters, export_service, 
 from listentrace.domain.services import date_range as date_range_rules
 from listentrace.domain.services import export_privacy
 from listentrace.infrastructure.export_io import atomic_write_text, sanitize_export_filename
+from listentrace.ui import theme
 
 # Duplicated (not imported) from `learning_history_window.py`'s own preset
 # list to avoid a circular import (that module will import `ExportDialog`
@@ -79,6 +81,8 @@ _SCOPE_LABELS = [
     ("Selected Materials", SCOPE_SELECTED_MATERIALS),
 ]
 
+_CHECKBOX_GRID_COLUMNS = 4
+
 _STALE_PREVIEW_MESSAGE = (
     'Selections changed since this preview was generated — click "Generate Preview" again '
     "before saving or copying. Nothing below reflects the current selections."
@@ -114,6 +118,7 @@ class ExportDialog(QDialog):
         layout = QVBoxLayout(self)
 
         # ---- scope ----
+        scope_card, scope_column = theme.make_card("Scope")
         scope_row = QHBoxLayout()
         scope_row.addWidget(QLabel("Scope:"))
         self._scope_combo = QComboBox()
@@ -121,9 +126,10 @@ class ExportDialog(QDialog):
             self._scope_combo.addItem(label)
         self._scope_combo.currentIndexChanged.connect(self._on_scope_changed)
         scope_row.addWidget(self._scope_combo)
-        layout.addLayout(scope_row)
+        scope_column.addLayout(scope_row)
 
         self._material_list = QListWidget()
+        theme.configure_long_text_list(self._material_list)
         self._material_list.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         materials = history_svc.list_all_materials(connection)
         preselect_row = None
@@ -133,7 +139,8 @@ class ExportDialog(QDialog):
             self._material_list.addItem(item)
             if initial_material_id is not None and row["id"] == initial_material_id:
                 preselect_row = self._material_list.count() - 1
-        layout.addWidget(self._material_list, 1)
+        scope_column.addWidget(self._material_list, 1)
+        layout.addWidget(scope_card, 1)
 
         # ---- date range ----
         date_row = QHBoxLayout()
@@ -155,44 +162,49 @@ class ExportDialog(QDialog):
         layout.addLayout(date_row)
 
         # ---- evidence categories ----
-        layout.addWidget(QLabel("Evidence categories:"))
-        categories_row = QHBoxLayout()
+        # Milestone 11: a fixed-column grid instead of a single-row QHBoxLayout
+        # -- a dozen checkboxes in one row forced the whole dialog to grow far
+        # wider than any reasonable window, rather than wrapping.
+        categories_card, categories_column = theme.make_card("Evidence categories")
+        categories_grid = QGridLayout()
         self._category_checkboxes: dict[str, QCheckBox] = {}
-        for category in export_privacy.EVIDENCE_CATEGORIES:
+        for index, category in enumerate(export_privacy.EVIDENCE_CATEGORIES):
             checkbox = QCheckBox(_CATEGORY_LABELS[category])
             checkbox.setChecked(category in export_privacy.DEFAULT_CATEGORIES)
             self._category_checkboxes[category] = checkbox
-            categories_row.addWidget(checkbox)
-        categories_wrap = QWidget()
-        categories_wrap.setLayout(categories_row)
-        layout.addWidget(categories_wrap)
+            categories_grid.addWidget(checkbox, index // _CHECKBOX_GRID_COLUMNS, index % _CHECKBOX_GRID_COLUMNS)
+        categories_column.addLayout(categories_grid)
+        layout.addWidget(categories_card)
 
         # ---- privacy review ----
-        layout.addWidget(QLabel("Privacy review — include these fields (unchecked fields are redacted, not omitted):"))
-        privacy_row = QHBoxLayout()
+        privacy_card, privacy_column = theme.make_card(
+            "Privacy review — include these fields (unchecked fields are redacted, not omitted)"
+        )
+        privacy_grid = QGridLayout()
         self._privacy_checkboxes: dict[str, QCheckBox] = {}
-        for field_key in export_privacy.PRIVACY_FIELDS:
+        for index, field_key in enumerate(export_privacy.PRIVACY_FIELDS):
             checkbox = QCheckBox(_PRIVACY_LABELS[field_key])
             checkbox.setChecked(field_key in export_privacy.DEFAULT_PRIVACY_FIELDS)
             self._privacy_checkboxes[field_key] = checkbox
-            privacy_row.addWidget(checkbox)
-        privacy_wrap = QWidget()
-        privacy_wrap.setLayout(privacy_row)
-        layout.addWidget(privacy_wrap)
+            privacy_grid.addWidget(checkbox, index // _CHECKBOX_GRID_COLUMNS, index % _CHECKBOX_GRID_COLUMNS)
+        privacy_column.addLayout(privacy_grid)
 
         always_excluded = QLabel(
             "Always excluded, regardless of any selection: " + ", ".join(export_privacy.ALWAYS_EXCLUDED_DESCRIPTION)
         )
         always_excluded.setWordWrap(True)
-        always_excluded.setStyleSheet("color: #6B7280;")
-        layout.addWidget(always_excluded)
+        theme.apply_role(always_excluded, "muted")
+        privacy_column.addWidget(always_excluded)
+        layout.addWidget(privacy_card)
 
         # ---- preview ----
         preview_button_row = QHBoxLayout()
         self._generate_preview_button = QPushButton("Generate Preview")
         self._generate_preview_button.clicked.connect(self._on_generate_preview_clicked)
+        theme.apply_role(self._generate_preview_button, "primary")
         preview_button_row.addWidget(self._generate_preview_button)
         self._size_label = QLabel("")
+        theme.apply_role(self._size_label, "caption")
         preview_button_row.addWidget(self._size_label, 1)
         layout.addLayout(preview_button_row)
 
@@ -231,15 +243,18 @@ class ExportDialog(QDialog):
             self._copy_template_button,
         ):
             button.setEnabled(False)
+            theme.apply_role(button, "secondary")
             actions_row.addWidget(button)
         layout.addLayout(actions_row)
 
         self._status_label = QLabel("")
+        theme.apply_role(self._status_label, "caption")
         self._status_label.setWordWrap(True)
         layout.addWidget(self._status_label)
 
         close_button = QPushButton("Close")
         close_button.clicked.connect(self.accept)
+        theme.apply_role(close_button, "quiet")
         layout.addWidget(close_button)
 
         self._on_scope_changed()
@@ -413,7 +428,12 @@ class ExportDialog(QDialog):
         except OSError as exc:
             QMessageBox.warning(self, "Save Failed", f"Could not save the file:\n{exc}")
             return
-        self._status_label.setText(f"Saved: {path}")
+        # Milestone 11: the status label is visible chrome, not a place to
+        # render a real absolute filesystem path -- show the bare filename
+        # and put the full path in a tooltip only (same pattern as
+        # MainWindow's database-path fix in Batch 0).
+        self._status_label.setText(f"Saved: {path.name}")
+        self._status_label.setToolTip(str(path))
 
     def _on_save_markdown_clicked(self) -> None:
         if self._markdown_text is not None:

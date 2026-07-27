@@ -1,14 +1,19 @@
 from __future__ import annotations
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QColor, QPainter
+from PySide6.QtGui import QPainter
 from PySide6.QtWidgets import QWidget
 
 from listentrace.application.dto.learning_history import ChartData
+from listentrace.ui import theme
 
-_BAR_COLOR = QColor("#2563EB")
-_AXIS_COLOR = QColor("#9CA3AF")
-_TEXT_COLOR = QColor("#374151")
+# Milestone 11: sourced from theme.py's dedicated chart_* tokens (same
+# #2563EB/#9CA3AF/#374151 values as before -- never a generic accent color)
+# rather than locally hardcoded QColor literals.
+_BACKGROUND_COLOR = theme.qcolor("chart_background")
+_BAR_COLOR = theme.qcolor("chart_bar")
+_AXIS_COLOR = theme.qcolor("chart_axis")
+_TEXT_COLOR = theme.qcolor("chart_text")
 
 
 class SimpleBarChart(QWidget):
@@ -29,7 +34,7 @@ class SimpleBarChart(QWidget):
     def paintEvent(self, event) -> None:  # noqa: N802 - Qt override
         painter = QPainter(self)
         try:
-            painter.fillRect(self.rect(), Qt.GlobalColor.white)
+            painter.fillRect(self.rect(), _BACKGROUND_COLOR)
             if self._data is None or not self._data.points:
                 painter.setPen(_TEXT_COLOR)
                 painter.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, "No data for the selected filters.")
