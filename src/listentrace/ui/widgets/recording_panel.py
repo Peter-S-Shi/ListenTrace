@@ -163,6 +163,13 @@ class RecordingPanel(QWidget):
         self._material_id, self._subtitle_cue_id, self._practice_session_id = new_context
         self._current_context = new_context
         self._refresh_takes()
+        # _refresh_takes() only refreshes the take list/buttons -- the
+        # recording buttons (Start/Stop Recording) depend on has-a-cue too,
+        # and without this call they can be stuck at whatever enabled state
+        # they had when the panel was first constructed (no cue set yet)
+        # until something unrelated (Refresh, a device change, or a host
+        # calling set_read_only()) happens to refresh them.
+        self._update_recording_buttons()
 
     def set_read_only(self, read_only: bool) -> None:
         """A completed/abandoned Guided Session makes Stage 4 read-only for
