@@ -9,16 +9,29 @@ Status legend: **Fixed** (repaired + regression test added this milestone),
 severity, rationale given), **Deferred** (out of M12 scope), **Open**
 (confirmed, not yet addressed).
 
-## Session summary (autonomous overnight pass, Batches 1-5)
+## Session summary (autonomous overnight pass, Batches 1-5, plus the M12.4 Performance Decision Gate)
 
-17 findings total across M12.1-B/M12.2/M12.3/M12.4: **8 Fixed** (#1, #2, #5,
-#11-#15 — every behavior-changing fix has a regression test independently
-verified to fail against the pre-fix code via `git stash`), **4 Pass/
+18 findings total across M12.1-B/M12.2/M12.3/M12.4: **8 Fixed**, **4 Pass/
 verified-clean** (#6-#8, #10 — no action needed), **4 Accepted** (#3, #4, #9,
-#16 — confirmed real, low severity, rationale given), **1 Deferred** (#17,
-needs a schema migration — out of proportion for an ad hoc batch). No
-release-blocking or high-risk unresolved defect is known. Zero destructive
-actions taken; `main` untouched throughout — all work on
+#16 — confirmed real, low severity, rationale given), **2 Deferred to
+v1.0.x** (#17, #18 — both decided by measurement, not just a query-plan
+shape; see the Performance Decision Gate section below; neither blocks
+merging `milestone/12-product-hardening` into `main`). No release-blocking
+or high-risk unresolved defect is known.
+
+Of the 8 Fixed, the regression-coverage picture is deliberately not uniform
+— data/behavior fixes are held to a stricter bar than text/tooltip fixes:
+- **5 have a dedicated regression test independently verified to fail
+  against the pre-fix code via `git stash`** (#1, #2, #5, #11, #14 — every
+  fix that changes stored data, write atomicity, or a confirmation
+  behavior).
+- **3 are low-risk text/tooltip corrections** (#12 dialog title, #13 status
+  text, #15 tooltip strings) **verified only via the existing test suite
+  staying green (no regression) plus direct code review** — no new
+  dedicated pre-fix-verified test was written for these, since a wrong
+  string is not a data-integrity or workflow-correctness risk.
+
+Zero destructive actions taken; `main` untouched throughout — all work on
 `milestone/12-product-hardening`.
 
 ## Batch 1 — Diagnosis-evidence write atomicity
@@ -85,9 +98,92 @@ this batch; two findings are documented rather than fixed, with rationale.
 | # | Finding | Severity | Disposition |
 |---|---|---|---|
 | 16 | The only 4 logging call sites in the app (all in `ui/app.py`) log static text or numeric counts only — no transcript/note/vocabulary content is ever logged directly. However, `sys.excepthook`'s crash-logging hook (`app.py`) logs a caught exception's full `exc_info`, and several exception messages elsewhere embed absolute file paths (e.g. `material_import_service.py`'s "Subtitle file not found: {path}", `media/validation.py`'s "Media file not found: {file_path}") — typically containing the Windows username. Today every such exception is already caught locally and shown in a dialog, never logged; the path would only reach the log file if some *unanticipated* exception type escaped every existing handler and fell through to the crash hook. | Low (latent, not currently exploitable) | **Accepted** — `ROADMAP.md`'s own privacy rule permits paths in logs "unless necessary for troubleshooting," and a crash traceback naming which file failed to open is genuinely necessary for diagnosing that class of bug. Building a message-redaction layer for a not-yet-observed leak path was judged disproportionate to the (currently zero) confirmed exposure. |
-| 17 | Learning History's "All Materials" default view (`history_repository.py`'s `_ACTIVITY_UNION_SQL`, backing `list_activity` and `count_materials_with_any_activity`) filters on `occurred_at`, a `COALESCE(...)` **expression** computed in the outer query, not a real column. Confirmed via `EXPLAIN QUERY PLAN` against the live schema: every one of the 6 UNIONed branches (session/quiz/diagnosis/shadowing/recording/quick_practice) does a full `SCAN`, not an indexed `SEARCH`, when no `material_id` narrows it — the 9 schema-version-10 foreign-key indexes don't cover this expression. This re-scans all 6 tables on every Learning History refresh. | Moderate (grows with total accumulated history; not release-blocking for a single-user local-first app at realistic personal-use data volumes — thousands, not millions, of rows even after years of daily use) | **Documented, deferred rather than fixed tonight** — a correct fix needs an expression index on each branch's own `COALESCE(...)` timestamp (a new schema migration, version 11) plus pushing the date-range predicate down into each UNION branch instead of the outer query; both changes touch a query two functions explicitly depend on staying in lockstep ("the two can never drift apart on what counts as practiced"). A schema migration is a bigger, more consequential step than an ad hoc M12.4 batch should take without a dedicated migration-test pass. Recommended as a scoped follow-up milestone-hardening task, not a today fix. |
+| 17 | Learning History's "All Materials" default view (`history_repository.py`'s `_ACTIVITY_UNION_SQL`, backing `list_activity` and `count_materials_with_any_activity`) filters on `occurred_at`, a `COALESCE(...)` **expression** computed in the outer query, not a real column. Confirmed via `EXPLAIN QUERY PLAN` against the live schema: every one of the 6 UNIONed branches (session/quiz/diagnosis/shadowing/recording/quick_practice) does a full `SCAN`, not an indexed `SEARCH`, when no `material_id` narrows it. | Originally logged Moderate from the query plan alone; **downgraded after measurement** — see the Performance Decision Gate below. | **Deferred to v1.0.x — does not block merging `milestone/12-product-hardening` into `main`.** A dedicated benchmark (`scripts/m12_4_performance_gate.py`) measured actual wall-clock time at realistic and 5x-stress personal-use data volumes, not just the query plan shape. See "M12.4 Performance Decision Gate" below for the full method, numbers, and reasoning — a schema migration is not currently justified by measured user impact. |
 
 Verified Pass, no action needed: rapid-click safety on Start Recording (button self-disables while active), Start Material Quiz (blocked behind a modal `QInputDialog`), and Start Intensive Practice (no button-disable, but race-safe via a caught `ActiveSessionExistsError` fallback — worst case is a duplicate window, never a duplicate session).
+
+## M12.4 Performance Decision Gate (finding #17)
+
+`EXPLAIN QUERY PLAN` showing a full table scan is a shape observation, not a
+measurement of user-visible impact — it says nothing about how large the
+tables actually get in real personal use, or how many milliseconds a scan
+of that size costs. Per instruction, a schema migration is **not** to be
+introduced on the strength of the query plan alone. This gate instead
+measures actual wall-clock time against privacy-safe synthetic data at a
+reasoned, defensible personal-use scale, before deciding.
+
+### Method
+
+`scripts/m12_4_performance_gate.py` (new, committed — a reusable, repeatable
+verification procedure, not a one-off). For each of two tiers, it:
+
+1. Bulk-generates synthetic data directly via SQL (fully synthetic titles/
+   text, no real user data, temporary on-disk SQLite file deleted after the
+   run) at a defensible personal-use scale, then
+2. Times `learning_history_service.get_overview`, `.list_activity`, and
+   `export_service.build_export` (All Materials scope) for both "All Time"
+   and "Last 90 Days", each averaged over 3 runs (first run reported
+   separately as "cold", remaining runs averaged as "warm"), then
+3. Independently recomputes 7 of `OverviewMetrics`' fields directly from
+   the persisted rows (deliberately different, simpler SQL than the
+   production queries — no `COALESCE`/`UNION`) and asserts they match the
+   production result exactly, so the benchmark also re-verifies current
+   result correctness/statistical accuracy, not just speed.
+
+**Scale tiers** (both defensible as single-user, local-first, not a
+multi-tenant workload):
+- **REALISTIC** (~2 years of very dedicated daily use): 100 materials,
+  1,000 Intensive Practice sessions, 800 quiz attempts (5 questions each),
+  ~5,700 session-diagnosis rows, ~5,700 shadowing-progress rows, 3,000
+  recordings, 1,500 Quick Practice sessions — roughly 87,000 total activity
+  rows across the 6 source tables.
+- **STRESS** (5x REALISTIC): 300 materials, 5,000 sessions, 4,000 quizzes,
+  ~28,500 diagnosis rows, ~28,400 shadowing rows, 15,000 recordings, 7,500
+  Quick Practice sessions — to see whether cost grows roughly linearly
+  (safe to defer) or worse (would argue for fixing regardless of the
+  realistic number), not because 5x is itself claimed as realistic.
+
+### Results
+
+| Tier | Operation | Cold | Warm avg | Rows / materials |
+|---|---|---|---|---|
+| REALISTIC | `get_overview`, All Time | 5.0ms | 4.2ms | — |
+| REALISTIC | `list_activity`, All Time | 69.6ms | 70.9ms | 17,505 rows |
+| REALISTIC | `get_overview`, Last 90 Days | 4.5ms | 3.7ms | — |
+| REALISTIC | `list_activity`, Last 90 Days | 10.0ms | 10.6ms | 2,098 rows |
+| REALISTIC | `build_export`, All Materials/All Time | 250.0ms | 246.8ms | 100 materials |
+| STRESS | `get_overview`, All Time | 29.9ms | 29.5ms | — |
+| STRESS | `list_activity`, All Time | 413.7ms | 677.3ms | 87,717 rows |
+| STRESS | `get_overview`, Last 90 Days | 52.4ms | 51.4ms | — |
+| STRESS | `list_activity`, Last 90 Days | 101.9ms | 103.5ms | 10,701 rows |
+| STRESS | `build_export`, All Materials/All Time | 3,309.6ms | 3,405.0ms | 300 materials |
+
+Correctness: at both tiers, all 7 independently-recomputed Overview metrics
+(`materials_practiced`, `completed_sessions`, `completed_quizzes`,
+`retained_recording_count`, `quick_practices_completed`,
+`shadowing_practice_count`, `session_diagnosis_evidence_count`) matched the
+production result exactly — confirms today's calculations remain accurate
+at this scale, independent of the performance question.
+
+### Decision on #17
+
+**Deferred to v1.0.x. Does not block merging `milestone/12-product-hardening`
+into `main`.** At REALISTIC scale, `list_activity`/`get_overview` (the
+functions #17 is actually about) complete in 4-71ms — imperceptible for a
+dashboard a learner opens occasionally, not a hot path hit on every
+keystroke. Even at 5x-stress they stay under ~680ms, still within a
+reasonable "brief pause for a full-history refresh" budget. A schema
+migration (expression indexes on each branch's `COALESCE(...)` timestamp,
+version 11) is not currently justified by any measured evidence of user
+impact. Re-run `scripts/m12_4_performance_gate.py` if a real user ever
+reports Learning History feeling slow, or periodically as history
+naturally accumulates well beyond the STRESS tier's assumptions.
+
+### New finding discovered during this gate (#18)
+
+| # | Finding | Severity | Disposition |
+|---|---|---|---|
+| 18 | `export_service.build_export`'s "All Materials" scope loops per-material (not a combined query), so its cost scales with `materials x average-evidence-per-material` rather than staying flat. Measured: 250ms at REALISTIC (100 materials), but 3.3-3.4 **seconds** at STRESS (300 materials, 5x the per-material evidence) — a ~13x time increase for a 5x data increase, i.e. worse than linear, and structurally unrelated to #17 (this path never touches `_ACTIVITY_UNION_SQL`, so #17's proposed fix would not help it). | Low at realistic personal-use scale (250ms is a normal, expected wait for an explicit "generate my full export" action, not a hot path); worth monitoring, not release-blocking. | **Deferred to v1.0.x, same rationale as #17** — real personal-use scale (100 materials) measures fine; only the 5x-stress tier crosses into clearly-noticeable territory. Documented rather than silently fixed or silently dropped, per the same "measure before deciding" discipline applied to #17. If a future user's material count grows well past ~100-150 with heavy per-material history, re-run the benchmark before assuming it's still fine. |
 
 ## Repair rules applied
 
