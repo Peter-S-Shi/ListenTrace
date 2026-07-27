@@ -59,6 +59,24 @@ Verified but not changed: quiz submission's confirmation + service-level status-
 transition guard already safely handles double-submission; no fix needed
 (see Batch 2's Quiz scoring-atomicity verification, same audit pass).
 
+## Batch 5 — M12.4 robustness, privacy, and performance (verification, no code changes)
+
+Audit method: grepped every logging call site in `src/`, read the crash-logging
+hook and custom exception classes for content leakage, verified query plans
+for the Learning History/Export query layer with `EXPLAIN QUERY PLAN` against
+the live migrated schema, and spot-checked rapid-click safety on the three
+highest-risk buttons (Start Recording, Start Material Quiz, Start Intensive
+Practice) — all three already guarded (button self-disable, a blocking modal
+dialog, or a caught `ActiveSessionExistsError` fallback). No code changed
+this batch; two findings are documented rather than fixed, with rationale.
+
+| # | Finding | Severity | Disposition |
+|---|---|---|---|
+| 16 | The only 4 logging call sites in the app (all in `ui/app.py`) log static text or numeric counts only — no transcript/note/vocabulary content is ever logged directly. However, `sys.excepthook`'s crash-logging hook (`app.py`) logs a caught exception's full `exc_info`, and several exception messages elsewhere embed absolute file paths (e.g. `material_import_service.py`'s "Subtitle file not found: {path}", `media/validation.py`'s "Media file not found: {file_path}") — typically containing the Windows username. Today every such exception is already caught locally and shown in a dialog, never logged; the path would only reach the log file if some *unanticipated* exception type escaped every existing handler and fell through to the crash hook. | Low (latent, not currently exploitable) | **Accepted** — `ROADMAP.md`'s own privacy rule permits paths in logs "unless necessary for troubleshooting," and a crash traceback naming which file failed to open is genuinely necessary for diagnosing that class of bug. Building a message-redaction layer for a not-yet-observed leak path was judged disproportionate to the (currently zero) confirmed exposure. |
+| 17 | Learning History's "All Materials" default view (`history_repository.py`'s `_ACTIVITY_UNION_SQL`, backing `list_activity` and `count_materials_with_any_activity`) filters on `occurred_at`, a `COALESCE(...)` **expression** computed in the outer query, not a real column. Confirmed via `EXPLAIN QUERY PLAN` against the live schema: every one of the 6 UNIONed branches (session/quiz/diagnosis/shadowing/recording/quick_practice) does a full `SCAN`, not an indexed `SEARCH`, when no `material_id` narrows it — the 9 schema-version-10 foreign-key indexes don't cover this expression. This re-scans all 6 tables on every Learning History refresh. | Moderate (grows with total accumulated history; not release-blocking for a single-user local-first app at realistic personal-use data volumes — thousands, not millions, of rows even after years of daily use) | **Documented, deferred rather than fixed tonight** — a correct fix needs an expression index on each branch's own `COALESCE(...)` timestamp (a new schema migration, version 11) plus pushing the date-range predicate down into each UNION branch instead of the outer query; both changes touch a query two functions explicitly depend on staying in lockstep ("the two can never drift apart on what counts as practiced"). A schema migration is a bigger, more consequential step than an ad hoc M12.4 batch should take without a dedicated migration-test pass. Recommended as a scoped follow-up milestone-hardening task, not a today fix. |
+
+Verified Pass, no action needed: rapid-click safety on Start Recording (button self-disables while active), Start Material Quiz (blocked behind a modal `QInputDialog`), and Start Intensive Practice (no button-disable, but race-safe via a caught `ActiveSessionExistsError` fallback — worst case is a duplicate window, never a duplicate session).
+
 ## Repair rules applied
 
 - Existing external call sites of the four touched repository functions
