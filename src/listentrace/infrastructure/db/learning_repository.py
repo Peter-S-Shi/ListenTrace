@@ -64,9 +64,12 @@ def insert_annotations(
     selection_start: int,
     selection_end: int,
     note: str | None,
+    commit: bool = True,
 ) -> list[int]:
     """Insert one Annotation row per (label, heard_as) pair, sharing the same range and
-    note, as a single all-or-nothing transaction."""
+    note, as a single all-or-nothing transaction. Pass commit=False when the caller is
+    folding this insert into a larger atomic operation and will commit (or roll back)
+    everything together itself."""
     try:
         ids: list[int] = []
         for label_key, heard_as in labels_with_heard_as:
@@ -81,9 +84,11 @@ def insert_annotations(
             )
             ids.append(int(cursor.lastrowid))
     except Exception:
-        conn.rollback()
+        if commit:
+            conn.rollback()
         raise
-    conn.commit()
+    if commit:
+        conn.commit()
     return ids
 
 

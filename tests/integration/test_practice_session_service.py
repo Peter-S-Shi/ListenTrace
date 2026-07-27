@@ -18,7 +18,7 @@ from listentrace.domain.models.material import Material
 from listentrace.domain.models.subtitle import SubtitleCue, SubtitleTrack
 from listentrace.infrastructure.db import session_repository as repo
 from listentrace.infrastructure.db.connection import open_connection
-from listentrace.infrastructure.db.learning_repository import get_annotation
+from listentrace.infrastructure.db.learning_repository import get_annotation, list_annotations_for_cue
 from listentrace.infrastructure.db.migrations import migrate
 from listentrace.infrastructure.db.repository import (
     get_cues_for_track,
@@ -486,6 +486,30 @@ def test_diagnosis_for_unknown_cue_or_evidence_raises_not_found(conn):
         svc.update_session_diagnosis(conn, session.id, 999, "keyword", 0, 5)
     with pytest.raises(DiagnosisNotFoundError):
         svc.delete_session_diagnosis(conn, session.id, 999)
+
+
+def test_record_session_diagnosis_is_atomic_across_annotation_and_evidence(conn, monkeypatch):
+    """M12.2 regression: a failure between creating the material-level Annotation and
+    inserting its session-scoped evidence snapshot must not leave an orphaned
+    Annotation with no linked evidence row."""
+    material_id, cues = _make_material_with_cues(conn)
+    session = svc.start_session(conn, material_id)
+    svc.enter_stage(conn, session.id, "transcript_diagnosis")
+
+    def _boom(*args, **kwargs):
+        raise RuntimeError("simulated crash between annotation insert and evidence insert")
+
+    monkeypatch.setattr(repo, "insert_session_diagnosis", _boom)
+    with pytest.raises(RuntimeError):
+        svc.record_session_diagnosis(conn, session.id, cues[0].id, 0, 7, "keyword")
+
+    assert list_annotations_for_cue(conn, cues[0].id) == []
+    assert svc.list_session_diagnosis(conn, session.id) == []
+
+    monkeypatch.undo()
+    evidence_id = svc.record_session_diagnosis(conn, session.id, cues[0].id, 0, 7, "keyword")
+    assert svc.list_session_diagnosis(conn, session.id)[0].id == evidence_id
+    assert len(list_annotations_for_cue(conn, cues[0].id)) == 1
 
 
 # ---- shadowing ----

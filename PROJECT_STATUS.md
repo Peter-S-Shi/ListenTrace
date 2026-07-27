@@ -32,7 +32,7 @@ The remote repository exists, is private, and uses `main` as its default branch.
 | Structured export and external evaluation | Implemented and tested: Markdown/JSON export from Learning History with All/One/Selected Materials scope, the same date-range presets and local-time rules as Learning History, 12 independent evidence categories (now including `quick_practice_evidence`), 6 independent privacy fields (redact-in-place, never silently drop the record — including full Quiz Q&A payload redaction across all four question types, an always-present `source_label`, and Quick Practice's `heard_fragment`/diagnosis redaction), preview generated before any save/copy and reused verbatim (never regenerated) and invalidated on any selection change, atomic saves with overwrite confirmation, and a separate reusable external-evaluation instruction template; `export_version: 1` (unchanged by Milestone 10 — additive-only category), no schema change from this milestone's own perspective |
 | Quick Practice Mode | Implemented and tested: a short, low-friction, cue-based practice mode distinct from Intensive Practice — Recommended Practice (deterministic, reason-based cue selection, 3/5/10 cues default 5, safe material-order fallback when evidence is insufficient) and Selected Cues (one cue, a range, or an explicit selection, order preserved); a forward-only per-cue cycle (Listen -> Recall -> Reveal & Diagnose -> Replay & Shadow) reusing the exact same playback, diagnosis-validation/annotation-reuse, and recording widgets as the rest of the app; progressive persistence with no exact-step resume; closing mid-run either abandons (preserving completed-cue evidence, with confirmation) or discards (zero progress, silent, no trace); a read-only completion summary with no effective-time/pronunciation/ability/difficulty/improvement score anywhere; full Learning History integration (`Quick Practices Completed` overview count, `quick_practice` activity entries, a dedicated history tab with per-cue results), a transparent Needs Attention reason (`repeated_missed_in_quick_practice`, threshold 2), and its own export category |
 | Subtitle parsing | Implemented and tested (Milestone 1, unchanged) |
-| Automated tests | 628 tests passing — 611 (through Milestone 10 and Post-M10 Phase B) plus 17 added during Milestone 11 (see Milestone 11's Completed entry below): 2 for the `initial_cue_index` construction-order fix, 10 new `tests/integration/test_theme.py` tests for the theme module itself, 1 new dedicated `chart_bar`-token test, and 4 for the `RecordingPanel.set_context()` button-refresh fix; no other milestone's own test counts changed |
+| Automated tests | 630 tests passing — 628 through Milestone 11 (see below) plus 2 added during M12.1-B Batch 1 (diagnosis-evidence write-atomicity regressions for `record_session_diagnosis` and `record_item_diagnosis`, each independently verified to fail against the pre-fix code); of the 628: 611 through Milestone 10 and Post-M10 Phase B, plus 17 added during Milestone 11: 2 for the `initial_cue_index` construction-order fix, 10 new `tests/integration/test_theme.py` tests for the theme module itself, 1 new dedicated `chart_bar`-token test, and 4 for the `RecordingPanel.set_context()` button-refresh fix |
 | Build and packaging | Phase A complete (PyInstaller onedir build, an Inno Setup installer, a portable zip, all validated end-to-end) plus a Phase B targeted-technical-hardening addition (a `longPathAware` manifest opt-in, a partial mitigation only). Phase C1 — Development-Machine Release Preflight complete (install/upgrade/uninstall, legacy database upgrade, real audio playback/microphone capture, a full feature-area walkthrough, all on the development machine). During Milestone 11 Closeout, the onedir build was rebuilt from the final M11 code and relaunched: the runtime window icon and the full theme rendered correctly (confirmed by a real screenshot of the title bar); icon resolution was additionally confirmed programmatically from a portable-ZIP-style relocated path. The installed-application (Inno Setup) context was **not** rebuilt this session — Inno Setup is not installed in this environment — so this is a code-level equivalence argument (the installer copies the same onedir tree verbatim), not an independent observation. Phase C2 — Clean-Machine Acceptance is **pending**, scheduled after Milestone 12 so the final hardened, final-UI release is tested; not code-signed — see `packaging/README.md`/`ROADMAP.md` |
 | Continuous integration | Not configured |
 
@@ -46,9 +46,9 @@ The project has passed the Functional Feature Complete Gate (after Milestone 10)
 
 **Milestone 12 — Product Hardening & Full Manual Acceptance**
 
-Status: **Next Product Milestone / Not Yet Started**
+Status: **In Progress — M12 engineering hardening in progress; blockers documented**
 
-Milestone 11 — UI/UX Presentation Refresh is completed and accepted (see the Completed section below and `ROADMAP.md`'s Closeout Summary); the Presentation Complete Gate has passed. No Milestone 12 audit work has begun; M12's detailed audit/repair plan is not yet written.
+Milestone 11 — UI/UX Presentation Refresh is completed and accepted (see the Completed section below and `ROADMAP.md`'s Closeout Summary); the Presentation Complete Gate has passed. Milestone 12.1-A (retroactive manual QA baseline) is complete (`manual-qa/`, commit `1285fcf`). M12.1-B (agent-led product audit) has started on branch `milestone/12-product-hardening`: Batch 1 (diagnosis-evidence write atomicity) is complete — see `HARDENING_BACKLOG.md`. Full Manual Acceptance (the user's own questionnaire pass) has not started and is not claimed here.
 
 ## Current Release Scope
 
@@ -64,7 +64,7 @@ Functional feature completion was reached after Milestone 10: every planned loca
 
 ## Open Release Blockers
 
-- Milestone 12 (product-wide hardening and full manual acceptance) not started — no GUI-level audit has been performed beyond scripted service-level walkthroughs and Milestone 11's own per-window visual review.
+- Milestone 12 (product-wide hardening and full manual acceptance) in progress — M12.1-B agent audit Batch 1 complete (see `HARDENING_BACKLOG.md`); no literal GUI-click audit has been performed by the agent (no native-GUI automation tool is available in this environment), only offscreen-Qt-driven service/window-level audits and code review; the user's own manual questionnaire pass (genuine GUI acceptance) has not started.
 - Full manual GUI acceptance not completed.
 - Phase C2 clean-machine validation pending.
 - Real clean-machine MP4/H.264 validation pending (not tested anywhere yet — Phase C1 had no H.264 encoder available to produce a sample).
@@ -76,13 +76,13 @@ Functional feature completion was reached after Milestone 10: every planned loca
 
 - Phase B — targeted technical release hardening: **completed** (migration atomicity, startup-crash-before-`QApplication`, crash logging, schema version 10 indexes, partial long-path mitigation, shutdown audit — see `ARCHITECTURE.md`'s "Resolved in Post-M10 Phase B").
 - Milestone 11 — UI/UX Presentation Refresh: **completed and accepted** (see the Completed section below and `ROADMAP.md`'s Closeout Summary). Presentation-only, per its own scope boundary — the only behavior changes were two independently-flagged, regression-tested corrective fixes for pre-existing defects found during visual review, not new presentation work.
-- Milestone 12 — final, system-wide product hardening and full manual acceptance: **not started**.
+- Milestone 12 — final, system-wide product hardening and full manual acceptance: **in progress**. M12.1-A (manual QA baseline) complete. M12.1-B (agent audit) Batch 1 complete: a read-only audit of every multi-statement DB write found 5 crash-window data-integrity findings (annotation/evidence-snapshot writes not sharing one transaction); the two highest-severity ones (`practice_session_service.record_session_diagnosis`, `quick_practice_service.record_item_diagnosis` — both could leave an orphaned `Annotation` row with no linked evidence snapshot after a crash) are fixed with regression coverage verified to fail pre-fix; the remaining 3 are documented in `HARDENING_BACKLOG.md` as accepted (low severity, self-healing, or narrower window) or queued for a follow-up batch. Full Manual Acceptance and the rest of M12.2-M12.5 remain.
 
 Phase B was a targeted technical pass against eleven specific failure categories, not a product-wide GUI audit; it does not by itself satisfy Milestone 12's exit criteria. Milestone 11 made the UI consistent and coherent; it does not by itself satisfy Milestone 12's workflow-correctness/robustness/privacy/performance audit either.
 
 ## Verification Status
 
-- **Automated tests**: 628 passing (611 through Post-M10 Phase B, plus 17 added during Milestone 11 — see the Completed section below).
+- **Automated tests**: 630 passing (628 through Milestone 11 — see the Completed section below — plus 2 added during M12.1-B Batch 1).
 - **Manual GUI QA**: partial — individual milestones were manually smoke-tested through their real windows at delivery time, and Milestone 11 added a per-window, per-batch visual review (real, non-offscreen `QApplication` screenshots of every migrated window and shared widget, user-approved batch by batch), but no single product-wide, workflow-correctness GUI acceptance pass has been done; that is Milestone 12's job.
 - **Packaged preflight**: Phase C1 complete (development machine only) — see `ROADMAP.md`. During Milestone 11 Closeout, the onedir build was rebuilt from the final M11 code, relaunched, and its runtime icon/theme visually confirmed; icon resolution was additionally confirmed programmatically from a portable-ZIP-style relocated path. The installed-application (Inno Setup) context was not freshly rebuilt this session (Inno Setup is not installed in this environment) — reasoned by code equivalence only.
 - **Migration**: schema version 10, every migration 1→10 covered by an automated upgrade test with real data present. Milestone 11 introduced no schema change (confirmed: its branch's diff against `main` touches only `src/listentrace/ui/`, `tests/integration/test_theme.py`, and the packaging spec's icon `datas` entry).
@@ -102,9 +102,8 @@ Plan and begin Milestone 12 — Product Hardening & Full Manual Acceptance's M12
 
 ## Repository State
 
-- Branch: `main`.
-- Latest verified commit: see below.
-- Remote synchronization: local `main` matches `origin/main` (verified via `git ls-remote origin main` after every push).
+- `main` branch: last verified matching `origin/main` at commit `1285fcf` (M12.1-A) via `git ls-remote origin main`.
+- Active work branch: `milestone/12-product-hardening`, branched from `main` at `1285fcf`, not yet merged — M12.1-B/M12.2 work lands here until the user's Full Manual Acceptance pass is complete.
 - Continuous integration: not configured.
 
 ## Completed

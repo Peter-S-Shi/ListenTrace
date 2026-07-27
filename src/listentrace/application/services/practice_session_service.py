@@ -441,32 +441,49 @@ def record_session_diagnosis(
     note_value = note.strip() if note and note.strip() else None
 
     existing_annotation = find_annotation(conn, subtitle_cue_id, label_key, selection_start, selection_end)
-    if existing_annotation is not None and existing_annotation.id is not None:
-        annotation_id: int | None = existing_annotation.id
-    else:
-        ids = insert_annotations(
-            conn, subtitle_cue_id, [(label_key, heard_as_value)], selected_text, selection_start, selection_end, note_value
+
+    # The annotation (if newly created), its session-scoped evidence snapshot, and the
+    # optional stage-outcome clear must land together: a crash between them would
+    # otherwise leave an orphaned Annotation with no linked evidence row, contradicting
+    # this function's own "always creates an independent snapshot" guarantee.
+    try:
+        if existing_annotation is not None and existing_annotation.id is not None:
+            annotation_id: int | None = existing_annotation.id
+        else:
+            ids = insert_annotations(
+                conn,
+                subtitle_cue_id,
+                [(label_key, heard_as_value)],
+                selected_text,
+                selection_start,
+                selection_end,
+                note_value,
+                commit=False,
+            )
+            annotation_id = ids[0]
+
+        evidence = SessionDiagnosisEvidence(
+            practice_session_id=session_id,
+            subtitle_cue_id=subtitle_cue_id,
+            annotation_id=annotation_id,
+            label_key=label_key,
+            selected_text=selected_text,
+            selection_start=selection_start,
+            selection_end=selection_end,
+            heard_as=heard_as_value,
+            note=note_value,
         )
-        annotation_id = ids[0]
+        evidence_id = repo.insert_session_diagnosis(conn, evidence, commit=False)
 
-    evidence = SessionDiagnosisEvidence(
-        practice_session_id=session_id,
-        subtitle_cue_id=subtitle_cue_id,
-        annotation_id=annotation_id,
-        label_key=label_key,
-        selected_text=selected_text,
-        selection_start=selection_start,
-        selection_end=selection_end,
-        heard_as=heard_as_value,
-        note=note_value,
-    )
-    evidence_id = repo.insert_session_diagnosis(conn, evidence)
-
-    # Mutually exclusive with "no notable difficulty": recording real evidence
-    # means that claim is no longer true for this session.
-    progress = repo.get_stage_progress(conn, session_id, StageKey.TRANSCRIPT_DIAGNOSIS.value)
-    if progress is not None and progress.outcome_key == StageOutcome.NO_NOTABLE_DIFFICULTY.value:
-        repo.set_stage_outcome(conn, session_id, StageKey.TRANSCRIPT_DIAGNOSIS.value, None)
+        # Mutually exclusive with "no notable difficulty": recording real evidence
+        # means that claim is no longer true for this session.
+        progress = repo.get_stage_progress(conn, session_id, StageKey.TRANSCRIPT_DIAGNOSIS.value)
+        if progress is not None and progress.outcome_key == StageOutcome.NO_NOTABLE_DIFFICULTY.value:
+            repo.set_stage_outcome(conn, session_id, StageKey.TRANSCRIPT_DIAGNOSIS.value, None, commit=False)
+    except Exception:
+        conn.rollback()
+        raise
+    conn.commit()
 
     return evidence_id
 

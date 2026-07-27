@@ -281,6 +281,31 @@ def test_diagnosis_rejects_an_unknown_cue_range(conn):
     assert excinfo.value.category == "invalid_range"
 
 
+def test_record_item_diagnosis_is_atomic_across_annotation_and_evidence(conn, monkeypatch):
+    """M12.2 regression: a failure between creating the material-level Annotation and
+    inserting its Quick-Practice-scoped evidence snapshot must not leave an orphaned
+    Annotation with no linked evidence row."""
+    material_id, cues = _make_material_with_cues(conn)
+    session = svc.start_selected_session(conn, material_id, [cues[0].id])
+    item_id = svc.load_session_state(conn, session.id).items[0].item.id
+    svc.record_recall(conn, item_id, "missed")
+
+    def _boom(*args, **kwargs):
+        raise RuntimeError("simulated crash between annotation insert and evidence insert")
+
+    monkeypatch.setattr(repo, "insert_item_diagnosis", _boom)
+    with pytest.raises(RuntimeError):
+        svc.record_item_diagnosis(conn, item_id, 0, 7, "keyword")
+
+    assert list_annotations_for_cue(conn, cues[0].id) == []
+    assert svc.list_item_diagnosis(conn, item_id) == []
+
+    monkeypatch.undo()
+    evidence_id = svc.record_item_diagnosis(conn, item_id, 0, 7, "keyword")
+    assert svc.list_item_diagnosis(conn, item_id)[0].id == evidence_id
+    assert len(list_annotations_for_cue(conn, cues[0].id)) == 1
+
+
 # ---- Step 4: shadowing ----
 
 

@@ -206,7 +206,9 @@ def find_item_diagnosis_exact(
     return _row_to_diagnosis(row) if row is not None else None
 
 
-def insert_item_diagnosis(conn: sqlite3.Connection, evidence: QuickPracticeDiagnosisEvidence) -> int:
+def insert_item_diagnosis(
+    conn: sqlite3.Connection, evidence: QuickPracticeDiagnosisEvidence, commit: bool = True
+) -> int:
     cursor = conn.execute(
         """
         INSERT INTO quick_practice_diagnosis_evidence (
@@ -225,7 +227,8 @@ def insert_item_diagnosis(conn: sqlite3.Connection, evidence: QuickPracticeDiagn
             evidence.note,
         ),
     )
-    conn.commit()
+    if commit:
+        conn.commit()
     return int(cursor.lastrowid)
 
 
