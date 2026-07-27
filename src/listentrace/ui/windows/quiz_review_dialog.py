@@ -5,11 +5,11 @@ import sqlite3
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QDialog,
-    QHBoxLayout,
     QLabel,
     QListWidget,
     QListWidgetItem,
     QPushButton,
+    QSplitter,
     QTextEdit,
     QVBoxLayout,
 )
@@ -17,10 +17,14 @@ from PySide6.QtWidgets import (
 from listentrace.application.dto.quiz_review import QuizReviewItem
 from listentrace.application.services import quiz_service
 from listentrace.domain.enums.question_type import QuestionType
+from listentrace.ui import theme
 from listentrace.ui.windows.player_window import _color_badge_icon
 
-_CORRECT_COLOR = "#16A34A"
-_INCORRECT_COLOR = "#DC2626"
+# Milestone 11: sourced from theme.py's dedicated quiz_correct/quiz_incorrect
+# tokens (same #16A34A/#DC2626 values as before -- never a generic accent
+# color) rather than locally hardcoded literals.
+_CORRECT_COLOR = theme.css("quiz_correct")
+_INCORRECT_COLOR = theme.css("quiz_incorrect")
 _TEXT_ANSWER_TYPES = frozenset({QuestionType.DICTATION.value, QuestionType.REVIEW_MISSED.value})
 
 
@@ -44,21 +48,39 @@ class QuizReviewDialog(QDialog):
         total = len(self._review.items)
         correct = attempt.correct_count or 0
         summary = QLabel(f"Score: {correct} / {total} correct   (mode: {attempt.quiz_mode})")
-        summary.setStyleSheet("font-size: 14px; font-weight: bold;")
+        theme.apply_role(summary, "title")
         layout.addWidget(summary)
 
-        body = QHBoxLayout()
+        # Milestone 11: the question list and the answer detail are two
+        # card-framed panels in a resizable QSplitter, matching the workspace
+        # treatment established in PlayerWindow (Batch 0) and Stage 3 of
+        # GuidedSessionWindow (Batch 1).
+        list_frame, list_column = theme.make_card()
         self._list = QListWidget()
+        # Milestone 11: wrap long question-type labels instead of growing an
+        # unnecessary horizontal scrollbar, matching the cue-list fix
+        # established in PlayerWindow (Batch 0) and GuidedSessionWindow
+        # (Batch 1).
+        self._list.setWordWrap(True)
+        self._list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self._list.currentItemChanged.connect(self._on_selection_changed)
-        body.addWidget(self._list, 1)
+        list_column.addWidget(self._list)
 
+        detail_frame, detail_column = theme.make_card()
         self._detail_view = QTextEdit()
         self._detail_view.setReadOnly(True)
-        body.addWidget(self._detail_view, 2)
-        layout.addLayout(body, 1)
+        detail_column.addWidget(self._detail_view)
+
+        splitter = QSplitter(Qt.Orientation.Horizontal)
+        splitter.setChildrenCollapsible(False)
+        splitter.addWidget(list_frame)
+        splitter.addWidget(detail_frame)
+        splitter.setSizes([300, 380])
+        layout.addWidget(splitter, 1)
 
         close_button = QPushButton("Close")
         close_button.clicked.connect(self.accept)
+        theme.apply_role(close_button, "secondary")
         layout.addWidget(close_button)
 
         for item in self._review.items:

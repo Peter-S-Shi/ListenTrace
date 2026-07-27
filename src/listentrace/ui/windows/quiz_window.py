@@ -26,6 +26,7 @@ from listentrace.domain.enums.answered_state import AnsweredState
 from listentrace.domain.enums.question_type import QuestionType
 from listentrace.domain.enums.quiz_status import QuizStatus
 from listentrace.infrastructure.media.playback import PlaybackController
+from listentrace.ui import theme
 from listentrace.ui.windows.player_window import _format_time
 from listentrace.ui.windows.quiz_review_dialog import QuizReviewDialog
 
@@ -76,24 +77,28 @@ class QuizWindow(QMainWindow):
 
         header_row = QHBoxLayout()
         title_label = QLabel(self._material.title)
-        title_label.setStyleSheet("font-size: 16px; font-weight: bold;")
+        theme.apply_role(title_label, "title")
         header_row.addWidget(title_label)
         self._progress_label = QLabel("")
+        theme.apply_role(self._progress_label, "caption")
         header_row.addWidget(self._progress_label, 1)
         layout.addLayout(header_row)
 
         self._status_label = QLabel("")
-        self._status_label.setStyleSheet("color: red;")
+        theme.apply_role(self._status_label, "error")
         self._status_label.setWordWrap(True)
         layout.addWidget(self._status_label)
 
         transport_row = QHBoxLayout()
         self._play_button = QPushButton("Play")
         self._play_button.clicked.connect(self._on_play_clicked)
+        theme.apply_role(self._play_button, "secondary")
         self._replay_button = QPushButton("Replay Cue")
         self._replay_button.clicked.connect(self._on_replay_clicked)
+        theme.apply_role(self._replay_button, "secondary")
         self._loop_button = QPushButton("Loop Cue")
         self._loop_button.clicked.connect(self._on_loop_clicked)
+        theme.apply_role(self._loop_button, "secondary")
         self._time_label = QLabel("00:00 / 00:00")
         for widget in (self._play_button, self._replay_button, self._loop_button):
             transport_row.addWidget(widget)
@@ -102,7 +107,6 @@ class QuizWindow(QMainWindow):
 
         self._question_label = QLabel("")
         self._question_label.setWordWrap(True)
-        self._question_label.setStyleSheet("font-size: 13px;")
         layout.addWidget(self._question_label)
 
         self._answer_stack = QStackedWidget()
@@ -142,17 +146,32 @@ class QuizWindow(QMainWindow):
         self._playback.set_volume(0.8)
         self._playback.load(self._material.media_path)
 
+        self._apply_presentation()
+
         self._load_initial_state()
         self._initialized = True
+
+    def _apply_presentation(self) -> None:
+        """Milestone 11 button-role assignment: `Submit Quiz` is this
+        window's single primary action -- correctness is never shown here
+        (see the class docstring), so submission is the one decisive forward
+        step. `Previous`/`Next` are ordinary navigation; `Close and Resume
+        Later` is quiet; `Abandon Quiz` is destructive; `View Consolidated
+        Review` is secondary (only enabled once the attempt is completed)."""
+        theme.apply_role(self._previous_button, "secondary")
+        theme.apply_role(self._next_button, "secondary")
+        theme.apply_role(self._close_button, "quiet")
+        theme.apply_role(self._abandon_button, "danger")
+        theme.apply_role(self._submit_button, "primary")
+        theme.apply_role(self._review_button, "secondary")
 
     # ---- panel construction ----
 
     def _build_text_answer_panel(self) -> QWidget:
-        panel = QWidget()
-        layout = QVBoxLayout(panel)
+        panel, layout = theme.make_card()
         self._masked_text_label = QLabel("")
         self._masked_text_label.setWordWrap(True)
-        self._masked_text_label.setStyleSheet("font-size: 14px; font-family: monospace;")
+        theme.apply_role(self._masked_text_label, "monospace")
         layout.addWidget(self._masked_text_label)
         layout.addWidget(QLabel("Your answer:"))
         self._answer_line_edit = QLineEdit()
@@ -161,8 +180,7 @@ class QuizWindow(QMainWindow):
         return panel
 
     def _build_choice_panel(self) -> QWidget:
-        panel = QWidget()
-        layout = QVBoxLayout(panel)
+        panel, layout = theme.make_card()
         self._choice_button_group = QButtonGroup(panel)
         self._choice_button_group.setExclusive(True)
         self._choice_radio_buttons: list[QRadioButton] = []

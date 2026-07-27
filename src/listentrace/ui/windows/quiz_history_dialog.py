@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
 )
 
 from listentrace.application.services import quiz_service as svc
+from listentrace.ui import theme
 
 
 class QuizHistoryDialog(QDialog):
@@ -43,8 +44,10 @@ class QuizHistoryDialog(QDialog):
         self._open_button = QPushButton("Open")
         self._open_button.clicked.connect(self._on_open_clicked)
         self._open_button.setEnabled(False)
+        theme.apply_role(self._open_button, "primary")
         close_button = QPushButton("Close")
         close_button.clicked.connect(self.reject)
+        theme.apply_role(close_button, "quiet")
         buttons_row.addWidget(self._open_button)
         buttons_row.addWidget(close_button)
         layout.addLayout(buttons_row)
