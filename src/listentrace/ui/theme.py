@@ -260,6 +260,46 @@ QFrame[role="card"] {{
     border-radius: {RADIUS_CARD}px;
 }}
 
+/* Batch 4 correction: the native radio indicator rendered its checked dot
+   almost invisibly against this warm palette, while the unchecked ring
+   stayed visible -- which mode was selected could only be inferred from
+   which panel/list was enabled, not from the control itself. Every state
+   gets an explicit, centralized definition here. */
+QRadioButton::indicator {{
+    width: 14px;
+    height: 14px;
+    border-radius: 8px;
+    border: {BORDER_WIDTH}px solid {css('line')};
+    background-color: {css('surface')};
+}}
+QRadioButton::indicator:hover {{
+    border-color: {css('muted')};
+}}
+QRadioButton::indicator:checked {{
+    border: {BORDER_WIDTH}px solid {css('accent')};
+    background-color: qradialgradient(
+        cx:0.5, cy:0.5, radius:0.5, fx:0.5, fy:0.5,
+        stop:0 {css('accent')}, stop:0.45 {css('accent')}, stop:0.5 {css('surface')}, stop:1 {css('surface')}
+    );
+}}
+QRadioButton::indicator:checked:hover {{
+    border-color: {css('accent_hover')};
+}}
+QRadioButton::indicator:unchecked:disabled {{
+    border-color: {css('line')};
+    background-color: {css('disabled_surface')};
+}}
+QRadioButton::indicator:checked:disabled {{
+    border: {BORDER_WIDTH}px solid {css('disabled_text')};
+    background-color: qradialgradient(
+        cx:0.5, cy:0.5, radius:0.5, fx:0.5, fy:0.5,
+        stop:0 {css('disabled_text')}, stop:0.45 {css('disabled_text')}, stop:0.5 {css('disabled_surface')}, stop:1 {css('disabled_surface')}
+    );
+}}
+QRadioButton::indicator:focus {{
+    border: {BORDER_WIDTH}px solid {css('focus')};
+}}
+
 QPushButton[role="primary"] {{
     background-color: {css('accent')};
     color: #FFFFFF;
