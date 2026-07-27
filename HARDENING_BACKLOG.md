@@ -9,6 +9,18 @@ Status legend: **Fixed** (repaired + regression test added this milestone),
 severity, rationale given), **Deferred** (out of M12 scope), **Open**
 (confirmed, not yet addressed).
 
+## Session summary (autonomous overnight pass, Batches 1-5)
+
+17 findings total across M12.1-B/M12.2/M12.3/M12.4: **8 Fixed** (#1, #2, #5,
+#11-#15 — every behavior-changing fix has a regression test independently
+verified to fail against the pre-fix code via `git stash`), **4 Pass/
+verified-clean** (#6-#8, #10 — no action needed), **4 Accepted** (#3, #4, #9,
+#16 — confirmed real, low severity, rationale given), **1 Deferred** (#17,
+needs a schema migration — out of proportion for an ad hoc batch). No
+release-blocking or high-risk unresolved defect is known. Zero destructive
+actions taken; `main` untouched throughout — all work on
+`milestone/12-product-hardening`.
+
 ## Batch 1 — Diagnosis-evidence write atomicity
 
 Audit method: read `src/listentrace/infrastructure/db/connection.py` (plain

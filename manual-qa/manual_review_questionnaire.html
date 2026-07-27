@@ -175,7 +175,7 @@ details.instructions summary{cursor:pointer;font-weight:600;}
 const META = {
   project: "ListenTrace",
   schemaVersion: "1.0.0",
-  questionnaireVersion: "2026-07-27",
+  questionnaireVersion: "2026-07-27.1",
   storageKey: "listentrace_manual_qa_v1"
 };
 
@@ -316,7 +316,7 @@ const MODULES = [
   items:[
     {id:"m04-01", text:{zh:"点击“开始精听练习”，确认 Stage 1（整体理解）打开时字幕是隐藏的。", en:"Click Start Intensive Practice; confirm Stage 1 (global comprehension) opens with the transcript hidden."}, expected:{zh:"Stage 1 打开，字幕不可见。", en:"Stage 1 opens with the transcript not visible."}},
     {id:"m04-02", text:{zh:"回答 Stage 1 后进入 Stage 2，采集两个关键词并调整它们的顺序，再进入 Stage 3。", en:"Answer Stage 1, move to Stage 2, capture two keywords and reorder them, then move to Stage 3."}, expected:{zh:"进入 Stage 3 后，Stage 2 中关键词的顺序仍保持你调整后的结果。", en:"After moving to Stage 3, the keyword order from Stage 2 is preserved exactly as reordered."}},
-    {id:"m04-03", text:{zh:"进入 Stage 3（揭示字幕），尝试返回 Stage 1 修改已提交的答案。", en:"Enter Stage 3 (reveal transcript), then try going back to edit an already-submitted Stage 1 answer."}, expected:{zh:"Stage 1/2 变为只读锁定，无法再修改。", en:"Stages 1/2 become read-only/locked and can no longer be edited."}},
+    {id:"m04-03", text:{zh:"进入 Stage 3（揭示字幕），尝试返回 Stage 1 修改已提交的答案。", en:"Enter Stage 3 (reveal transcript), then try going back to edit an already-submitted Stage 1 answer."}, expected:{zh:"Stage 1/2 变为只读锁定，无法再修改；界面上应能看到一句说明只读原因的提示文字（M12.3 新增）。", en:"Stages 1/2 become read-only/locked and can no longer be edited; the UI should show a short hint explaining why (new in M12.3)."}},
     {id:"m04-04", text:{zh:"在 Stage 3 中，对一条已在独立字幕工作区标注过的 cue 记录诊断。", en:"In Stage 3, record a diagnosis on a cue that already has an annotation from the standalone Transcript Workspace."}, expected:{zh:"会话复用/关联到同一条已有标注，而不是盲目重复创建一条新标注。", en:"The session reuses/links to that same existing annotation rather than blindly creating a duplicate."}},
     {id:"m04-05", text:{zh:"在 Stage 4 为一条 cue 录制跟读音频，将另一条 cue 标记为跳过。", en:"In Stage 4, record a shadowing take for one cue and mark another cue as skipped."}, expected:{zh:"每条 cue 的“已练习/已跳过”状态被分别正确记录。", en:"Each cue's practiced/skipped state is tracked correctly and independently."}},
     {id:"m04-06", text:{zh:"完成 Stage 5 的无字幕总结。", en:"Complete Stage 5's transcript-free summary."}, expected:{zh:"Stage 5 期间字幕始终不显示。", en:"The transcript is never shown during Stage 5."}},
@@ -361,7 +361,8 @@ const MODULES = [
     {id:"m07-01", text:{zh:"用 Recommended Practice（默认 5 条）开始，即使素材上历史证据很少。", en:"Start via Recommended Practice with the default 5 cues, even on a material with little prior evidence."}, expected:{zh:"仍能自动选出 cue 并给出选择理由（安全的按素材顺序回退）。", en:"Cues are still auto-selected with a stated reason (safe material-order fallback)."}},
     {id:"m07-02", text:{zh:"用 Selected Cues 选择一个具体范围开始。", en:"Start via Selected Cues, choosing a specific range."}, expected:{zh:"练习严格按选中的 cue 和顺序进行。", en:"The run proceeds through exactly the chosen cues in the chosen order."}},
     {id:"m07-03", text:{zh:"完整走一遍 Listen→Recall→Reveal & Diagnose→Replay & Shadow，Recall 阶段选择“Missed”。", en:"Complete the full Listen -> Recall -> Reveal & Diagnose -> Replay & Shadow cycle, choosing \"Missed\" at Recall."}, expected:{zh:"结果被记录，并出现在最终的完成总结里。", en:"The result is recorded and appears in the completion summary."}},
-    {id:"m07-04", text:{zh:"完成至少一条 cue 后关闭本次运行。", en:"Close the run after completing at least one cue."}, expected:{zh:"出现确认提示，随后保存为只读的“已放弃”记录，保留已完成 cue 的证据。", en:"A confirmation prompt appears, then it saves as a read-only \"abandoned\" run preserving that cue's evidence."}},
+    {id:"m07-03b", text:{zh:"在 Reveal & Diagnose 阶段保存一条诊断后，选中它并点击删除。（M12.3 新增：此前删除无需确认，现应与其他删除操作一致弹出确认。）", en:"After saving a diagnosis at Reveal & Diagnose, select it and click delete. (New in M12.3: this previously deleted with no confirmation; it should now prompt like every other delete in the app.)"}, expected:{zh:"删除前出现确认对话框；确认后诊断被移除，取消则保留。", en:"A confirmation dialog appears before deletion; confirming removes it, cancelling keeps it."}},
+    {id:"m07-04", text:{zh:"完成至少一条 cue 后关闭本次运行。", en:"Close the run after completing at least one cue."}, expected:{zh:"出现确认提示（标题为“Abandon Quick Practice Run”），随后保存为只读的“已放弃”记录，保留已完成 cue 的证据。", en:"A confirmation prompt appears (titled \"Abandon Quick Practice Run\"), then it saves as a read-only \"abandoned\" run preserving that cue's evidence."}},
     {id:"m07-05", text:{zh:"开始新一轮练习，未完成任何 cue 就关闭。", en:"Start a new run and close it before completing any cue."}, expected:{zh:"这次运行在历史中不留任何痕迹。", en:"This run leaves no trace in history at all."}},
     {id:"m07-06", text:{zh:"在两次独立的 Quick Practice 运行中，把同一条 cue 都标记为 Missed。", en:"Mark the same cue as Missed in two separate Quick Practice runs."}, expected:{zh:"该 cue 在 Learning History 触发“Quick Practice 中重复 Missed”的 Needs Attention 原因。", en:"It triggers the \"repeated missed in Quick Practice\" Needs Attention reason in Learning History."}},
     {id:"m07-07", text:{zh:"查看某次运行的完成总结。", en:"View a run's completion summary."}, expected:{zh:"没有任何时间/发音/能力/难度得分，只有真实发生的计数。", en:"No time/pronunciation/ability/difficulty score of any kind — only counts of what actually happened."}}

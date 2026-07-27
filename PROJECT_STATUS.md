@@ -98,7 +98,7 @@ Phase B was a targeted technical pass against eleven specific failure categories
 
 ## Next Engineering Objective
 
-Plan and begin Milestone 12 — Product Hardening & Full Manual Acceptance's M12.1 System Audit and Defect Inventory (a product-wide audit through realistic GUI workflows, not only isolated service calls). Phase C2 and Phase D follow M12.
+An autonomous overnight agent pass (per the user's own authorized prompt) completed M12.1-B/M12.2/M12.3/M12.4 Batches 1-5 on branch `milestone/12-product-hardening` (5 commits on top of `main`'s `1285fcf`, all pushed to `origin`, `main` itself untouched) — see `HARDENING_BACKLOG.md` for the full, itemized finding list. Next: (1) the user's own Full Manual Acceptance pass against `manual-qa/manual_review_questionnaire.html` (questionnaire version `2026-07-27.1`) run against this branch's build, prioritizing Modules 04 and 07 where behavior changed tonight, plus every subjective/Module-14 item no agent can answer; (2) a scoped follow-up batch for the one deferred finding (`HARDENING_BACKLOG.md` #17, Learning History's "All Materials" full-table-scan, needs a schema migration); (3) only after both, consider merging `milestone/12-product-hardening` into `main` and proceeding to M12.5's exit stage, Phase C2, and Phase D. No release-blocking defect is currently known; no claim of Full Manual Acceptance, M12 completion, or Release Ready is made.
 
 ## Repository State
 
