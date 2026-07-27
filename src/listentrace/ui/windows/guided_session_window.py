@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QMessageBox,
     QPushButton,
+    QSplitter,
     QStackedWidget,
     QTextEdit,
     QVBoxLayout,
@@ -42,6 +43,7 @@ from listentrace.domain.services import session_rules as rules
 from listentrace.domain.services.text_range import whole_cue_range
 from listentrace.infrastructure.db.learning_repository import list_annotations_for_cue
 from listentrace.infrastructure.media.playback import PlaybackController
+from listentrace.ui import theme
 from listentrace.ui.annotation_highlighting import apply_range_highlighting
 from listentrace.ui.text_offset_conversion import (
     SurrogatePairOffsetError,
@@ -116,14 +118,15 @@ class GuidedSessionWindow(QMainWindow):
 
         header_row = QHBoxLayout()
         title_label = QLabel(self._material.title)
-        title_label.setStyleSheet("font-size: 16px; font-weight: bold;")
+        theme.apply_role(title_label, "title")
         header_row.addWidget(title_label)
         self._stage_progress_label = QLabel("")
+        theme.apply_role(self._stage_progress_label, "caption")
         header_row.addWidget(self._stage_progress_label, 1)
         layout.addLayout(header_row)
 
         self._status_label = QLabel("")
-        self._status_label.setStyleSheet("color: red;")
+        theme.apply_role(self._status_label, "error")
         self._status_label.setWordWrap(True)
         layout.addWidget(self._status_label)
 
@@ -167,9 +170,27 @@ class GuidedSessionWindow(QMainWindow):
         self._playback.set_volume(0.8)
         self._playback.load(self._material.media_path)
 
+        self._apply_presentation()
+
         initial_session = svc.get_session(self._connection, self._session_id)
         self._show_stage(initial_session.current_stage if initial_session is not None else self._current_stage)
         self._initialized = True
+
+    def _apply_presentation(self) -> None:
+        """Milestone 11 button-role assignment: `Save and Continue` is this
+        window's single primary action (the common forward step through
+        every stage); `Back`/`Skip Stage`/`Close and Resume Later` are
+        low-priority navigation; `Abandon Session` is destructive;
+        `Complete Session` is the positive completion action. Per-stage
+        action buttons (capture/diagnosis/shadowing) are assigned their own
+        roles where they are built, since they don't exist yet at this
+        point in `__init__`."""
+        theme.apply_role(self._back_button, "quiet")
+        theme.apply_role(self._skip_button, "quiet")
+        theme.apply_role(self._continue_button, "primary")
+        theme.apply_role(self._close_button, "quiet")
+        theme.apply_role(self._abandon_button, "danger")
+        theme.apply_role(self._complete_button, "success")
 
     # ---- read-only / status helpers ----
 
@@ -419,8 +440,7 @@ class GuidedSessionWindow(QMainWindow):
     # ---- Stage 1: Global Comprehension ----
 
     def _build_stage1_panel(self) -> QWidget:
-        panel = QWidget()
-        layout = QVBoxLayout(panel)
+        panel, layout = theme.make_card()
         layout.addWidget(
             QLabel(
                 "Listen without the transcript. Answer what you can — an empty answer is fine, "
@@ -460,8 +480,7 @@ class GuidedSessionWindow(QMainWindow):
     # ---- Stage 2: Keyword & Fragment Capture ----
 
     def _build_stage2_panel(self) -> QWidget:
-        panel = QWidget()
-        layout = QVBoxLayout(panel)
+        panel, layout = theme.make_card()
         layout.addWidget(
             QLabel(
                 "Capture any keywords, names, numbers, or fragments you catch — spelling doesn't "
@@ -476,6 +495,7 @@ class GuidedSessionWindow(QMainWindow):
         self._capture_text_edit = QLineEdit()
         self._capture_add_button = QPushButton("Add")
         self._capture_add_button.clicked.connect(self._on_add_capture_clicked)
+        theme.apply_role(self._capture_add_button, "secondary")
         add_row.addWidget(self._capture_type_combo)
         add_row.addWidget(self._capture_text_edit, 1)
         add_row.addWidget(self._capture_add_button)
@@ -489,15 +509,19 @@ class GuidedSessionWindow(QMainWindow):
         self._capture_update_button = QPushButton("Update Selected")
         self._capture_update_button.clicked.connect(self._on_update_capture_clicked)
         self._capture_update_button.setEnabled(False)
+        theme.apply_role(self._capture_update_button, "secondary")
         self._capture_delete_button = QPushButton("Delete Selected")
         self._capture_delete_button.clicked.connect(self._on_delete_capture_clicked)
         self._capture_delete_button.setEnabled(False)
+        theme.apply_role(self._capture_delete_button, "danger")
         self._capture_move_up_button = QPushButton("Move Up")
         self._capture_move_up_button.clicked.connect(self._on_move_capture_up_clicked)
         self._capture_move_up_button.setEnabled(False)
+        theme.apply_role(self._capture_move_up_button, "quiet")
         self._capture_move_down_button = QPushButton("Move Down")
         self._capture_move_down_button.clicked.connect(self._on_move_capture_down_clicked)
         self._capture_move_down_button.setEnabled(False)
+        theme.apply_role(self._capture_move_down_button, "quiet")
         for button in (
             self._capture_update_button,
             self._capture_delete_button,
@@ -621,30 +645,37 @@ class GuidedSessionWindow(QMainWindow):
     # ---- Stage 3: Transcript Comparison & Error Diagnosis ----
 
     def _build_stage3_panel(self) -> QWidget:
-        panel = QWidget()
-        layout = QHBoxLayout(panel)
-
-        left_column = QVBoxLayout()
+        # Milestone 11: the cue list and the diagnosis workspace are two
+        # card-framed panels in a resizable QSplitter, mirroring
+        # PlayerWindow's workspace-panel treatment (see player_window.py's
+        # _build_workspace_panel) rather than a fixed 1:1 QHBoxLayout.
+        left_frame, left_column = theme.make_card()
         left_column.addWidget(QLabel("Cues:"))
         self._diagnosis_cue_list = QListWidget()
+        # Milestone 11: wrap long cue text instead of growing an unnecessary
+        # horizontal scrollbar, matching PlayerWindow's cue list treatment.
+        self._diagnosis_cue_list.setWordWrap(True)
+        self._diagnosis_cue_list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self._diagnosis_cue_list.currentItemChanged.connect(self._on_diagnosis_cue_selected)
         left_column.addWidget(self._diagnosis_cue_list, 1)
 
         transport_row = QHBoxLayout()
         self._diagnosis_play_button = QPushButton("Play")
         self._diagnosis_play_button.clicked.connect(self._on_diagnosis_play_clicked)
+        theme.apply_role(self._diagnosis_play_button, "secondary")
         self._diagnosis_replay_button = QPushButton("Replay Cue")
         self._diagnosis_replay_button.clicked.connect(self._on_diagnosis_replay_clicked)
+        theme.apply_role(self._diagnosis_replay_button, "secondary")
         self._diagnosis_loop_button = QPushButton("Loop Cue")
         self._diagnosis_loop_button.clicked.connect(self._on_diagnosis_loop_clicked)
+        theme.apply_role(self._diagnosis_loop_button, "secondary")
         self._diagnosis_time_label = QLabel("00:00 / 00:00")
         for button in (self._diagnosis_play_button, self._diagnosis_replay_button, self._diagnosis_loop_button):
             transport_row.addWidget(button)
         transport_row.addWidget(self._diagnosis_time_label)
         left_column.addLayout(transport_row)
-        layout.addLayout(left_column, 1)
 
-        right_column = QVBoxLayout()
+        right_frame, right_column = theme.make_card()
         right_column.addWidget(QLabel("Transcript (select text to diagnose):"))
         self._diagnosis_transcript_view = QTextEdit()
         self._diagnosis_transcript_view.setReadOnly(True)
@@ -676,11 +707,14 @@ class GuidedSessionWindow(QMainWindow):
         diag_buttons_row = QHBoxLayout()
         self._save_diagnosis_button = QPushButton("Save Diagnosis")
         self._save_diagnosis_button.clicked.connect(self._on_save_diagnosis_clicked)
+        theme.apply_role(self._save_diagnosis_button, "secondary")
         self._delete_diagnosis_button = QPushButton("Delete")
         self._delete_diagnosis_button.clicked.connect(self._on_delete_diagnosis_clicked)
         self._delete_diagnosis_button.setEnabled(False)
+        theme.apply_role(self._delete_diagnosis_button, "danger")
         self._no_difficulty_button = QPushButton("No Notable Difficulty")
         self._no_difficulty_button.clicked.connect(self._on_no_difficulty_clicked)
+        theme.apply_role(self._no_difficulty_button, "secondary")
         diag_buttons_row.addWidget(self._save_diagnosis_button)
         diag_buttons_row.addWidget(self._delete_diagnosis_button)
         diag_buttons_row.addWidget(self._no_difficulty_button)
@@ -697,8 +731,12 @@ class GuidedSessionWindow(QMainWindow):
         self._diagnosis_reference_list.setMaximumHeight(80)
         right_column.addWidget(self._diagnosis_reference_list)
 
-        layout.addLayout(right_column, 1)
-        return panel
+        splitter = QSplitter(Qt.Orientation.Horizontal)
+        splitter.setChildrenCollapsible(False)
+        splitter.addWidget(left_frame)
+        splitter.addWidget(right_frame)
+        splitter.setSizes([400, 500])
+        return splitter
 
     def _populate_stage3(self, state: PracticeSessionState) -> None:
         revealed = state.session.transcript_revealed_at is not None
@@ -913,31 +951,35 @@ class GuidedSessionWindow(QMainWindow):
     # ---- Stage 4: Sentence-Level Shadowing ----
 
     def _build_stage4_panel(self) -> QWidget:
-        panel = QWidget()
-        layout = QVBoxLayout(panel)
+        panel, layout = theme.make_card()
         layout.addWidget(
             QLabel("Shadow each cue: listen, then repeat aloud. Mark it practiced when you're satisfied, or skip it.")
         )
 
         self._shadowing_progress_label = QLabel("")
+        theme.apply_role(self._shadowing_progress_label, "caption")
         layout.addWidget(self._shadowing_progress_label)
 
         self._shadowing_cue_label = QLabel("")
         self._shadowing_cue_label.setWordWrap(True)
-        self._shadowing_cue_label.setStyleSheet("font-size: 14px;")
         layout.addWidget(self._shadowing_cue_label)
 
         transport_row = QHBoxLayout()
         self._shadowing_previous_button = QPushButton("Previous Cue")
         self._shadowing_previous_button.clicked.connect(self._on_shadowing_previous_clicked)
+        theme.apply_role(self._shadowing_previous_button, "secondary")
         self._shadowing_next_button = QPushButton("Next Cue")
         self._shadowing_next_button.clicked.connect(self._on_shadowing_next_clicked)
+        theme.apply_role(self._shadowing_next_button, "secondary")
         self._shadowing_play_button = QPushButton("Play")
         self._shadowing_play_button.clicked.connect(self._on_shadowing_play_clicked)
+        theme.apply_role(self._shadowing_play_button, "secondary")
         self._shadowing_replay_button = QPushButton("Replay Cue")
         self._shadowing_replay_button.clicked.connect(self._on_shadowing_replay_clicked)
+        theme.apply_role(self._shadowing_replay_button, "secondary")
         self._shadowing_loop_button = QPushButton("Loop Cue")
         self._shadowing_loop_button.clicked.connect(self._on_shadowing_loop_clicked)
+        theme.apply_role(self._shadowing_loop_button, "secondary")
         self._shadowing_time_label = QLabel("00:00 / 00:00")
         for button in (
             self._shadowing_previous_button,
@@ -953,10 +995,13 @@ class GuidedSessionWindow(QMainWindow):
         action_row = QHBoxLayout()
         self._mark_practiced_button = QPushButton("Mark Practiced")
         self._mark_practiced_button.clicked.connect(self._on_mark_practiced_clicked)
+        theme.apply_role(self._mark_practiced_button, "secondary")
         self._skip_cue_button = QPushButton("Skip Cue")
         self._skip_cue_button.clicked.connect(self._on_skip_shadowing_cue_clicked)
+        theme.apply_role(self._skip_cue_button, "quiet")
         self._skip_remaining_button = QPushButton("Skip Remaining Cues")
         self._skip_remaining_button.clicked.connect(self._on_skip_remaining_shadowing_clicked)
+        theme.apply_role(self._skip_remaining_button, "quiet")
         action_row.addWidget(self._mark_practiced_button)
         action_row.addWidget(self._skip_cue_button)
         action_row.addWidget(self._skip_remaining_button)
@@ -1126,8 +1171,7 @@ class GuidedSessionWindow(QMainWindow):
     # ---- Stage 5: Final Recall ----
 
     def _build_stage5_panel(self) -> QWidget:
-        panel = QWidget()
-        layout = QVBoxLayout(panel)
+        panel, layout = theme.make_card()
         layout.addWidget(
             QLabel("Transcript hidden. Summarize the material in two or three sentences in the target language.")
         )
