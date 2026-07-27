@@ -240,7 +240,7 @@ def _reveal_transcript_and_lock_prior_stages(
             can_complete = rules.stage2_can_complete(len(repo.list_keyword_captures(conn, session_id)))
 
         if can_complete:
-            repo.set_stage_status(conn, session_id, stage_key, StageStatus.COMPLETED.value)
+            repo.set_stage_status(conn, session_id, stage_key, StageStatus.COMPLETED.value, commit=False)
         else:
             repo.set_stage_status(
                 conn,
@@ -248,9 +248,10 @@ def _reveal_transcript_and_lock_prior_stages(
                 stage_key,
                 StageStatus.SKIPPED.value,
                 skip_note="Auto-skipped: no evidence entered before transcript reveal.",
+                commit=False,
             )
 
-    repo.set_transcript_revealed(conn, session_id)
+    repo.set_transcript_revealed(conn, session_id, commit=False)
 
 
 def enter_stage(conn: sqlite3.Connection, session_id: int, stage_key: str) -> None:
@@ -261,16 +262,25 @@ def enter_stage(conn: sqlite3.Connection, session_id: int, stage_key: str) -> No
     session = _require_active_session(conn, session_id)
     _require_stage_key(stage_key)
 
-    repo.set_current_stage(conn, session_id, stage_key)
+    # current_stage, the not_started->in_progress transition, and (for Stage 3) the
+    # transcript-reveal/prior-stage-lock sequence must land together: a crash between
+    # them could otherwise advance current_stage without the stage-progress rows (or
+    # transcript_revealed_at) actually reflecting it.
+    try:
+        repo.set_current_stage(conn, session_id, stage_key, commit=False)
 
-    progress = repo.get_stage_progress(conn, session_id, stage_key)
-    if progress is not None and progress.status == StageStatus.NOT_STARTED.value:
-        repo.set_stage_status(conn, session_id, stage_key, StageStatus.IN_PROGRESS.value)
+        progress = repo.get_stage_progress(conn, session_id, stage_key)
+        if progress is not None and progress.status == StageStatus.NOT_STARTED.value:
+            repo.set_stage_status(conn, session_id, stage_key, StageStatus.IN_PROGRESS.value, commit=False)
 
-    if stage_key == StageKey.TRANSCRIPT_DIAGNOSIS.value:
-        _reveal_transcript_and_lock_prior_stages(conn, session, session_id)
-    elif stage_key == StageKey.SHADOWING.value:
-        _ensure_shadowing_initialized(conn, session_id, session.material_id)
+        if stage_key == StageKey.TRANSCRIPT_DIAGNOSIS.value:
+            _reveal_transcript_and_lock_prior_stages(conn, session, session_id)
+        elif stage_key == StageKey.SHADOWING.value:
+            _ensure_shadowing_initialized(conn, session_id, session.material_id)
+    except Exception:
+        conn.rollback()
+        raise
+    conn.commit()
 
 
 def skip_stage(conn: sqlite3.Connection, session_id: int, stage_key: str, skip_note: str | None = None) -> None:

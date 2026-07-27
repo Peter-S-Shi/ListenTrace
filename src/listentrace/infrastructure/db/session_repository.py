@@ -160,15 +160,18 @@ def touch_session_resumed(conn: sqlite3.Connection, session_id: int) -> None:
     conn.commit()
 
 
-def set_current_stage(conn: sqlite3.Connection, session_id: int, stage_key: str) -> None:
+def set_current_stage(
+    conn: sqlite3.Connection, session_id: int, stage_key: str, commit: bool = True
+) -> None:
     conn.execute(
         "UPDATE practice_session SET current_stage = ?, updated_at = datetime('now') WHERE id = ?",
         (stage_key, session_id),
     )
-    conn.commit()
+    if commit:
+        conn.commit()
 
 
-def set_transcript_revealed(conn: sqlite3.Connection, session_id: int) -> None:
+def set_transcript_revealed(conn: sqlite3.Connection, session_id: int, commit: bool = True) -> None:
     """Idempotent: only the first call actually sets the timestamp."""
     conn.execute(
         "UPDATE practice_session SET "
@@ -176,7 +179,8 @@ def set_transcript_revealed(conn: sqlite3.Connection, session_id: int) -> None:
         "updated_at = datetime('now') WHERE id = ?",
         (session_id,),
     )
-    conn.commit()
+    if commit:
+        conn.commit()
 
 
 # ---- session_stage_progress ----
@@ -207,6 +211,7 @@ def set_stage_status(
     stage_key: str,
     status: str,
     skip_note: str | None = None,
+    commit: bool = True,
 ) -> None:
     timestamp_column = {"in_progress": "started_at", "completed": "completed_at", "skipped": "skipped_at"}.get(
         status
@@ -232,7 +237,8 @@ def set_stage_status(
             "WHERE practice_session_id = ? AND stage_key = ?",
             (status, session_id, stage_key),
         )
-    conn.commit()
+    if commit:
+        conn.commit()
 
 
 def set_stage_outcome(

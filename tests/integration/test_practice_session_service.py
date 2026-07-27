@@ -512,6 +512,35 @@ def test_record_session_diagnosis_is_atomic_across_annotation_and_evidence(conn,
     assert len(list_annotations_for_cue(conn, cues[0].id)) == 1
 
 
+def test_enter_stage3_is_atomic_across_current_stage_and_transcript_reveal(conn, monkeypatch):
+    """M12.2 regression: a failure partway through entering Stage 3 (advancing
+    current_stage, auto-resolving Stages 1/2, revealing the transcript) must leave the
+    session exactly as it was before the attempt, not a mix of old and new state."""
+    material_id, _ = _make_material_with_cues(conn)
+    session = svc.start_session(conn, material_id)
+
+    def _boom(*args, **kwargs):
+        raise RuntimeError("simulated crash during transcript reveal")
+
+    monkeypatch.setattr(repo, "set_transcript_revealed", _boom)
+    with pytest.raises(RuntimeError):
+        svc.enter_stage(conn, session.id, "transcript_diagnosis")
+
+    state = svc.load_session_state(conn, session.id)
+    assert state.session.current_stage == "global_comprehension"
+    assert state.session.transcript_revealed_at is None
+    assert state.stage_progress["global_comprehension"].status == "not_started"
+    assert state.stage_progress["keyword_capture"].status == "not_started"
+
+    monkeypatch.undo()
+    svc.enter_stage(conn, session.id, "transcript_diagnosis")
+    state = svc.load_session_state(conn, session.id)
+    assert state.session.current_stage == "transcript_diagnosis"
+    assert state.session.transcript_revealed_at is not None
+    assert state.stage_progress["global_comprehension"].status == "skipped"
+    assert state.stage_progress["keyword_capture"].status == "skipped"
+
+
 # ---- shadowing ----
 
 
