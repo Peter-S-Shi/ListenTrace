@@ -657,6 +657,114 @@ def test_recording_panel_can_delete_a_take_immediately_after_playing_it(qapp, tm
     panel.close()
 
 
+def _fake_device() -> "AudioInputDevice":
+    from listentrace.infrastructure.media.recording import AudioInputDevice
+
+    return AudioInputDevice(device_id="fake-device-1", description="Fake Test Microphone", is_default=True)
+
+
+def test_recording_panel_set_context_enables_start_recording_once_device_and_cue_are_set(qapp, tmp_path, monkeypatch):
+    """Regression test: set_context() used to only call _refresh_takes(), never
+    _update_recording_buttons() -- so Start Recording stayed stuck disabled
+    (computed once at construction time, before any cue existed) even after a
+    real context with a device and a cue was set. GuidedSessionWindow and
+    QuickPracticeWindow masked this because they always call set_read_only()
+    right after set_context(), which happens to refresh the buttons as a side
+    effect; ShadowingPracticeWindow never calls set_read_only() at all, so the
+    bug was fully exposed there."""
+    connection = open_connection(tmp_path / "smoke.db")
+    migrate(connection)
+    result = _import_shadowing_lesson(connection, tmp_path)
+
+    from listentrace.application.services import recording_service
+    from listentrace.infrastructure.db.repository import get_cues_for_track, get_subtitle_track_for_material
+    from listentrace.ui.widgets.recording_panel import RecordingPanel
+
+    monkeypatch.setattr(recording_service, "list_audio_input_devices", lambda: [_fake_device()])
+
+    track = get_subtitle_track_for_material(connection, result.material_id)
+    first_cue = get_cues_for_track(connection, track.id)[0]
+
+    panel = RecordingPanel(connection, tmp_path / "recordings")
+    # At construction time no cue is set yet -- Start Recording is correctly
+    # disabled even though a device was auto-selected.
+    assert panel._start_recording_button.isEnabled() is False
+
+    panel.set_context(result.material_id, first_cue.id, None)
+
+    assert panel._start_recording_button.isEnabled() is True
+    panel.close()
+
+
+def test_recording_panel_set_context_keeps_start_recording_disabled_without_a_device(qapp, tmp_path, monkeypatch):
+    connection = open_connection(tmp_path / "smoke.db")
+    migrate(connection)
+    result = _import_shadowing_lesson(connection, tmp_path)
+
+    from listentrace.application.services import recording_service
+    from listentrace.infrastructure.db.repository import get_cues_for_track, get_subtitle_track_for_material
+    from listentrace.ui.widgets.recording_panel import RecordingPanel
+
+    monkeypatch.setattr(recording_service, "list_audio_input_devices", lambda: [])
+
+    track = get_subtitle_track_for_material(connection, result.material_id)
+    first_cue = get_cues_for_track(connection, track.id)[0]
+
+    panel = RecordingPanel(connection, tmp_path / "recordings")
+    panel.set_context(result.material_id, first_cue.id, None)
+
+    assert panel._device_status_label.text() == "No microphone was found on this system."
+    assert panel._start_recording_button.isEnabled() is False
+    panel.close()
+
+
+def test_recording_panel_set_context_respects_read_only(qapp, tmp_path, monkeypatch):
+    connection = open_connection(tmp_path / "smoke.db")
+    migrate(connection)
+    result = _import_shadowing_lesson(connection, tmp_path)
+
+    from listentrace.application.services import recording_service
+    from listentrace.infrastructure.db.repository import get_cues_for_track, get_subtitle_track_for_material
+    from listentrace.ui.widgets.recording_panel import RecordingPanel
+
+    monkeypatch.setattr(recording_service, "list_audio_input_devices", lambda: [_fake_device()])
+
+    track = get_subtitle_track_for_material(connection, result.material_id)
+    first_cue = get_cues_for_track(connection, track.id)[0]
+
+    panel = RecordingPanel(connection, tmp_path / "recordings")
+    panel.set_read_only(True)
+
+    panel.set_context(result.material_id, first_cue.id, None)
+
+    assert panel._start_recording_button.isEnabled() is False
+    panel.close()
+
+
+def test_recording_panel_set_context_refreshes_buttons_on_cue_switch(qapp, tmp_path, monkeypatch):
+    connection = open_connection(tmp_path / "smoke.db")
+    migrate(connection)
+    result = _import_shadowing_lesson(connection, tmp_path)
+
+    from listentrace.application.services import recording_service
+    from listentrace.infrastructure.db.repository import get_cues_for_track, get_subtitle_track_for_material
+    from listentrace.ui.widgets.recording_panel import RecordingPanel
+
+    monkeypatch.setattr(recording_service, "list_audio_input_devices", lambda: [_fake_device()])
+
+    track = get_subtitle_track_for_material(connection, result.material_id)
+    cues = get_cues_for_track(connection, track.id)
+    assert len(cues) >= 2
+
+    panel = RecordingPanel(connection, tmp_path / "recordings")
+    panel.set_context(result.material_id, cues[0].id, None)
+    assert panel._start_recording_button.isEnabled() is True
+
+    panel.set_context(result.material_id, cues[1].id, None)
+    assert panel._start_recording_button.isEnabled() is True
+    panel.close()
+
+
 def test_guided_session_stage4_recording_panel_syncs_to_current_shadowing_cue(qapp, tmp_path):
     connection = open_connection(tmp_path / "smoke.db")
     migrate(connection)
