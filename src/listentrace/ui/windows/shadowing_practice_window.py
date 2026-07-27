@@ -17,6 +17,7 @@ from listentrace.application.dto.player_load import PlayerLoadResult
 from listentrace.application.services import recording_service
 from listentrace.application.services.player_session import PlayerSession
 from listentrace.infrastructure.media.playback import PlaybackController
+from listentrace.ui import theme
 from listentrace.ui.widgets.recording_panel import RecordingPanel
 from listentrace.ui.windows.player_window import _format_time
 
@@ -62,33 +63,39 @@ class ShadowingPracticeWindow(QMainWindow):
 
         header_row = QHBoxLayout()
         title_label = QLabel(self._material.title)
-        title_label.setStyleSheet("font-size: 16px; font-weight: bold;")
+        theme.apply_role(title_label, "title")
         header_row.addWidget(title_label)
         self._progress_label = QLabel("")
+        theme.apply_role(self._progress_label, "caption")
         header_row.addWidget(self._progress_label, 1)
         layout.addLayout(header_row)
 
         self._status_label = QLabel("")
-        self._status_label.setStyleSheet("color: red;")
+        theme.apply_role(self._status_label, "error")
         self._status_label.setWordWrap(True)
         layout.addWidget(self._status_label)
 
+        practice_card, practice_column = theme.make_card()
         self._cue_label = QLabel("")
         self._cue_label.setWordWrap(True)
-        self._cue_label.setStyleSheet("font-size: 14px;")
-        layout.addWidget(self._cue_label)
+        practice_column.addWidget(self._cue_label)
 
         transport_row = QHBoxLayout()
         self._previous_button = QPushButton("Previous Cue")
         self._previous_button.clicked.connect(self._on_previous_clicked)
+        theme.apply_role(self._previous_button, "secondary")
         self._next_button = QPushButton("Next Cue")
         self._next_button.clicked.connect(self._on_next_clicked)
+        theme.apply_role(self._next_button, "secondary")
         self._play_button = QPushButton("Play")
         self._play_button.clicked.connect(self._on_play_clicked)
+        theme.apply_role(self._play_button, "secondary")
         self._replay_button = QPushButton("Replay Cue")
         self._replay_button.clicked.connect(self._on_replay_clicked)
+        theme.apply_role(self._replay_button, "secondary")
         self._loop_button = QPushButton("Loop Cue")
         self._loop_button.clicked.connect(self._on_loop_clicked)
+        theme.apply_role(self._loop_button, "secondary")
         self._time_label = QLabel("00:00 / 00:00")
         for widget in (
             self._previous_button,
@@ -99,17 +106,20 @@ class ShadowingPracticeWindow(QMainWindow):
         ):
             transport_row.addWidget(widget)
         transport_row.addWidget(self._time_label)
-        layout.addLayout(transport_row)
+        practice_column.addLayout(transport_row)
 
         self._recording_panel = RecordingPanel(connection, recordings_dir, self)
         self._recording_panel.request_play_source.connect(self._on_recording_panel_request_play_source)
-        layout.addWidget(self._recording_panel, 1)
+        practice_column.addWidget(self._recording_panel, 1)
+        layout.addWidget(practice_card, 1)
 
         bottom_row = QHBoxLayout()
         self._delete_material_recordings_button = QPushButton("Delete All Recordings for This Material")
         self._delete_material_recordings_button.clicked.connect(self._on_delete_material_recordings_clicked)
+        theme.apply_role(self._delete_material_recordings_button, "danger")
         self._close_button = QPushButton("Close")
         self._close_button.clicked.connect(self.close)
+        theme.apply_role(self._close_button, "quiet")
         bottom_row.addWidget(self._delete_material_recordings_button)
         bottom_row.addWidget(self._close_button)
         layout.addLayout(bottom_row)

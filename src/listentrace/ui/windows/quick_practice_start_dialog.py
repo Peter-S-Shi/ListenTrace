@@ -22,6 +22,7 @@ from listentrace.application.errors import QuickPracticeValidationError
 from listentrace.application.services import quick_practice_service as svc
 from listentrace.domain.models.subtitle import SubtitleCue
 from listentrace.domain.services import quick_practice_rules as rules
+from listentrace.ui import theme
 from listentrace.ui.windows.player_window import _format_time
 
 _REASON_LABELS: dict[str, str] = {
@@ -84,18 +85,22 @@ class QuickPracticeStartDialog(QDialog):
         recommended_row.addWidget(self._count_combo)
         layout.addLayout(recommended_row)
 
-        layout.addWidget(QLabel("Preview (transparent reasons — never a hidden score):"))
+        preview_card, preview_column = theme.make_card("Preview (transparent reasons — never a hidden score)")
         self._recommended_preview = QListWidget()
-        layout.addWidget(self._recommended_preview, 1)
+        theme.configure_long_text_list(self._recommended_preview)
+        preview_column.addWidget(self._recommended_preview, 1)
+        layout.addWidget(preview_card, 1)
 
-        layout.addWidget(QLabel("Cues (select one, a range, or several — order picked is preserved):"))
+        cues_card, cues_column = theme.make_card("Cues (select one, a range, or several — order picked is preserved)")
         self._cue_list = QListWidget()
+        theme.configure_long_text_list(self._cue_list)
         self._cue_list.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         for cue in cues:
             item = QListWidgetItem(_cue_label(cue))
             item.setData(Qt.ItemDataRole.UserRole, cue.id)
             self._cue_list.addItem(item)
-        layout.addWidget(self._cue_list, 1)
+        cues_column.addWidget(self._cue_list, 1)
+        layout.addWidget(cues_card, 1)
 
         if initial_selected_cue_ids:
             self._selected_radio.setChecked(True)
@@ -108,15 +113,17 @@ class QuickPracticeStartDialog(QDialog):
             self._recommended_radio.setChecked(True)
 
         self._status_label = QLabel("")
-        self._status_label.setStyleSheet("color: red;")
+        theme.apply_role(self._status_label, "error")
         self._status_label.setWordWrap(True)
         layout.addWidget(self._status_label)
 
         button_row = QHBoxLayout()
         self._start_button = QPushButton("Start Quick Practice")
         self._start_button.clicked.connect(self._on_start_clicked)
+        theme.apply_role(self._start_button, "primary")
         cancel_button = QPushButton("Cancel")
         cancel_button.clicked.connect(self.reject)
+        theme.apply_role(cancel_button, "quiet")
         button_row.addWidget(self._start_button)
         button_row.addWidget(cancel_button)
         layout.addLayout(button_row)

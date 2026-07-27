@@ -23,6 +23,7 @@ from listentrace.domain.models.recording import Recording
 from listentrace.domain.services.comparison_sequence import COMPARISON_PAUSE_MS, ComparisonSequencer, ComparisonStep
 from listentrace.infrastructure.media.playback import PlaybackController
 from listentrace.infrastructure.media.recording import AudioInputDevice, RecordingController
+from listentrace.ui import theme
 
 
 class RecordingPanel(QWidget):
@@ -84,37 +85,52 @@ class RecordingPanel(QWidget):
         device_row.addWidget(self._device_combo, 1)
         self._refresh_devices_button = QPushButton("Refresh")
         self._refresh_devices_button.clicked.connect(self.refresh_devices)
+        theme.apply_role(self._refresh_devices_button, "quiet")
         device_row.addWidget(self._refresh_devices_button)
         layout.addLayout(device_row)
 
         self._device_status_label = QLabel("")
-        self._device_status_label.setStyleSheet("color: red;")
+        theme.apply_role(self._device_status_label, "error")
         self._device_status_label.setWordWrap(True)
         layout.addWidget(self._device_status_label)
 
         record_row = QHBoxLayout()
         self._start_recording_button = QPushButton("Start Recording")
         self._start_recording_button.clicked.connect(self._on_start_recording_clicked)
+        theme.apply_role(self._start_recording_button, "secondary")
         self._stop_recording_button = QPushButton("Stop Recording")
         self._stop_recording_button.clicked.connect(self._on_stop_recording_clicked)
+        theme.apply_role(self._stop_recording_button, "secondary")
         record_row.addWidget(self._start_recording_button)
         record_row.addWidget(self._stop_recording_button)
         layout.addLayout(record_row)
 
+        # Milestone 11: an explicit text state (never color alone) for
+        # whether a capture is currently in progress -- distinct from the
+        # per-take "ready"/"failed" labels in the takes list below.
+        self._recording_state_label = QLabel("")
+        theme.apply_role(self._recording_state_label, "caption")
+        layout.addWidget(self._recording_state_label)
+
         layout.addWidget(QLabel("Takes for this cue:"))
         self._takes_list = QListWidget()
+        theme.configure_long_text_list(self._takes_list)
         self._takes_list.currentItemChanged.connect(lambda *_: self._update_take_buttons())
         layout.addWidget(self._takes_list)
 
         take_row = QHBoxLayout()
         self._play_take_button = QPushButton("Play Take")
         self._play_take_button.clicked.connect(self._on_play_take_clicked)
+        theme.apply_role(self._play_take_button, "secondary")
         self._compare_button = QPushButton("Compare (Source, then Take)")
         self._compare_button.clicked.connect(self._on_compare_clicked)
+        theme.apply_role(self._compare_button, "secondary")
         self._delete_take_button = QPushButton("Delete Take")
         self._delete_take_button.clicked.connect(self._on_delete_take_clicked)
+        theme.apply_role(self._delete_take_button, "danger")
         self._delete_cue_takes_button = QPushButton("Delete All Takes for This Cue")
         self._delete_cue_takes_button.clicked.connect(self._on_delete_all_takes_for_cue_clicked)
+        theme.apply_role(self._delete_cue_takes_button, "danger")
         for button in (
             self._play_take_button,
             self._compare_button,
@@ -322,6 +338,12 @@ class RecordingPanel(QWidget):
         )
         self._stop_recording_button.setEnabled(recording_in_progress and self._pending_action != "finish")
         self._device_combo.setEnabled(not recording_in_progress)
+        if recording_in_progress and self._pending_action == "finish":
+            self._recording_state_label.setText("Stopping…")
+        elif recording_in_progress:
+            self._recording_state_label.setText("Recording in progress…")
+        else:
+            self._recording_state_label.setText("")
 
     # ---- takes ----
 

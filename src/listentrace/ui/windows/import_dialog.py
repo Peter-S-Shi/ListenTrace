@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
 from listentrace.application.dto.import_results import ImportNeedsConfirmation, ImportSuccess
 from listentrace.application.errors import MaterialValidationError
 from listentrace.application.services.material_import_service import import_material
+from listentrace.ui import theme
 
 
 class ImportDialog(QDialog):
@@ -30,11 +31,13 @@ class ImportDialog(QDialog):
 
         layout = QVBoxLayout(self)
 
+        form_card, form_column = theme.make_card()
+
         self._media_edit = QLineEdit()
-        layout.addLayout(self._path_row("Media file:", self._media_edit, self._browse_media))
+        form_column.addLayout(self._path_row("Media file:", self._media_edit, self._browse_media))
 
         self._subtitle_edit = QLineEdit()
-        layout.addLayout(
+        form_column.addLayout(
             self._path_row("Subtitle file (SRT/WebVTT):", self._subtitle_edit, self._browse_subtitle)
         )
 
@@ -42,24 +45,27 @@ class ImportDialog(QDialog):
         title_row = QHBoxLayout()
         title_row.addWidget(QLabel("Title:"))
         title_row.addWidget(self._title_edit)
-        layout.addLayout(title_row)
+        form_column.addLayout(title_row)
 
         self._language_edit = QLineEdit()
         language_row = QHBoxLayout()
         language_row.addWidget(QLabel("Language (optional):"))
         language_row.addWidget(self._language_edit)
-        layout.addLayout(language_row)
+        form_column.addLayout(language_row)
+        layout.addWidget(form_card)
 
         self._error_label = QLabel("")
-        self._error_label.setStyleSheet("color: red;")
+        theme.apply_role(self._error_label, "error")
         self._error_label.setWordWrap(True)
         layout.addWidget(self._error_label)
 
         button_row = QHBoxLayout()
         import_button = QPushButton("Import")
         import_button.clicked.connect(self._on_import_clicked)
+        theme.apply_role(import_button, "primary")
         cancel_button = QPushButton("Cancel")
         cancel_button.clicked.connect(self.reject)
+        theme.apply_role(cancel_button, "quiet")
         button_row.addWidget(import_button)
         button_row.addWidget(cancel_button)
         layout.addLayout(button_row)
@@ -70,6 +76,7 @@ class ImportDialog(QDialog):
         row.addWidget(line_edit)
         browse_button = QPushButton("Browse...")
         browse_button.clicked.connect(on_browse)
+        theme.apply_role(browse_button, "secondary")
         row.addWidget(browse_button)
         return row
 
@@ -106,11 +113,15 @@ class ImportDialog(QDialog):
             return
 
         if isinstance(result, ImportNeedsConfirmation):
+            # Milestone 11: show only the bare filename of the existing
+            # material's media, not its full absolute path -- same
+            # elision pattern as MainWindow's/ExportDialog's Batch 0/3 fixes.
+            existing_name = Path(result.existing_media_path).name
             answer = QMessageBox.question(
                 self,
                 "Possible Duplicate",
                 f"A file with the same content was already imported as "
-                f"'{result.existing_media_path}'.\n\nContinue importing this as a new material?",
+                f"'{existing_name}'.\n\nContinue importing this as a new material?",
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             )
             if answer != QMessageBox.StandardButton.Yes:

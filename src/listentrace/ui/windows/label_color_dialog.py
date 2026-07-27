@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
 from listentrace.application.errors import AnnotationValidationError
 from listentrace.application.services import label_preference_service
 from listentrace.domain.enums.annotation_label import AnnotationLabel
+from listentrace.ui import theme
 
 
 class LabelColorDialog(QDialog):
@@ -43,6 +44,7 @@ class LabelColorDialog(QDialog):
 
         close_button = QPushButton("Close")
         close_button.clicked.connect(self.accept)
+        theme.apply_role(close_button, "secondary")
         layout.addWidget(close_button)
 
     def _pick_color(self, label_key: str, button: QPushButton) -> None:
