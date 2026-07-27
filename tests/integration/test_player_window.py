@@ -54,6 +54,33 @@ def test_is_text_entry_widget_helper(qapp):
     assert _is_text_entry_widget(None) is False
 
 
+def test_player_window_initial_cue_index_selects_cue_without_crashing(qapp, conn, tmp_path):
+    wav_path = tmp_path / "lesson.wav"
+    _make_wav(wav_path)
+
+    window = PlayerWindow(_two_cue_result(wav_path), conn, initial_cue_index=1)
+
+    assert window._cue_list.currentRow() == 1
+    assert window._editing_cue_index == 1
+    assert window._save_annotation_button.isEnabled() is True
+    assert window._save_note_button.isEnabled() is True
+
+    window.close()
+
+
+def test_player_window_out_of_range_initial_cue_index_is_ignored(qapp, conn, tmp_path):
+    wav_path = tmp_path / "lesson.wav"
+    _make_wav(wav_path)
+
+    window = PlayerWindow(_two_cue_result(wav_path), conn, initial_cue_index=99)
+
+    assert window._cue_list.currentRow() == -1
+    assert window._editing_cue_index is None
+    assert window._save_annotation_button.isEnabled() is False
+
+    window.close()
+
+
 def test_player_window_audio_mode_does_not_autoplay(qapp, conn, tmp_path):
     wav_path = tmp_path / "lesson.wav"
     _make_wav(wav_path)
