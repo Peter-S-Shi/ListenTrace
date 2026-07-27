@@ -367,6 +367,14 @@ QPushButton[role="success"]:disabled {{
     color: {css('disabled_text')};
 }}
 
+/* Milestone 11 Closeout: a visible keyboard-focus ring for every themed
+   button role -- source order lets this win the border color specifically
+   for the focused state, while each role's own background/color/padding
+   are untouched. */
+QPushButton:focus {{
+    border: {BORDER_WIDTH}px solid {css('focus')};
+}}
+
 QTabWidget::pane {{ border: {BORDER_WIDTH}px solid {css('line')}; }}
 
 /* Milestone 11 (Batch 3 correction): the native tab-bar style painted
