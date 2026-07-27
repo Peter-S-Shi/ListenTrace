@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
     QPlainTextEdit,
     QPushButton,
     QSlider,
+    QSplitter,
     QTextEdit,
     QVBoxLayout,
     QWidget,
@@ -189,6 +190,11 @@ class PlayerWindow(QMainWindow):
 
         self._cue_list = QListWidget()
         self._cue_list.setSelectionMode(QAbstractItemView.SelectionMode.ContiguousSelection)
+        # Milestone 11: wrap long cue text instead of growing an unnecessary
+        # horizontal scrollbar -- presentation-only, no change to item data,
+        # ordering, or selection behavior.
+        self._cue_list.setWordWrap(True)
+        self._cue_list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         for cue in self._session.cues:
             label = f"[{_format_time(cue.start_ms)}-{_format_time(cue.end_ms)}] {cue.text}"
             self._cue_list.addItem(QListWidgetItem(label))
@@ -211,7 +217,7 @@ class PlayerWindow(QMainWindow):
         layout.addWidget(self._workspace_status_label)
 
         return_button = QPushButton("Return to Library")
-        theme.apply_role(return_button, "secondary")
+        theme.apply_role(return_button, "quiet")
         return_button.clicked.connect(self.close)
         layout.addWidget(return_button)
 
@@ -266,16 +272,17 @@ class PlayerWindow(QMainWindow):
     # ---- workspace panel construction ----
 
     def _build_workspace_panel(self) -> QWidget:
-        panel = QWidget()
-        panel_layout = QHBoxLayout(panel)
-        panel_layout.setContentsMargins(0, 0, 0, 0)
-
-        annotation_column = QVBoxLayout()
+        # Milestone 11: the two panels are card-framed and placed in a
+        # QSplitter (rather than a fixed 1:1 QHBoxLayout) so their surfaces
+        # are visually distinct and the learner can rebalance the width
+        # between them; the annotation panel gets a slightly larger default
+        # share since it holds more controls.
+        annotation_frame, annotation_column = theme.make_card()
         annotation_column.addWidget(QLabel("Editing cue transcript (select text to annotate):"))
 
         self._editing_transcript_view = QTextEdit()
         self._editing_transcript_view.setReadOnly(True)
-        self._editing_transcript_view.setMaximumHeight(80)
+        self._editing_transcript_view.setMaximumHeight(110)
         self._editing_transcript_view.cursorPositionChanged.connect(
             self._on_transcript_cursor_moved
         )
@@ -336,9 +343,7 @@ class PlayerWindow(QMainWindow):
         note_buttons_row.addWidget(self._delete_note_button)
         annotation_column.addLayout(note_buttons_row)
 
-        panel_layout.addLayout(annotation_column, 1)
-
-        item_column = QVBoxLayout()
+        item_frame, item_column = theme.make_card()
         item_column.addWidget(QLabel("Save Language Item"))
         source_lock_note = QLabel(
             "Type, meaning, note, and context can be edited later. The source text/range "
@@ -393,9 +398,12 @@ class PlayerWindow(QMainWindow):
         self._saved_items_list.currentItemChanged.connect(self._on_saved_item_selected)
         item_column.addWidget(self._saved_items_list)
 
-        panel_layout.addLayout(item_column, 1)
-
-        return panel
+        splitter = QSplitter(Qt.Orientation.Horizontal)
+        splitter.setChildrenCollapsible(False)
+        splitter.addWidget(annotation_frame)
+        splitter.addWidget(item_frame)
+        splitter.setSizes([550, 450])
+        return splitter
 
     # ---- transport handlers (Milestone 3, unchanged behavior) ----
 

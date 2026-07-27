@@ -31,7 +31,7 @@ from listentrace.application.services import quiz_service
 from listentrace.application.services.player_loading_service import load_material_for_player
 from listentrace.domain.enums.material_status import MaterialStatus
 from listentrace.infrastructure.db.migrations import current_version
-from listentrace.ui.theme import apply_role
+from listentrace.ui.theme import apply_role, make_card
 from listentrace.ui.windows.guided_session_window import GuidedSessionWindow
 from listentrace.ui.windows.import_dialog import ImportDialog
 from listentrace.ui.windows.learning_history_window import LearningHistoryWindow
@@ -72,70 +72,86 @@ class MainWindow(QMainWindow):
         apply_role(title_label, "title")
         outer_layout.addWidget(title_label)
 
-        self._status_label = QLabel(
-            f"Database ready\nPath: {db_path}\nSchema version: {current_version(db_connection)}"
-        )
+        self._status_label = QLabel(f"Database ready — Schema version: {current_version(db_connection)}")
+        self._status_label.setToolTip(f"Database path: {db_path}")
         outer_layout.addWidget(self._status_label)
 
-        content_layout = QHBoxLayout()
+        # --- Action cards: Library / Practice / History, grouped by
+        # purpose rather than one long undifferentiated button row. ---
+        cards_row = QHBoxLayout()
 
-        list_column = QVBoxLayout()
-        list_buttons_row = QHBoxLayout()
+        library_card, library_layout = make_card("Library")
         self._import_button = QPushButton("Import Material")
         self._import_button.clicked.connect(self._on_import_clicked)
         self._open_player_button = QPushButton("Open Player")
         self._open_player_button.clicked.connect(self._on_open_player_clicked)
+        self._toggle_archived_button = QPushButton("Show Archived")
+        self._toggle_archived_button.clicked.connect(self._on_toggle_archived)
+        library_row = QHBoxLayout()
+        library_row.addWidget(self._import_button)
+        library_row.addWidget(self._open_player_button)
+        library_row.addWidget(self._toggle_archived_button)
+        library_layout.addLayout(library_row)
+        library_layout.addStretch(1)
+        cards_row.addWidget(library_card, 2)
+
+        practice_card, practice_layout = make_card("Practice")
         self._start_intensive_button = QPushButton("Start Intensive Practice")
         self._start_intensive_button.clicked.connect(self._on_start_intensive_clicked)
         self._resume_intensive_button = QPushButton("Resume Intensive Practice")
         self._resume_intensive_button.clicked.connect(self._on_resume_intensive_clicked)
-        self._session_history_button = QPushButton("Session History")
-        self._session_history_button.clicked.connect(self._on_session_history_clicked)
         self._shadowing_practice_button = QPushButton("Shadowing Practice")
         self._shadowing_practice_button.clicked.connect(self._on_shadowing_practice_clicked)
-        self._toggle_archived_button = QPushButton("Show Archived")
-        self._toggle_archived_button.clicked.connect(self._on_toggle_archived)
-        self._learning_history_button = QPushButton("Learning History")
-        self._learning_history_button.clicked.connect(self._on_learning_history_clicked)
         self._quick_practice_button = QPushButton("Quick Practice")
         self._quick_practice_button.clicked.connect(self._on_quick_practice_clicked)
-        list_buttons_row.addWidget(self._import_button)
-        list_buttons_row.addWidget(self._open_player_button)
-        list_buttons_row.addWidget(self._start_intensive_button)
-        list_buttons_row.addWidget(self._resume_intensive_button)
-        list_buttons_row.addWidget(self._session_history_button)
-        list_buttons_row.addWidget(self._shadowing_practice_button)
-        list_buttons_row.addWidget(self._quick_practice_button)
-        list_buttons_row.addWidget(self._toggle_archived_button)
-        list_buttons_row.addWidget(self._learning_history_button)
-        list_column.addLayout(list_buttons_row)
-
-        quiz_buttons_row = QHBoxLayout()
+        practice_row_1 = QHBoxLayout()
+        practice_row_1.addWidget(self._start_intensive_button)
+        practice_row_1.addWidget(self._resume_intensive_button)
+        practice_row_1.addWidget(self._shadowing_practice_button)
+        practice_row_1.addWidget(self._quick_practice_button)
+        practice_layout.addLayout(practice_row_1)
         self._start_material_quiz_button = QPushButton("Start Material Quiz")
         self._start_material_quiz_button.clicked.connect(self._on_start_material_quiz_clicked)
         self._start_review_quiz_button = QPushButton("Start Review Quiz")
         self._start_review_quiz_button.clicked.connect(self._on_start_review_quiz_clicked)
         self._resume_quiz_button = QPushButton("Resume Quiz")
         self._resume_quiz_button.clicked.connect(self._on_resume_quiz_clicked)
+        practice_row_2 = QHBoxLayout()
+        practice_row_2.addWidget(self._start_material_quiz_button)
+        practice_row_2.addWidget(self._start_review_quiz_button)
+        practice_row_2.addWidget(self._resume_quiz_button)
+        practice_layout.addLayout(practice_row_2)
+        practice_layout.addStretch(1)
+        cards_row.addWidget(practice_card, 3)
+
+        history_card, history_layout = make_card("History")
+        self._session_history_button = QPushButton("Session History")
+        self._session_history_button.clicked.connect(self._on_session_history_clicked)
+        self._learning_history_button = QPushButton("Learning History")
+        self._learning_history_button.clicked.connect(self._on_learning_history_clicked)
         self._quiz_history_button = QPushButton("Quiz History")
         self._quiz_history_button.clicked.connect(self._on_quiz_history_clicked)
-        quiz_buttons_row.addWidget(self._start_material_quiz_button)
-        quiz_buttons_row.addWidget(self._start_review_quiz_button)
-        quiz_buttons_row.addWidget(self._resume_quiz_button)
-        quiz_buttons_row.addWidget(self._quiz_history_button)
-        list_column.addLayout(quiz_buttons_row)
+        for button in (self._session_history_button, self._learning_history_button, self._quiz_history_button):
+            history_layout.addWidget(button)
+        history_layout.addStretch(1)
+        cards_row.addWidget(history_card, 1)
 
+        outer_layout.addLayout(cards_row)
+
+        content_layout = QHBoxLayout()
+
+        list_card, list_layout = make_card(None)
         self._material_list = QListWidget()
         self._material_list.currentItemChanged.connect(self._on_selection_changed)
         self._material_list.itemDoubleClicked.connect(self._on_material_double_clicked)
-        list_column.addWidget(self._material_list)
+        list_layout.addWidget(self._material_list)
+        content_layout.addWidget(list_card, 1)
 
-        content_layout.addLayout(list_column, 1)
-
-        detail_column = QVBoxLayout()
+        detail_card, detail_layout = make_card(None)
         self._detail_label = QLabel("Select a material to see details.")
         self._detail_label.setWordWrap(True)
-        detail_column.addWidget(self._detail_label)
+        detail_layout.addWidget(self._detail_label)
+        detail_layout.addStretch(1)
 
         action_row = QHBoxLayout()
         self._rename_button = QPushButton("Rename")
@@ -147,9 +163,9 @@ class MainWindow(QMainWindow):
         action_row.addWidget(self._rename_button)
         action_row.addWidget(self._archive_restore_button)
         action_row.addWidget(self._remove_button)
-        detail_column.addLayout(action_row)
+        detail_layout.addLayout(action_row)
 
-        content_layout.addLayout(detail_column, 1)
+        content_layout.addWidget(detail_card, 1)
 
         outer_layout.addLayout(content_layout)
 
@@ -168,16 +184,17 @@ class MainWindow(QMainWindow):
         """Milestone 11 button-role assignment for this window: `Open Player`
         is this view's single primary action (the most common next step once
         a material is selected); the rest of the per-material actions and
-        the quiz row are secondary; navigation/history toggles are quiet
-        (low-priority); `Remove` is the only destructive action here."""
+        the quiz row are secondary; the History card's actions are quiet and
+        visually consistent with each other; `Remove` is the only
+        destructive action here."""
         apply_role(self._status_label, "caption")
         apply_role(self._import_button, "secondary")
         apply_role(self._open_player_button, "primary")
+        apply_role(self._toggle_archived_button, "secondary")
         apply_role(self._start_intensive_button, "secondary")
         apply_role(self._resume_intensive_button, "secondary")
         apply_role(self._session_history_button, "quiet")
         apply_role(self._shadowing_practice_button, "secondary")
-        apply_role(self._toggle_archived_button, "quiet")
         apply_role(self._learning_history_button, "quiet")
         apply_role(self._quick_practice_button, "secondary")
         apply_role(self._start_material_quiz_button, "secondary")
@@ -207,6 +224,7 @@ class MainWindow(QMainWindow):
             self._material_list.addItem(empty_item)
             self._set_action_buttons_enabled(False)
             self._detail_label.setText("Select a material to see details.")
+            self._detail_label.setToolTip("")
             return
 
         for material in materials:
@@ -228,6 +246,7 @@ class MainWindow(QMainWindow):
         if material_id is None:
             self._set_action_buttons_enabled(False)
             self._detail_label.setText("Select a material to see details.")
+            self._detail_label.setToolTip("")
             return
 
         self._set_action_buttons_enabled(True)
@@ -235,6 +254,7 @@ class MainWindow(QMainWindow):
             detail = library.get_material_detail(self._connection, material_id)
         except MaterialNotFoundError:
             self._detail_label.setText("This material no longer exists.")
+            self._detail_label.setToolTip("")
             self.refresh_library()
             return
 
@@ -242,11 +262,16 @@ class MainWindow(QMainWindow):
             "Restore" if detail.status == MaterialStatus.ARCHIVED.value else "Archive"
         )
 
-        subtitle_line = f"Subtitle path: {detail.subtitle_source_path or '(none)'}"
+        # Milestone 11: show a compact filename rather than the full absolute
+        # path (which can run to a long, wrapped, privacy-sensitive paragraph
+        # for a deeply nested folder) -- the full path remains available via
+        # this label's tooltip on hover, never dropped, just not rendered.
+        subtitle_display = Path(detail.subtitle_source_path).name if detail.subtitle_source_path else "(none)"
+        subtitle_line = f"Subtitle path: {subtitle_display}"
         if detail.subtitle_source_path is not None and not detail.subtitle_available:
             subtitle_line += "  [MISSING]"
 
-        media_line = f"Media path: {detail.media_path}"
+        media_line = f"Media path: {Path(detail.media_path).name}"
         if not detail.media_available:
             media_line += "  [MISSING]"
 
@@ -260,6 +285,11 @@ class MainWindow(QMainWindow):
             f"Cue count: {detail.cue_count}",
         ]
         self._detail_label.setText("\n".join(lines))
+        tooltip_lines = [
+            f"Media path: {detail.media_path}",
+            f"Subtitle path: {detail.subtitle_source_path or '(none)'}",
+        ]
+        self._detail_label.setToolTip("\n".join(tooltip_lines))
 
     def _set_action_buttons_enabled(self, enabled: bool) -> None:
         self._rename_button.setEnabled(enabled)

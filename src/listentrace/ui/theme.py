@@ -31,7 +31,7 @@ import sys
 from pathlib import Path
 
 from PySide6.QtGui import QColor, QIcon
-from PySide6.QtWidgets import QApplication, QWidget
+from PySide6.QtWidgets import QApplication, QFrame, QLabel, QVBoxLayout, QWidget
 
 # ---------------------------------------------------------------------------
 # Tokens
@@ -45,7 +45,7 @@ _TOKENS: dict[str, tuple[int, int, int, int]] = {
     "surface_soft": (248, 243, 235, 255),
     "ink": (41, 38, 34, 255),
     "muted": (119, 112, 102, 255),
-    "line": (74, 64, 52, 31),
+    "line": (74, 64, 52, 70),
     "accent": (232, 121, 79, 255),
     "accent_hover": (219, 107, 65, 255),
     "accent_pressed": (201, 85, 51, 255),
@@ -58,8 +58,8 @@ _TOKENS: dict[str, tuple[int, int, int, int]] = {
     "warning": (230, 162, 59, 255),
     "info": (69, 123, 157, 255),
     "focus": (232, 121, 79, 255),
-    "disabled_text": (168, 160, 150, 255),
-    "disabled_surface": (238, 233, 224, 255),
+    "disabled_text": (140, 132, 122, 255),
+    "disabled_surface": (232, 226, 216, 255),
     # Dedicated product-semantic tokens -- never collapsed into a generic
     # accent token. Values preserved from the pre-M11 hardcoded literals
     # they replace.
@@ -102,6 +102,26 @@ def css(token: str) -> str:
     return f"rgba({r}, {g}, {b}, {a / 255:.3f})"
 
 
+def make_card(title: str | None = None) -> tuple[QFrame, QVBoxLayout]:
+    """A light `QFrame[role="card"]` surface with its own padded layout.
+
+    Shared by any window that wants to group related content as a visually
+    distinct surface (e.g. separating a list from a detail panel, or giving
+    a workspace sub-panel its own bordered/rounded/padded frame) -- one
+    definition, reused rather than re-implemented per window.
+    """
+    frame = QFrame()
+    apply_role(frame, "card")
+    layout = QVBoxLayout(frame)
+    layout.setContentsMargins(SPACE_SECTION, SPACE_SECTION, SPACE_SECTION, SPACE_SECTION)
+    layout.setSpacing(SPACE_NORMAL)
+    if title is not None:
+        caption = QLabel(title)
+        apply_role(caption, "caption")
+        layout.addWidget(caption)
+    return frame, layout
+
+
 def apply_role(widget: QWidget, role: str) -> None:
     """Tag `widget` with a presentation role consumed by the component-layer QSS.
 
@@ -138,6 +158,72 @@ QLineEdit:focus, QTextEdit:focus, QPlainTextEdit:focus, QComboBox:focus, QListWi
 }}
 *:disabled {{
     color: {css('disabled_text')};
+}}
+
+/* A plain label should let its container's surface show through (a card,
+   the page, etc.) rather than always painting its own page-colored patch
+   -- role-specific label rules (below) are attribute-selectors and take
+   precedence over this bare-type rule regardless of source order. */
+QLabel {{
+    background-color: transparent;
+}}
+
+/* Fields must look like fields, not disconnected horizontal lines --
+   a real box with a visible border and a surface background. List/table
+   widgets get the same surface treatment so they read as part of the same
+   card rather than a mismatched page-colored patch inside a white card. */
+QLineEdit, QComboBox, QTextEdit, QPlainTextEdit, QListWidget, QTableWidget {{
+    background-color: {css('surface')};
+    border: {BORDER_WIDTH}px solid {css('line')};
+    border-radius: {RADIUS_CONTROL}px;
+    padding: {SPACE_COMPACT}px {SPACE_COMPACT + 2}px;
+}}
+
+/* The current-but-unfocused selected row must stay clearly visible --
+   Qt's native "inactive selection" palette otherwise barely shows. */
+QListWidget::item:selected, QListWidget::item:selected:active {{
+    background-color: {css('accent')};
+    color: #FFFFFF;
+}}
+QListWidget::item:selected:!active {{
+    background-color: {css('accent_hover')};
+    color: #FFFFFF;
+}}
+
+QSlider::groove:horizontal {{
+    height: 4px;
+    background: {css('line')};
+    border-radius: 2px;
+}}
+QSlider::sub-page:horizontal {{
+    background: {css('accent')};
+    border-radius: 2px;
+}}
+QSlider::handle:horizontal {{
+    background: {css('accent')};
+    width: 14px;
+    margin: -6px 0;
+    border-radius: 7px;
+}}
+QSlider::handle:horizontal:hover {{ background: {css('accent_hover')}; }}
+
+QScrollBar:vertical, QScrollBar:horizontal {{
+    background: transparent;
+    border: none;
+}}
+QScrollBar::handle {{
+    background: {css('line')};
+    border-radius: 4px;
+}}
+QScrollBar::handle:hover {{ background: {css('muted')}; }}
+QScrollBar::add-line, QScrollBar::sub-line {{
+    width: 0px;
+    height: 0px;
+    border: none;
+    background: none;
+}}
+QScrollBar::add-page, QScrollBar::sub-page {{
+    background: none;
 }}
 """
 
@@ -197,18 +283,24 @@ QPushButton[role="quiet"] {{
     padding: {SPACE_COMPACT}px {SPACE_NORMAL}px;
 }}
 QPushButton[role="quiet"]:hover {{ color: {css('ink')}; }}
+QPushButton[role="quiet"]:disabled {{ color: {css('disabled_text')}; }}
 
+/* Destructive actions stay clearly legible (outlined, not a solid block)
+   so they never visually overpower an adjacent Save/Update action -- the
+   solid fill only appears on hover/press, right when actually interacting. */
 QPushButton[role="danger"] {{
-    background-color: {css('danger')};
-    color: #FFFFFF;
-    border: none;
+    background-color: {css('surface')};
+    color: {css('danger')};
+    border: {BORDER_WIDTH}px solid {css('danger')};
     border-radius: {RADIUS_CONTROL}px;
     padding: {SPACE_COMPACT}px {SPACE_NORMAL}px;
 }}
-QPushButton[role="danger"]:hover {{ background-color: {css('danger_hover')}; }}
+QPushButton[role="danger"]:hover {{ background-color: {css('danger')}; color: #FFFFFF; }}
+QPushButton[role="danger"]:pressed {{ background-color: {css('danger_hover')}; color: #FFFFFF; }}
 QPushButton[role="danger"]:disabled {{
     background-color: {css('disabled_surface')};
     color: {css('disabled_text')};
+    border-color: {css('line')};
 }}
 
 QPushButton[role="success"] {{
@@ -217,6 +309,10 @@ QPushButton[role="success"] {{
     border: none;
     border-radius: {RADIUS_CONTROL}px;
     padding: {SPACE_COMPACT}px {SPACE_NORMAL}px;
+}}
+QPushButton[role="success"]:disabled {{
+    background-color: {css('disabled_surface')};
+    color: {css('disabled_text')};
 }}
 
 QTabWidget::pane {{ border: {BORDER_WIDTH}px solid {css('line')}; }}
