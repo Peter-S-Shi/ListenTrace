@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPlainTextEdit,
     QPushButton,
+    QScrollArea,
     QSlider,
     QSplitter,
     QTextEdit,
@@ -198,6 +199,12 @@ class PlayerWindow(QMainWindow):
 
         self._cue_list = QListWidget()
         self._cue_list.setSelectionMode(QAbstractItemView.SelectionMode.ContiguousSelection)
+        # M12 Round 2 L1: inside the new resizable QScrollArea below, a
+        # stretch factor alone no longer guarantees this list a usable share
+        # of the window -- it can grow, but nothing forces it to. This floor
+        # keeps several cues visible at once regardless of the outer window's
+        # height; the list still scrolls its own content beyond that.
+        self._cue_list.setMinimumHeight(160)
         # Milestone 11: wrap long cue text instead of growing an unnecessary
         # horizontal scrollbar -- presentation-only, no change to item data,
         # ordering, or selection behavior.
@@ -231,7 +238,20 @@ class PlayerWindow(QMainWindow):
         return_button.clicked.connect(self.close)
         layout.addWidget(return_button)
 
-        self.setCentralWidget(central)
+        # M12 Round 2 Layout Contract (m03-01/m03-04/m03-05, L1): the content
+        # above has no natural upper bound on its combined height (title,
+        # media area, transport rows, the cue list, and the two-column
+        # annotation/Saved-Language-Item workspace all stack in one column).
+        # Without a scroll container, a window shorter than that combined
+        # height forced every zero-minimum-height widget -- especially the
+        # workspace panel's QLineEdits and Save/Update/Delete buttons -- to
+        # compress toward unreadable slivers instead. Wrapping the whole
+        # content in a QScrollArea means the window scrolls; nothing inside
+        # it is ever squeezed below its natural size.
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setWidget(central)
+        self.setCentralWidget(scroll_area)
 
         self._playback.position_changed.connect(self._on_position_changed)
         self._playback.duration_changed.connect(self._on_duration_changed)
@@ -282,6 +302,23 @@ class PlayerWindow(QMainWindow):
         ):
             theme.apply_role(button, "danger")
 
+        # M12 Round 2 L1: these buttons rendered as unreadable slivers when
+        # the workspace panel was squeezed (see the QScrollArea change above
+        # for the actual layout-pressure fix) -- this is a second, independent
+        # safety floor so they stay legible even if that pressure returns for
+        # some other reason.
+        for button in (
+            self._save_annotation_button,
+            self._update_annotation_button,
+            self._delete_annotation_button,
+            self._save_note_button,
+            self._delete_note_button,
+            self._save_item_button,
+            self._update_item_button,
+            self._delete_item_button,
+        ):
+            button.setMinimumHeight(28)
+
     # ---- workspace panel construction ----
 
     def _build_workspace_panel(self) -> QWidget:
@@ -313,6 +350,7 @@ class PlayerWindow(QMainWindow):
         heard_as_row = QHBoxLayout()
         heard_as_row.addWidget(QLabel("Heard as:"))
         self._heard_as_edit = QLineEdit()
+        self._heard_as_edit.setMinimumHeight(28)  # M12 Round 2 L1: never let this compress unreadably
         self._heard_as_edit.setEnabled(False)
         heard_as_row.addWidget(self._heard_as_edit)
         annotation_column.addLayout(heard_as_row)
@@ -320,6 +358,7 @@ class PlayerWindow(QMainWindow):
         note_row = QHBoxLayout()
         note_row.addWidget(QLabel("Annotation note:"))
         self._annotation_note_edit = QLineEdit()
+        self._annotation_note_edit.setMinimumHeight(28)
         note_row.addWidget(self._annotation_note_edit)
         annotation_column.addLayout(note_row)
 
@@ -377,12 +416,14 @@ class PlayerWindow(QMainWindow):
         meaning_row = QHBoxLayout()
         meaning_row.addWidget(QLabel("Meaning:"))
         self._item_meaning_edit = QLineEdit()
+        self._item_meaning_edit.setMinimumHeight(28)
         meaning_row.addWidget(self._item_meaning_edit)
         item_column.addLayout(meaning_row)
 
         item_note_row = QHBoxLayout()
         item_note_row.addWidget(QLabel("Note:"))
         self._item_note_edit = QLineEdit()
+        self._item_note_edit.setMinimumHeight(28)
         item_note_row.addWidget(self._item_note_edit)
         item_column.addLayout(item_note_row)
 

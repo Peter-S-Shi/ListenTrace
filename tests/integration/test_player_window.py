@@ -406,6 +406,47 @@ def test_programmatic_navigation_does_not_suspend_follow(qapp, conn, tmp_path):
     window.close()
 
 
+def test_central_widget_is_scrollable_and_workspace_fields_have_a_minimum_height(qapp, conn, tmp_path):
+    """M12 Round 2 Layout Contract (m03-01/m03-04/m03-05, L1): reproduces the
+    screenshotted human-QA finding that the workspace panel's QLineEdits and
+    Save/Update/Delete buttons compressed to unreadable slivers when the
+    window was shorter than the stacked content's combined height. Fixed by
+    wrapping the content in a resizable QScrollArea (the window scrolls
+    instead of squeezing every zero-minimum-height widget) plus an explicit
+    minimum height on the fields/buttons that were reported as unreadable."""
+    from PySide6.QtWidgets import QScrollArea
+
+    wav_path = tmp_path / "lesson.wav"
+    _make_wav(wav_path)
+    window = PlayerWindow(_two_cue_result(wav_path), conn)
+
+    central = window.centralWidget()
+    assert isinstance(central, QScrollArea)
+    assert central.widgetResizable() is True
+
+    for field in (
+        window._heard_as_edit,
+        window._annotation_note_edit,
+        window._item_meaning_edit,
+        window._item_note_edit,
+    ):
+        assert field.minimumHeight() >= 28
+
+    for button in (
+        window._save_annotation_button,
+        window._update_annotation_button,
+        window._delete_annotation_button,
+        window._save_note_button,
+        window._delete_note_button,
+        window._save_item_button,
+        window._update_item_button,
+        window._delete_item_button,
+    ):
+        assert button.minimumHeight() >= 28
+
+    window.close()
+
+
 def test_player_window_toggle_transcript_keeps_active_cue_tracking(qapp, conn, tmp_path):
     wav_path = tmp_path / "lesson.wav"
     _make_wav(wav_path)
