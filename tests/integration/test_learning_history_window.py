@@ -322,3 +322,48 @@ def test_shadowing_practice_initial_cue_id_selects_matching_cue(qapp, tmp_path):
     assert window._child_window._cue_index == 1
     window._child_window.close()
     window.close()
+
+
+def test_quick_practice_delete_requires_confirmation_and_removes_the_row(qapp, tmp_path, monkeypatch):
+    """M12 History Ownership Contract (m05-02): the user can delete a
+    completed/abandoned Quick Practice run from history, but not an active one."""
+    from PySide6.QtCore import Qt
+    from PySide6.QtWidgets import QMessageBox
+
+    from listentrace.application.services import quick_practice_service
+
+    connection = open_connection(tmp_path / "qp.db")
+    migrate(connection)
+    material_id, cues = _make_material_with_cues(connection, tmp_path, title="Active")
+    active = quick_practice_service.start_selected_session(connection, material_id, [c.id for c in cues])
+
+    material_id2, cues2 = _make_material_with_cues(connection, tmp_path, title="Abandoned")
+    abandoned = quick_practice_service.start_selected_session(connection, material_id2, [c.id for c in cues2])
+    item_id = quick_practice_service.load_session_state(connection, abandoned.id).items[0].item.id
+    quick_practice_service.record_recall(connection, item_id, "understood")
+    quick_practice_service.complete_item(connection, item_id)
+    quick_practice_service.close_session(connection, abandoned.id)  # has evidence -> abandoned, not discarded
+
+    window = LearningHistoryWindow(connection, tmp_path / "recordings")
+    assert window._quick_practice_list.count() == 2
+
+    def _row_for(session_id):
+        for i in range(window._quick_practice_list.count()):
+            item = window._quick_practice_list.item(i)
+            if item.data(Qt.ItemDataRole.UserRole).session_id == session_id:
+                return i
+        raise AssertionError("row not found")
+
+    window._quick_practice_list.setCurrentRow(_row_for(active.id))
+    assert window._delete_quick_practice_button.isEnabled() is False, "an active run must not be deletable"
+
+    window._quick_practice_list.setCurrentRow(_row_for(abandoned.id))
+    assert window._delete_quick_practice_button.isEnabled() is True
+
+    monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.StandardButton.Yes)
+    window._on_delete_quick_practice_clicked()
+
+    assert window._quick_practice_list.count() == 1
+    assert quick_practice_service.get_session(connection, abandoned.id) is None
+    assert quick_practice_service.get_session(connection, active.id) is not None
+    window.close()

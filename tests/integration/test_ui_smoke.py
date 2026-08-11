@@ -3,7 +3,7 @@ from __future__ import annotations
 import struct
 import wave
 
-from PySide6.QtCore import QEventLoop, QTimer
+from PySide6.QtCore import QEventLoop, Qt, QTimer
 from PySide6.QtWidgets import QInputDialog, QMessageBox
 
 from listentrace.application.services import material_library_service as library
@@ -283,6 +283,43 @@ def test_session_history_dialog_opens_selected_session(qapp, tmp_path):
     window.close()
 
 
+def test_session_history_dialog_delete_requires_confirmation_and_removes_the_row(qapp, tmp_path, monkeypatch):
+    """M12 History Ownership Contract (m05-02): the user can delete a
+    completed/abandoned Guided Session from history, but not an active one."""
+    connection = open_connection(tmp_path / "smoke.db")
+    migrate(connection)
+
+    media = tmp_path / "lesson.wav"
+    _make_wav(media)
+    subtitle = tmp_path / "lesson.srt"
+    subtitle.write_text("1\n00:00:00,000 --> 00:00:02,000\nBonjour\n", encoding="utf-8")
+    result = import_material(connection, media, subtitle, "Lesson One")
+    abandoned = session_service.start_session(connection, result.material_id)
+    session_service.abandon_session(connection, abandoned.id)
+    active = session_service.start_session(connection, result.material_id)
+
+    from listentrace.ui.windows.session_history_dialog import SessionHistoryDialog
+
+    dialog = SessionHistoryDialog(connection, result.material_id, "Lesson One")
+    assert dialog._list.count() == 2
+
+    active_row = next(i for i in range(2) if dialog._list.item(i).data(Qt.ItemDataRole.UserRole) == active.id)
+    dialog._list.setCurrentRow(active_row)
+    assert dialog._delete_button.isEnabled() is False, "an active session must not be deletable"
+
+    abandoned_row = 1 - active_row
+    dialog._list.setCurrentRow(abandoned_row)
+    assert dialog._delete_button.isEnabled() is True
+
+    monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.StandardButton.Yes)
+    dialog._on_delete_clicked()
+
+    assert dialog._list.count() == 1
+    assert session_service.get_session(connection, abandoned.id) is None
+    assert session_service.get_session(connection, active.id) is not None
+    dialog.close()
+
+
 def test_start_material_quiz_opens_quiz_window_and_enables_resume(qapp, tmp_path, monkeypatch):
     connection = open_connection(tmp_path / "smoke.db")
     migrate(connection)
@@ -409,6 +446,43 @@ def test_quiz_history_dialog_opens_selected_quiz(qapp, tmp_path):
 
     window._quiz_window.close()
     window.close()
+
+
+def test_quiz_history_dialog_delete_requires_confirmation_and_removes_the_row(qapp, tmp_path, monkeypatch):
+    """M12 History Ownership Contract (m05-02): the user can delete a
+    completed/abandoned quiz attempt from history, but not an active one."""
+    connection = open_connection(tmp_path / "smoke.db")
+    migrate(connection)
+
+    media = tmp_path / "lesson.wav"
+    _make_wav(media)
+    subtitle = tmp_path / "lesson.srt"
+    subtitle.write_text(_MULTI_CUE_SRT, encoding="utf-8")
+    result = import_material(connection, media, subtitle, "Lesson One")
+    active = quiz_service.create_material_quiz(connection, result.material_id, requested_count=2, seed=1)
+    abandoned = quiz_service.create_material_quiz(connection, result.material_id, requested_count=2, seed=2)
+    quiz_service.abandon_quiz(connection, abandoned.id)
+
+    from listentrace.ui.windows.quiz_history_dialog import QuizHistoryDialog
+
+    dialog = QuizHistoryDialog(connection, result.material_id, "Lesson One")
+    assert dialog._list.count() == 2
+
+    active_row = next(i for i in range(2) if dialog._list.item(i).data(Qt.ItemDataRole.UserRole) == active.id)
+    dialog._list.setCurrentRow(active_row)
+    assert dialog._delete_button.isEnabled() is False, "an active attempt must not be deletable"
+
+    abandoned_row = 1 - active_row
+    dialog._list.setCurrentRow(abandoned_row)
+    assert dialog._delete_button.isEnabled() is True
+
+    monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.StandardButton.Yes)
+    dialog._on_delete_clicked()
+
+    assert dialog._list.count() == 1
+    assert quiz_service.get_quiz_attempt(connection, abandoned.id) is None
+    assert quiz_service.get_quiz_attempt(connection, active.id) is not None
+    dialog.close()
 
 
 def test_quiz_window_full_take_submit_and_review_flow(qapp, tmp_path):

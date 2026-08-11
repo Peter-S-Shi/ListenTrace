@@ -32,10 +32,12 @@ from listentrace.application.dto.learning_history import (
     SessionHistoryEntry,
     ShadowingEvidenceEntry,
 )
-from listentrace.application.errors import PlayerOpenError
+from listentrace.application.errors import PlayerOpenError, QuickPracticeValidationError
 from listentrace.application.services import learning_history_service as history_svc
 from listentrace.application.services import practice_session_service
+from listentrace.application.services import quick_practice_service
 from listentrace.application.services.player_loading_service import load_material_for_player
+from listentrace.domain.enums.quick_practice_status import QuickPracticeStatus
 from listentrace.domain.services import date_range as date_range_rules
 from listentrace.ui import theme
 from listentrace.ui.time_display import format_local_timestamp
@@ -793,7 +795,13 @@ class LearningHistoryWindow(QMainWindow):
         self._quick_practice_list = QListWidget()
         theme.configure_long_text_list(self._quick_practice_list)
         self._quick_practice_list.itemDoubleClicked.connect(self._on_quick_practice_item_double_clicked)
+        self._quick_practice_list.currentItemChanged.connect(self._on_quick_practice_selection_changed)
         column.addWidget(self._quick_practice_list, 1)
+        self._delete_quick_practice_button = QPushButton("Delete")
+        self._delete_quick_practice_button.clicked.connect(self._on_delete_quick_practice_clicked)
+        self._delete_quick_practice_button.setEnabled(False)
+        theme.apply_role(self._delete_quick_practice_button, "danger")
+        column.addWidget(self._delete_quick_practice_button)
         layout.addWidget(card, 1)
         return widget
 
@@ -828,6 +836,44 @@ class LearningHistoryWindow(QMainWindow):
         entry: QuickPracticeHistoryEntry | None = item.data(Qt.ItemDataRole.UserRole)
         if entry is not None:
             self._open_material(entry.material_id)
+
+    def _on_quick_practice_selection_changed(self, current: QListWidgetItem, previous: QListWidgetItem) -> None:
+        entry: QuickPracticeHistoryEntry | None = current.data(Qt.ItemDataRole.UserRole) if current is not None else None
+        # M12 Round 3 History Ownership Contract: only a completed/abandoned
+        # run is a historical record; an active run must be closed first
+        # (see quick_practice_service.delete_history).
+        self._delete_quick_practice_button.setEnabled(
+            entry is not None and entry.status != QuickPracticeStatus.ACTIVE.value
+        )
+
+    def _on_delete_quick_practice_clicked(self) -> None:
+        item = self._quick_practice_list.currentItem()
+        if item is None:
+            return
+        entry: QuickPracticeHistoryEntry | None = item.data(Qt.ItemDataRole.UserRole)
+        if entry is None:
+            return
+        answer = QMessageBox.question(
+            self,
+            "Delete Quick Practice Run",
+            "Delete this Quick Practice run record?\n\n"
+            "This removes:\n"
+            "• the run record and its per-cue results\n"
+            "• diagnosis evidence recorded during this run\n\n"
+            "This does not delete:\n"
+            "• annotations, saved language items, or keyword captures "
+            "(kept as independent assets)\n\n"
+            "This cannot be undone.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        try:
+            quick_practice_service.delete_history(self._connection, entry.session_id)
+        except QuickPracticeValidationError as exc:
+            QMessageBox.warning(self, "Cannot Delete Run", str(exc))
+            return
+        self._reload()
 
     # ---- shared navigation ----
 
