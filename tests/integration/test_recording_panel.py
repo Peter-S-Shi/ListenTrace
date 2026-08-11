@@ -1,0 +1,116 @@
+from __future__ import annotations
+
+import struct
+import wave
+
+import pytest
+from PySide6.QtWidgets import QMessageBox
+
+from listentrace.application.services import recording_service as svc
+from listentrace.domain.models.material import Material
+from listentrace.domain.models.subtitle import SubtitleCue, SubtitleTrack
+from listentrace.infrastructure.db.connection import open_connection
+from listentrace.infrastructure.db.migrations import migrate
+from listentrace.infrastructure.db.repository import (
+    get_cues_for_track,
+    get_subtitle_track_for_material,
+    insert_material,
+    insert_subtitle_track,
+)
+from listentrace.ui.widgets.recording_panel import RecordingPanel
+
+
+@pytest.fixture()
+def conn(tmp_path):
+    connection = open_connection(tmp_path / "test.db")
+    migrate(connection)
+    yield connection
+    connection.close()
+
+
+@pytest.fixture()
+def recordings_dir(tmp_path):
+    return tmp_path / "recordings"
+
+
+def _make_material_with_cues(conn, cue_texts=("Bonjour", "Comment ca va")):
+    material_id = insert_material(conn, Material(title="Lesson", media_path="C:/media/lesson.mp4"))
+    track = SubtitleTrack(
+        material_id=material_id,
+        format="srt",
+        source_path="C:/media/lesson.srt",
+        cues=[
+            SubtitleCue(cue_index=i + 1, start_ms=i * 1000, end_ms=(i + 1) * 1000, text=text)
+            for i, text in enumerate(cue_texts)
+        ],
+    )
+    insert_subtitle_track(conn, track)
+    track_row = get_subtitle_track_for_material(conn, material_id)
+    return material_id, get_cues_for_track(conn, track_row.id)
+
+
+def _make_ready_recording(conn, recordings_dir, material_id, cue_id):
+    recording, path = svc.begin_recording(conn, recordings_dir, material_id, cue_id, "dev", "Mic")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with wave.open(str(path), "w") as wf:
+        wf.setnchannels(1)
+        wf.setsampwidth(2)
+        wf.setframerate(8000)
+        wf.writeframes(struct.pack("<h", 0) * 8000)
+    return svc.finish_recording(conn, recordings_dir, recording.id)
+
+
+def test_deleting_a_take_in_one_panel_refreshes_a_second_open_panel_on_the_same_cue(
+    qapp, conn, recordings_dir, monkeypatch
+):
+    """M12 Round 3/4 ghost-take fix: two windows (e.g. Shadowing Practice and a
+    Guided Session Stage 4) can be open on the same cue at once. Deleting a take
+    in one must not leave a stale, un-refreshable "Not Found" row in the other."""
+    monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.StandardButton.Yes)
+    material_id, cues = _make_material_with_cues(conn)
+    _make_ready_recording(conn, recordings_dir, material_id, cues[0].id)
+
+    panel_a = RecordingPanel(conn, recordings_dir)
+    panel_a.set_context(material_id, cues[0].id, None)
+    panel_b = RecordingPanel(conn, recordings_dir)
+    panel_b.set_context(material_id, cues[0].id, None)
+    assert panel_a._takes_list.count() == 1
+    assert panel_b._takes_list.count() == 1
+
+    panel_b._takes_list.setCurrentRow(0)
+    panel_b._on_delete_take_clicked()
+
+    assert panel_b._takes_list.count() == 0
+    assert panel_a._takes_list.count() == 0, (
+        "panel_a's stale row must be cleared once panel_b deletes the same "
+        "take -- this is the exact 'ghost take / Not Found' report from "
+        "the first human QA pass"
+    )
+    panel_a.deleteLater()
+    panel_b.deleteLater()
+
+
+def test_re_deleting_an_already_gone_take_clears_the_stale_row_without_raising(
+    qapp, conn, recordings_dir, monkeypatch
+):
+    """The second half of the ghost-take fix: clicking Delete on a row whose
+    underlying DB row is already gone (e.g. the cross-window signal above
+    never reached this panel for some reason) must not silently swallow an
+    uncaught `RecordingNotFoundError` and leave the row stuck forever."""
+    monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.StandardButton.Yes)
+    material_id, cues = _make_material_with_cues(conn)
+    recording = _make_ready_recording(conn, recordings_dir, material_id, cues[0].id)
+
+    panel = RecordingPanel(conn, recordings_dir)
+    panel.set_context(material_id, cues[0].id, None)
+    assert panel._takes_list.count() == 1
+
+    # Simulate "deleted elsewhere without notifying this panel" by removing the
+    # DB row directly, bypassing the panel entirely.
+    svc.delete_take(conn, recordings_dir, recording.id)
+
+    panel._takes_list.setCurrentRow(0)
+    panel._on_delete_take_clicked()  # must not raise RecordingNotFoundError
+
+    assert panel._takes_list.count() == 0
+    panel.deleteLater()

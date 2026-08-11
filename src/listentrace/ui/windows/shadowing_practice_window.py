@@ -18,7 +18,7 @@ from listentrace.application.services import recording_service
 from listentrace.application.services.player_session import PlayerSession
 from listentrace.infrastructure.media.playback import PlaybackController
 from listentrace.ui import theme
-from listentrace.ui.widgets.recording_panel import RecordingPanel
+from listentrace.ui.widgets.recording_panel import RecordingPanel, recording_change_bus
 from listentrace.ui.windows.player_window import _format_time
 
 
@@ -199,6 +199,7 @@ class ShadowingPracticeWindow(QMainWindow):
                 f"{len(summary.failed)} recording(s) could not be deleted and remain in the list.",
             )
         self._refresh()
+        recording_change_bus.material_changed.emit(self._material.id)
 
     # ---- shared playback plumbing ----
 

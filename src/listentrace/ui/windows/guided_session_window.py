@@ -39,6 +39,7 @@ from listentrace.domain.enums.keyword_capture_type import KeywordCaptureType
 from listentrace.domain.enums.session_status import SessionStatus
 from listentrace.domain.enums.shadowing_status import ShadowingStatus
 from listentrace.domain.enums.stage_key import STAGE_ORDER, StageKey
+from listentrace.domain.enums.stage_status import StageStatus
 from listentrace.domain.services import session_rules as rules
 from listentrace.domain.services.text_range import whole_cue_range
 from listentrace.infrastructure.db.learning_repository import list_annotations_for_cue
@@ -137,6 +138,15 @@ class GuidedSessionWindow(QMainWindow):
         self._stack.addWidget(self._build_stage4_panel())
         self._stack.addWidget(self._build_stage5_panel())
         layout.addWidget(self._stack, 1)
+
+        # M12 Round 3/4 Completion Explainability Contract: a disabled `Complete
+        # Session` must never be an unexplained grey button -- this mirrors
+        # `rules.session_can_complete`'s per-stage predicate so the explanation
+        # can never drift from the actual enable/disable decision below.
+        self._completion_status_label = QLabel("")
+        self._completion_status_label.setWordWrap(True)
+        theme.apply_role(self._completion_status_label, "caption")
+        layout.addWidget(self._completion_status_label)
 
         nav_row = QHBoxLayout()
         self._back_button = QPushButton("Back")
@@ -265,12 +275,39 @@ class GuidedSessionWindow(QMainWindow):
     def _update_nav_buttons(self, state: PracticeSessionState) -> None:
         read_only = state.session.status != SessionStatus.ACTIVE.value
         index = STAGE_ORDER.index(self._current_stage)
+        is_last_stage = index == len(STAGE_ORDER) - 1
+        # M12 Round 3 Completion/Explainability Contract: on Stage 5 there is no
+        # next stage to "Continue" to, and the shared label previously left
+        # learners unsure whether this action was still required at all.
+        self._continue_button.setText("Save Summary" if is_last_stage else "Save and Continue")
         self._back_button.setEnabled(index > 0)
         self._skip_button.setEnabled(not read_only)
         self._continue_button.setEnabled(not read_only)
         self._abandon_button.setEnabled(not read_only)
         statuses = {key: progress.status for key, progress in state.stage_progress.items()}
         self._complete_button.setEnabled(not read_only and rules.session_can_complete(statuses))
+        self._update_completion_status_label(state, read_only)
+
+    def _update_completion_status_label(self, state: PracticeSessionState, read_only: bool) -> None:
+        if read_only:
+            self._completion_status_label.setText("")
+            return
+        resolved_statuses = (StageStatus.COMPLETED.value, StageStatus.SKIPPED.value)
+        unresolved_titles = []
+        checklist_lines = []
+        for stage_key in STAGE_ORDER:
+            progress = state.stage_progress.get(stage_key)
+            status = progress.status if progress is not None else StageStatus.NOT_STARTED.value
+            resolved = status in resolved_statuses
+            mark = "✓" if resolved else "✗"
+            checklist_lines.append(f"{mark} {_STAGE_TITLES[stage_key]}")
+            if not resolved:
+                unresolved_titles.append(_STAGE_TITLES[stage_key])
+        if unresolved_titles:
+            summary = "Complete Session needs: " + "; ".join(unresolved_titles) + "."
+        else:
+            summary = "Ready to complete."
+        self._completion_status_label.setText(summary + "  (" + " | ".join(checklist_lines) + ")")
 
     def _save_current_stage_inputs(self) -> None:
         # Checked live rather than via `self._state`, which may be stale if the

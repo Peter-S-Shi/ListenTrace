@@ -33,6 +33,7 @@ from listentrace.application.services.player_loading_service import load_materia
 from listentrace.domain.enums.material_status import MaterialStatus
 from listentrace.infrastructure.db.migrations import current_version
 from listentrace.ui.theme import apply_role, make_card
+from listentrace.ui.widgets.recording_panel import recording_change_bus
 from listentrace.ui.windows.guided_session_window import GuidedSessionWindow
 from listentrace.ui.windows.import_dialog import ImportDialog
 from listentrace.ui.windows.learning_history_window import LearningHistoryWindow
@@ -608,6 +609,11 @@ class MainWindow(QMainWindow):
             except RecordingValidationError as exc:
                 QMessageBox.warning(self, "Cannot Remove Material", str(exc))
                 return
+            # M12 Round 3/4 ghost-take fix: tell every open RecordingPanel (a
+            # Shadowing/Quick Practice/Guided Session window may already be
+            # open on this material) to drop any now-deleted takes rather than
+            # leaving a stale, unclickable row.
+            recording_change_bus.material_changed.emit(material_id)
             self.refresh_library()
 
     def show_error(self, message: str) -> None:

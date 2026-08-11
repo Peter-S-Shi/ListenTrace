@@ -187,6 +187,66 @@ def test_completed_session_reopens_read_only(qapp, conn, tmp_path, monkeypatch):
     reopened.close()
 
 
+def test_stage5_summary_save_and_continue_enables_complete_button(qapp, conn, tmp_path, monkeypatch):
+    """M12 Round 4 Batch A: reproduces the human-QA report that `Complete Session`
+    stays disabled after Stage 5's summary is filled in. Walks the real UI path
+    (not `svc.*` shortcuts) end to end to determine whether this is a UI-wiring
+    defect or a discoverability gap: typing the summary alone must not enable
+    Complete (that would be a *different* bug -- silent auto-completion), but
+    clicking the documented "Save and Continue" action on Stage 5 must."""
+    monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.StandardButton.Yes)
+    window, _, session_id = _open_guided_window(conn, tmp_path)
+
+    window._stage1_edits["where"].setPlainText("A cafe")
+    window._on_save_and_continue_clicked()  # -> stage2
+    window._on_skip_stage_clicked()  # -> stage3 (triggers reveal confirmation, auto-Yes)
+    window._on_skip_stage_clicked()  # -> stage4
+    window._on_skip_stage_clicked()  # -> stage5
+    assert window._current_stage == "final_summary"
+    assert window._complete_button.isEnabled() is False
+
+    window._final_summary_edit.setPlainText("Short summary of what I understood.")
+    assert window._complete_button.isEnabled() is False, (
+        "Typing the summary alone must not silently satisfy completion -- "
+        "only an explicit save action should."
+    )
+
+    window._on_save_and_continue_clicked()  # the only documented action that resolves stage 5
+    state = svc.load_session_state(conn, session_id)
+    assert state.stage_progress["final_summary"].status == "completed"
+    assert window._complete_button.isEnabled() is True, (
+        "Complete Session must become enabled once every stage is resolved via "
+        "the documented UI action."
+    )
+    window.close()
+
+
+def test_complete_button_disabled_reason_is_visible_and_accurate(qapp, conn, tmp_path, monkeypatch):
+    """M12 Round 3 Completion/Explainability Contract: a disabled `Complete
+    Session` must show an inspectable reason, not just render grey."""
+    monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.StandardButton.Yes)
+    window, _, _ = _open_guided_window(conn, tmp_path)
+
+    assert "Global Comprehension" in window._completion_status_label.text()
+    assert "Final Recall" in window._completion_status_label.text()
+
+    window._stage1_edits["where"].setPlainText("A cafe")
+    window._on_save_and_continue_clicked()  # -> stage2
+    window._on_skip_stage_clicked()  # -> stage3
+    window._on_skip_stage_clicked()  # -> stage4
+    window._on_skip_stage_clicked()  # -> stage5
+
+    assert "Final Recall" in window._completion_status_label.text()
+    assert "Global Comprehension" not in window._completion_status_label.text().split("(")[0]
+
+    window._final_summary_edit.setPlainText("Short summary.")
+    window._on_save_and_continue_clicked()
+    assert window._completion_status_label.text() == "Ready to complete.  (✓ Global Comprehension | " \
+        "✓ Keyword & Fragment Capture | ✓ Transcript Comparison & Error Diagnosis | " \
+        "✓ Sentence-Level Shadowing | ✓ Final Recall)"
+    window.close()
+
+
 def test_unsaved_capture_draft_survives_unrelated_stage3_refresh(qapp, conn, tmp_path, monkeypatch):
     monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.StandardButton.Yes)
     window, _, session_id = _open_guided_window(conn, tmp_path)
