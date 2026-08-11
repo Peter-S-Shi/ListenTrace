@@ -49,6 +49,10 @@ samples/private/
 *.webm
 # Synthetic, privacy-safe manual-QA sample audio (see manual-qa/samples/README.md)
 !/manual-qa/samples/audio/normal_lesson.wav
+# M12 Round 3 QA-spec fix (m01-02): same audio content as normal_lesson.wav
+# under a distinct filename, so the SRT/VTT-equivalence test no longer
+# collides with the product's intentional duplicate-file-path invariant.
+!/manual-qa/samples/audio/normal_lesson2.wav
 
 # IDE and operating-system files
 .vscode/
