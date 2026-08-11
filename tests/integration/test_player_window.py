@@ -315,6 +315,97 @@ def test_player_window_cancel_loop_stops_boundary_seeks(qapp, conn, tmp_path):
     window.close()
 
 
+def test_loop_button_toggles_label_between_loop_and_stop(qapp, conn, tmp_path):
+    """M12 Round 1 Playback Contract S7.1 (m02-05, P3): the same control must
+    show the state transition -- previously the button always read "Loop Cue"
+    even while a loop was active, with no visible way to discover a cancel."""
+    wav_path = tmp_path / "lesson.wav"
+    _make_wav(wav_path)
+    window = PlayerWindow(_two_cue_result(wav_path), conn)
+    assert window._loop_cue_button.text() == "Loop Cue"
+
+    window._cue_list.setCurrentRow(0)
+    window._on_loop_cue_clicked()
+    assert window._loop_cue_button.text() == "Stop Loop"
+
+    window._session.cancel_loop()
+    window._sync_loop_button_text()
+    assert window._loop_cue_button.text() == "Loop Cue"
+    window.close()
+
+
+def test_loop_button_resets_when_cancelled_via_escape_key(qapp, conn, tmp_path):
+    wav_path = tmp_path / "lesson.wav"
+    _make_wav(wav_path)
+    window = PlayerWindow(_two_cue_result(wav_path), conn)
+    window._cue_list.setCurrentRow(0)
+    window._on_loop_cue_clicked()
+    assert window._loop_cue_button.text() == "Stop Loop"
+
+    window.keyPressEvent(QKeyEvent(QKeyEvent.Type.KeyPress, Qt.Key.Key_Escape, Qt.KeyboardModifier.NoModifier))
+    assert window._session.loop_mode is LoopMode.NONE
+    assert window._loop_cue_button.text() == "Loop Cue"
+    window.close()
+
+
+def test_loop_button_resets_when_replay_cue_cancels_the_active_loop(qapp, conn, tmp_path):
+    wav_path = tmp_path / "lesson.wav"
+    _make_wav(wav_path)
+    window = PlayerWindow(_two_cue_result(wav_path), conn)
+    window._cue_list.setCurrentRow(0)
+    window._on_loop_cue_clicked()
+    assert window._loop_cue_button.text() == "Stop Loop"
+
+    window._on_replay_cue()
+    assert window._session.loop_mode is LoopMode.NONE
+    assert window._loop_cue_button.text() == "Loop Cue"
+    window.close()
+
+
+def test_manual_scroll_suspends_follow_and_shows_return_button(qapp, conn, tmp_path):
+    """M12 Round 1 Playback Contract S8 (m02-01/m12-05, P4): a manual scroll
+    away from the playing cue must suspend auto-follow and expose a
+    lightweight recovery action, rather than fighting the learner's scroll on
+    the next position tick."""
+    wav_path = tmp_path / "lesson.wav"
+    _make_wav(wav_path)
+    window = PlayerWindow(_two_cue_result(wav_path), conn)
+    assert window._follow_playback is True
+    assert window._return_to_playing_button.isHidden() is True
+
+    window._on_transcript_scrollbar_changed(5)  # simulates a real user scroll
+    assert window._follow_playback is False
+    assert window._return_to_playing_button.isHidden() is False
+
+    window.close()
+
+
+def test_return_to_playing_cue_resumes_follow(qapp, conn, tmp_path):
+    wav_path = tmp_path / "lesson.wav"
+    _make_wav(wav_path)
+    window = PlayerWindow(_two_cue_result(wav_path), conn)
+    window._on_transcript_scrollbar_changed(5)
+    assert window._follow_playback is False
+
+    window._on_return_to_playing_clicked()
+    assert window._follow_playback is True
+    assert window._return_to_playing_button.isHidden() is True
+    window.close()
+
+
+def test_programmatic_navigation_does_not_suspend_follow(qapp, conn, tmp_path):
+    """Round 1 S8: Previous/Next Cue moves the list selection (and its
+    built-in scroll-into-view) on purpose -- this must not be mistaken for a
+    manual free-scroll that suspends Follow Playback."""
+    wav_path = tmp_path / "lesson.wav"
+    _make_wav(wav_path)
+    window = PlayerWindow(_two_cue_result(wav_path), conn)
+    window._cue_list.setCurrentRow(0)
+    window._on_next_cue()
+    assert window._follow_playback is True
+    window.close()
+
+
 def test_player_window_toggle_transcript_keeps_active_cue_tracking(qapp, conn, tmp_path):
     wav_path = tmp_path / "lesson.wav"
     _make_wav(wav_path)

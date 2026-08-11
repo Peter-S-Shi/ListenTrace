@@ -188,6 +188,14 @@ class PlayerWindow(QMainWindow):
         volume_row.addWidget(self._volume_slider)
         layout.addLayout(volume_row)
 
+        # M12 Round 1 S8 Transcript Playback Follow: shown only while Follow
+        # Playback is suspended by a manual scroll.
+        self._return_to_playing_button = QPushButton("Return to Playing Cue")
+        theme.apply_role(self._return_to_playing_button, "quiet")
+        self._return_to_playing_button.clicked.connect(self._on_return_to_playing_clicked)
+        self._return_to_playing_button.setVisible(False)
+        layout.addWidget(self._return_to_playing_button)
+
         self._cue_list = QListWidget()
         self._cue_list.setSelectionMode(QAbstractItemView.SelectionMode.ContiguousSelection)
         # Milestone 11: wrap long cue text instead of growing an unnecessary
@@ -200,6 +208,10 @@ class PlayerWindow(QMainWindow):
             self._cue_list.addItem(QListWidgetItem(label))
         self._cue_list.currentItemChanged.connect(self._on_editing_cue_changed)
         layout.addWidget(self._cue_list, 1)
+
+        self._follow_playback = True
+        self._programmatic_scroll = False
+        self._cue_list.verticalScrollBar().valueChanged.connect(self._on_transcript_scrollbar_changed)
 
         self._workspace_panel = self._build_workspace_panel()
         layout.addWidget(self._workspace_panel)
@@ -454,6 +466,36 @@ class PlayerWindow(QMainWindow):
             if item is None:
                 continue
             item.setBackground(_ACTIVE_CUE_HIGHLIGHT if i == active_index else QColor(0, 0, 0, 0))
+        # M12 Round 1 S8 Transcript Playback Follow: keep the playing cue
+        # reachable during continuous playback without forcibly recentering
+        # on every tick, and without fighting a learner who scrolled away on
+        # purpose to read earlier/later content (see
+        # _on_transcript_scrollbar_changed / _on_return_to_playing_clicked).
+        if self._follow_playback and active_index is not None:
+            self._scroll_to_cue_if_needed(active_index)
+
+    def _scroll_to_cue_if_needed(self, index: int) -> None:
+        item = self._cue_list.item(index)
+        if item is None:
+            return
+        item_rect = self._cue_list.visualItemRect(item)
+        if self._cue_list.viewport().rect().contains(item_rect):
+            return  # already comfortably visible -- do not force a jump
+        self._programmatic_scroll = True
+        self._cue_list.scrollToItem(item, QAbstractItemView.ScrollHint.EnsureVisible)
+        self._programmatic_scroll = False
+
+    def _on_transcript_scrollbar_changed(self, _value: int) -> None:
+        if self._programmatic_scroll or not self._follow_playback:
+            return
+        self._follow_playback = False
+        self._return_to_playing_button.setVisible(True)
+
+    def _on_return_to_playing_clicked(self) -> None:
+        self._follow_playback = True
+        self._return_to_playing_button.setVisible(False)
+        if self._session.active_cue_index is not None:
+            self._scroll_to_cue_if_needed(self._session.active_cue_index)
 
     def _on_slider_pressed(self) -> None:
         self._seeking_via_slider = True
@@ -482,8 +524,12 @@ class PlayerWindow(QMainWindow):
         # refreshes the transcript workspace -- so Selected Cue, the visible
         # list selection, and the workspace panel all move together with
         # Media Position in one atomic action, per the Round 1 navigation
-        # contract. Never touches play/pause state.
+        # contract. Never touches play/pause state. Qt's own current-item
+        # change already scrolls the new row into view; guarded as
+        # programmatic so it does not itself suspend Follow Playback.
+        self._programmatic_scroll = True
         self._cue_list.setCurrentRow(new_index)
+        self._programmatic_scroll = False
         self._playback.seek(self._session.cues[new_index].start_ms)
 
     def _on_previous_cue(self) -> None:
@@ -505,10 +551,11 @@ class PlayerWindow(QMainWindow):
         if cue_index is None:
             self._show_status("No cue selected to replay.")
             return
-        seek_to = self._session.replay_cue(cue_index)
+        seek_to = self._session.replay_cue(cue_index)  # cancels any active loop
         self._playback.seek(seek_to)
         self._playback.play()
         self._play_pause_button.setText("Pause")
+        self._sync_loop_button_text()
         self._show_status("")
 
     def _on_loop_cue_clicked(self) -> None:
@@ -530,7 +577,16 @@ class PlayerWindow(QMainWindow):
         self._playback.seek(seek_to_ms)
         self._playback.play()
         self._play_pause_button.setText("Pause")
+        self._sync_loop_button_text()
         self._show_status("")
+
+    def _sync_loop_button_text(self) -> None:
+        # M12 Round 1 Playback Contract S7.1: the same control must show the
+        # state transition -- previously this button always read "Loop Cue"
+        # even while a loop was active, and the only way to discover how to
+        # cancel it was the undocumented Escape/L keyboard shortcuts.
+        active = self._session.loop_mode is not LoopMode.NONE
+        self._loop_cue_button.setText("Stop Loop" if active else "Loop Cue")
 
     # ---- Quick Practice (Milestone 10) ----
 
@@ -643,6 +699,7 @@ class PlayerWindow(QMainWindow):
     def _on_loop_toggle_shortcut(self) -> None:
         if self._session.loop_mode is not LoopMode.NONE:
             self._session.cancel_loop()
+            self._sync_loop_button_text()
             return
         indices = self._selected_cue_indices()
         if len(indices) >= 2:
@@ -667,6 +724,7 @@ class PlayerWindow(QMainWindow):
             self._on_toggle_transcript()
         elif key == Qt.Key.Key_Escape:
             self._session.cancel_loop()
+            self._sync_loop_button_text()
         elif not self._playback_usable:
             super().keyPressEvent(event)
         elif key == Qt.Key.Key_Space:
