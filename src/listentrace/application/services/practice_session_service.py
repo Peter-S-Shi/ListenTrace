@@ -165,6 +165,21 @@ def abandon_session(conn: sqlite3.Connection, session_id: int) -> None:
     repo.set_session_status(conn, session_id, SessionStatus.ABANDONED.value)
 
 
+def delete_session(conn: sqlite3.Connection, session_id: int) -> None:
+    """M12 Round 3/4 History Ownership Contract: the user owns ordinary
+    learning history. Only a completed or abandoned session -- a genuine
+    historical record, not a live workflow -- may be deleted this way; an
+    active session must be abandoned first (Round 3 S26: "Active Sessions Are
+    Not Deleted as History"). Cascade/retention behavior is documented on
+    `session_repository.delete_practice_session`."""
+    session = _require_session(conn, session_id)
+    if session.status == SessionStatus.ACTIVE.value:
+        raise SessionValidationError(
+            "session_active", "An active session cannot be deleted. Abandon it first."
+        )
+    repo.delete_practice_session(conn, session_id)
+
+
 def complete_session(conn: sqlite3.Connection, session_id: int) -> None:
     session = _require_active_session(conn, session_id)
     if not rules.is_valid_session_transition(session.status, SessionStatus.COMPLETED.value):

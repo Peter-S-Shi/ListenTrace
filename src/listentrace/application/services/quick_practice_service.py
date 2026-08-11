@@ -393,6 +393,25 @@ def close_session(conn: sqlite3.Connection, session_id: int) -> str:
     return "abandoned"
 
 
+def delete_history(conn: sqlite3.Connection, session_id: int) -> None:
+    """M12 Round 3/4 History Ownership Contract: only a completed or
+    abandoned run -- a genuine historical record -- may be deleted this way;
+    an active run must be closed first. Distinct from `close_session`'s
+    zero-evidence auto-discard: this is the user explicitly deleting a
+    *resolved* run they no longer want in their history. Cascades (see
+    migrations.py) to quick_practice_item and quick_practice_diagnosis_
+    evidence -- both run-owned; independent `annotation` links are
+    `ON DELETE SET NULL`. No `recording` table reference exists for Quick
+    Practice at all, so retained recordings are entirely unaffected."""
+    session = _require_session(conn, session_id)
+    if session.status == QuickPracticeStatus.ACTIVE.value:
+        raise QuickPracticeValidationError(
+            "session_active", "An active Quick Practice run cannot be deleted. Close it first."
+        )
+    assert session.id is not None
+    repo.delete_quick_practice_session(conn, session.id)
+
+
 def recover_interrupted_sessions(conn: sqlite3.Connection) -> int:
     """Run once at application startup (mirrors `recording_service.
     recover_interrupted_recordings`): a session left `active` was left that

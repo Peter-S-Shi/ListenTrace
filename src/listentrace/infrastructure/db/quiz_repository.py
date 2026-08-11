@@ -150,6 +150,16 @@ def set_quiz_status(conn: sqlite3.Connection, attempt_id: int, status: str) -> N
     conn.commit()
 
 
+def delete_quiz_attempt(conn: sqlite3.Connection, attempt_id: int) -> None:
+    """Hard delete. Cascades (see migrations.py) to quiz_question and then
+    quiz_answer -- both attempt-owned. Does not cascade to the independent
+    `annotation`/`saved_language_item`/`keyword_capture` rows a question may
+    reference (all `ON DELETE SET NULL`), so those survive with that
+    provenance link simply cleared."""
+    conn.execute("DELETE FROM quiz_attempt WHERE id = ?", (attempt_id,))
+    conn.commit()
+
+
 def touch_quiz_resumed(conn: sqlite3.Connection, attempt_id: int) -> None:
     conn.execute(
         "UPDATE quiz_attempt SET last_resumed_at = datetime('now'), "

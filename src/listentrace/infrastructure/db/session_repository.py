@@ -151,6 +151,17 @@ def set_session_status(conn: sqlite3.Connection, session_id: int, status: str) -
     conn.commit()
 
 
+def delete_practice_session(conn: sqlite3.Connection, session_id: int) -> None:
+    """Hard delete. Cascades (see migrations.py) to session_stage_progress,
+    stage_response, keyword_capture, session_diagnosis_evidence, and
+    shadowing_cue_progress -- all genuinely session-owned. Does NOT cascade to
+    `annotation`, `saved_language_item` (never referenced from here), or
+    `recording` (`practice_session_id` is `ON DELETE SET NULL`, so retained
+    recordings survive as standalone rows, still discoverable by material/cue)."""
+    conn.execute("DELETE FROM practice_session WHERE id = ?", (session_id,))
+    conn.commit()
+
+
 def touch_session_resumed(conn: sqlite3.Connection, session_id: int) -> None:
     conn.execute(
         "UPDATE practice_session SET last_resumed_at = datetime('now'), "

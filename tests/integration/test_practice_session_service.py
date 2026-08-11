@@ -12,6 +12,7 @@ from listentrace.application.errors import (
 )
 from listentrace.application.services import annotation_service
 from listentrace.application.services import practice_session_service as svc
+from listentrace.application.services import recording_service
 from listentrace.domain.enums.shadowing_status import ShadowingStatus
 from listentrace.domain.enums.stage_status import StageStatus
 from listentrace.domain.models.material import Material
@@ -136,6 +137,75 @@ def test_complete_session_requires_every_stage_resolved(conn):
         svc.skip_stage(conn, session.id, stage_key)
     svc.complete_session(conn, session.id)
     assert svc.get_session(conn, session.id).status == "completed"
+
+
+def test_delete_session_requires_completed_or_abandoned(conn):
+    material_id, _ = _make_material_with_cues(conn)
+    session = svc.start_session(conn, material_id)
+    with pytest.raises(SessionValidationError) as excinfo:
+        svc.delete_session(conn, session.id)
+    assert excinfo.value.category == "session_active"
+
+    svc.abandon_session(conn, session.id)
+    svc.delete_session(conn, session.id)  # must not raise once abandoned
+    assert svc.get_session(conn, session.id) is None
+
+
+def test_delete_session_preserves_independent_annotations_and_retained_recordings(conn, tmp_path):
+    """M12 Round 3/4 History Ownership Contract + History Deletion Feasibility
+    Gate: deleting a session must not delete independent user assets
+    (annotations survive via ON DELETE SET NULL, not CASCADE), and must not
+    delete retained recordings -- confirmed against the real schema that
+    recording.practice_session_id is SET NULL, not CASCADE, so a retained
+    recording survives as a standalone row, still discoverable by cue."""
+    import struct
+    import wave
+
+    material_id, cues = _make_material_with_cues(conn)
+    session = svc.start_session(conn, material_id)
+
+    for stage_key in ("global_comprehension", "keyword_capture"):
+        svc.enter_stage(conn, session.id, stage_key)
+        svc.skip_stage(conn, session.id, stage_key)
+
+    svc.enter_stage(conn, session.id, "transcript_diagnosis")
+    evidence_id = svc.record_session_diagnosis(
+        conn, session.id, cues[0].id, 0, 3, "keyword", heard_as=None, note=None
+    )
+    diagnosis = svc.list_session_diagnosis(conn, session.id)
+    annotation_id = next(d.annotation_id for d in diagnosis if d.id == evidence_id)
+    assert annotation_id is not None
+    svc.skip_stage(conn, session.id, "transcript_diagnosis")
+
+    svc.enter_stage(conn, session.id, "shadowing")
+    recordings_dir = tmp_path / "recordings"
+    recording, path = recording_service.begin_recording(
+        conn, recordings_dir, material_id, cues[0].id, "dev", "Mic", practice_session_id=session.id
+    )
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with wave.open(str(path), "w") as wf:
+        wf.setnchannels(1)
+        wf.setsampwidth(2)
+        wf.setframerate(8000)
+        wf.writeframes(struct.pack("<h", 0) * 8000)
+    recording_service.finish_recording(conn, recordings_dir, recording.id)
+    svc.skip_stage(conn, session.id, "shadowing")
+
+    svc.enter_stage(conn, session.id, "final_summary")
+    svc.skip_stage(conn, session.id, "final_summary")
+    svc.complete_session(conn, session.id)
+
+    svc.delete_session(conn, session.id)
+
+    assert svc.get_session(conn, session.id) is None
+    assert get_annotation(conn, annotation_id) is not None, "independent annotation must survive session deletion"
+
+    surviving_takes = recording_service.list_takes_for_cue(conn, cues[0].id)
+    assert len(surviving_takes) == 1
+    assert surviving_takes[0].practice_session_id is None, (
+        "the recording's session link is cleared, but the recording itself is retained"
+    )
+    assert path.exists(), "the recording file itself must not be touched"
 
 
 def test_completed_and_abandoned_sessions_are_read_only(conn):

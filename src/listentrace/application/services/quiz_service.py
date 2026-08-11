@@ -116,6 +116,17 @@ def abandon_quiz(conn: sqlite3.Connection, attempt_id: int) -> None:
     repo.set_quiz_status(conn, attempt_id, QuizStatus.ABANDONED.value)
 
 
+def delete_quiz_attempt(conn: sqlite3.Connection, attempt_id: int) -> None:
+    """M12 Round 3/4 History Ownership Contract: only a completed or
+    abandoned attempt -- a genuine historical record -- may be deleted; an
+    active quiz must be abandoned first. Cascade/retention behavior is
+    documented on `quiz_repository.delete_quiz_attempt`."""
+    attempt = _require_attempt(conn, attempt_id)
+    if attempt.status == QuizStatus.ACTIVE.value:
+        raise QuizValidationError("quiz_active", "An active quiz cannot be deleted. Abandon it first.")
+    repo.delete_quiz_attempt(conn, attempt_id)
+
+
 def save_quiz_answer(
     conn: sqlite3.Connection,
     attempt_id: int,
