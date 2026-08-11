@@ -431,10 +431,21 @@ class QuizWindow(QMainWindow):
             widget.setEnabled(enabled)
 
     def _on_play_clicked(self) -> None:
+        # M12 Round 1 Playback Contract: Quiz is a cue-oriented context, so
+        # Play must default to cue-scoped playback (this cue only), never
+        # whole-media playback -- previously this just resumed/started the
+        # underlying continuous transport, which could play straight through
+        # every remaining cue in the material.
         if self._playback.is_playing:
             self._playback.pause()
-        else:
-            self._playback.play()
+            self._sync_play_button_text()
+            return
+        if self._current_cue_index is None:
+            return
+        seek_to = self._player_session.play_cue(self._current_cue_index)
+        if seek_to is not None:
+            self._playback.seek(seek_to)
+        self._playback.play()
         self._sync_play_button_text()
 
     def _on_replay_clicked(self) -> None:

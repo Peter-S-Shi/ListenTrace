@@ -71,6 +71,42 @@ def test_window_opens_with_transcript_hidden_at_listen_recall_step(qapp, conn, t
     window.close()
 
 
+def test_play_button_is_cue_scoped_not_whole_media(qapp, conn, tmp_path):
+    """M12 Round 1 Playback Contract (P1): Play in the Listen step must stop
+    at the current cue's end, not drift into the next cue's audio."""
+    from PySide6.QtCore import QEventLoop, QTimer
+
+    def _pump(ms: int) -> None:
+        loop = QEventLoop()
+        QTimer.singleShot(ms, loop.quit)
+        loop.exec()
+
+    media_path = tmp_path / "lesson.wav"
+    _make_wav(media_path, seconds=4)
+    srt = tmp_path / "lesson.srt"
+    srt.write_text(
+        "1\n00:00:00,000 --> 00:00:01,000\nBonjour\n\n"
+        "2\n00:00:01,000 --> 00:00:02,000\nComment ca va\n\n"
+        "3\n00:00:02,000 --> 00:00:03,000\nAu revoir\n",
+        encoding="utf-8",
+    )
+    result = import_material(conn, media_path, srt, "QP Lesson")
+    load_result = load_material_for_player(conn, result.material_id)
+    cue = load_result.cues[1]  # 1000-2000ms, so a "just play from 0" bug would overshoot it
+    session = svc.start_selected_session(conn, load_result.material.id, [cue.id])
+    window = QuickPracticeWindow(conn, load_result, session.id, tmp_path / "recordings")
+    _pump(500)  # let the async media load finish before seeking away from position 0
+
+    window._on_play_clicked()
+    _pump((cue.end_ms - cue.start_ms) + 500)
+
+    assert window._playback.is_playing is False, (
+        "Play must stop at this cue's end, not continue playing into the next cue"
+    )
+    assert window._playback.position_ms < cue.end_ms + 200
+    window.close()
+
+
 def test_step_action_disabled_until_a_recall_result_is_chosen(qapp, conn, tmp_path):
     window, _, _ = _open_window(conn, tmp_path, None)
     assert not window._step_action_button.isEnabled()

@@ -38,6 +38,40 @@ def test_replay_cue_pauses_once_at_cue_end_and_does_not_loop():
     assert tick.seek_to_ms is None
 
 
+def test_play_cue_starts_at_cue_start_when_never_played():
+    session = PlayerSession(_cues())
+    seek_to = session.play_cue(1)  # cue "two": 1000-2000
+    assert seek_to == 1000
+
+
+def test_play_cue_resumes_in_place_when_paused_mid_cue():
+    session = PlayerSession(_cues())
+    session.play_cue(1)  # start cue "two"
+    session.on_position_changed(1400)  # learner paused here, mid-cue
+
+    seek_to = session.play_cue(1)  # pressed Play again
+    assert seek_to is None, "must resume from 1400ms, not restart at cue.start"
+
+
+def test_play_cue_restarts_at_cue_start_once_it_already_reached_cue_end():
+    session = PlayerSession(_cues())
+    session.play_cue(1)  # cue "two": 1000-2000
+    tick = session.on_position_changed(2000 - LOOP_END_TOLERANCE_MS)
+    assert tick.pause is True  # naturally reached cue.end and stopped
+
+    seek_to = session.play_cue(1)  # pressed Play again after it finished
+    assert seek_to == 1000, "a second press after natural completion must replay from the start"
+
+
+def test_play_cue_never_drifts_past_cue_end():
+    session = PlayerSession(_cues())
+    session.play_cue(0)  # cue "one": 0-1000
+    tick = session.on_position_changed(1000 - LOOP_END_TOLERANCE_MS)
+    assert tick.pause is True
+    tick = session.on_position_changed(1500)
+    assert tick.pause is False  # one-shot: no further pause/seek once already stopped
+
+
 def test_loop_cue_seeks_back_to_start_at_cue_end():
     session = PlayerSession(_cues())
     seek_to = session.loop_cue(1)  # cue "two": 1000-2000

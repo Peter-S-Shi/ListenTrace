@@ -31,17 +31,23 @@ class PlayerSession:
         self._loop_end_ms: int | None = None
         self._loop_seek_pending = False
         self._replay_end_ms: int | None = None
+        self._last_position_ms: int | None = None
+        self._play_cue_target_index: int | None = None
+        self._play_cue_reached_end = False
 
     @property
     def cues(self) -> list[SubtitleCue]:
         return self._cue_index.cues
 
     def on_position_changed(self, position_ms: int) -> PlayerTick:
+        self._last_position_ms = position_ms
         self.active_cue_index = self._cue_index.active_cue_index(position_ms)
 
         if self._replay_end_ms is not None:
             if position_ms >= self._replay_end_ms - LOOP_END_TOLERANCE_MS:
                 self._replay_end_ms = None
+                if self._play_cue_target_index is not None:
+                    self._play_cue_reached_end = True
                 return PlayerTick(self.active_cue_index, pause=True)
             return PlayerTick(self.active_cue_index)
 
@@ -60,17 +66,57 @@ class PlayerSession:
 
         return PlayerTick(self.active_cue_index)
 
+    def play_cue(self, cue_index: int) -> int | None:
+        """Cue-scoped Play (M12 Round 1 Playback Contract S3.2/S11): the default
+        Play action in cue-oriented contexts (Quiz, Quick Practice, Shadowing).
+
+        Unlike `replay_cue`, this does not unconditionally restart at
+        `cue.start` -- if the last known position is already paused somewhere
+        inside `[cue.start, cue.end)` (the learner paused mid-cue and pressed
+        Play again), it resumes from there instead of jumping back to the
+        start. If the position is outside the cue's range (not yet started,
+        or a previous play already reached `cue.end` and stopped), it starts
+        at `cue.start` like `replay_cue`. Either way, playback never drifts
+        past `cue.end` -- enforced by the same `_replay_end_ms` boundary
+        `on_position_changed` already applies to `replay_cue`.
+
+        Returns the position to seek to, or `None` if no seek is needed
+        (resuming in place)."""
+        cue = self._cue_index.cues[cue_index]
+        # A position inside [cue.start, cue.end) is ambiguous on its own: it is
+        # also exactly where playback sits right after naturally reaching
+        # cue.end and stopping (the boundary tolerance stops it a hair early,
+        # not exactly at cue.end). `_play_cue_reached_end` disambiguates a
+        # genuine mid-cue pause from "this cue already finished, restart it".
+        already_finished_this_cue = self._play_cue_reached_end and self._play_cue_target_index == cue_index
+        resume_in_place = (
+            not already_finished_this_cue
+            and self._last_position_ms is not None
+            and cue.start_ms <= self._last_position_ms < cue.end_ms
+        )
+        self.cancel_loop()
+        self._replay_end_ms = cue.end_ms
+        self._play_cue_target_index = cue_index
+        self._play_cue_reached_end = False
+        if resume_in_place:
+            return None
+        return cue.start_ms
+
     def replay_cue(self, cue_index: int) -> int:
         """Start a one-shot replay of `cue_index`. Returns the position to seek to."""
         cue = self._cue_index.cues[cue_index]
         self.cancel_loop()
         self._replay_end_ms = cue.end_ms
+        self._play_cue_target_index = None
+        self._play_cue_reached_end = False
         return cue.start_ms
 
     def loop_cue(self, cue_index: int) -> int:
         """Start looping a single cue. Returns the position to seek to."""
         cue = self._cue_index.cues[cue_index]
         self._replay_end_ms = None
+        self._play_cue_target_index = None
+        self._play_cue_reached_end = False
         self.loop_mode = LoopMode.CUE
         self._loop_start_ms = cue.start_ms
         self._loop_end_ms = cue.end_ms
@@ -83,6 +129,8 @@ class PlayerSession:
         cues = self._cue_index.cues
         lo, hi = sorted((first_index, last_index))
         self._replay_end_ms = None
+        self._play_cue_target_index = None
+        self._play_cue_reached_end = False
         self.loop_mode = LoopMode.RANGE
         self._loop_start_ms = cues[lo].start_ms
         self._loop_end_ms = cues[hi].end_ms

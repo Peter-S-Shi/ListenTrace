@@ -460,6 +460,43 @@ def test_quiz_window_full_take_submit_and_review_flow(qapp, tmp_path):
     quiz_window.close()
 
 
+def test_quiz_window_play_button_is_cue_scoped_not_whole_media(qapp, tmp_path):
+    """M12 Round 1 Playback Contract (m05-01/m10-05/m12-05, P1): Play in a
+    cue-oriented context must stop at the current cue's end, never drift into
+    the next cue's audio, the way whole-media continuous playback would."""
+    connection = open_connection(tmp_path / "smoke.db")
+    migrate(connection)
+
+    media = tmp_path / "lesson.wav"
+    _make_wav(media, seconds=11)  # covers all of _MULTI_CUE_SRT's 0-10000ms range
+    subtitle = tmp_path / "lesson.srt"
+    subtitle.write_text(_MULTI_CUE_SRT, encoding="utf-8")
+    result = import_material(connection, media, subtitle, "Lesson One")
+    attempt = quiz_service.create_material_quiz(connection, result.material_id, requested_count=5, seed=1)
+
+    from listentrace.application.services.player_loading_service import load_material_for_player
+    from listentrace.ui.windows.quiz_window import QuizWindow
+
+    load_result = load_material_for_player(connection, result.material_id)
+    quiz_window = QuizWindow(connection, load_result, attempt.id, None)
+    _pump(500)  # let the async media load finish before seeking away from position 0
+
+    state = quiz_service.load_quiz_state(connection, attempt.id)
+    cue_index = quiz_window._cue_index_by_id[state.questions[0].subtitle_cue_id]
+    cue = quiz_window._player_session.cues[cue_index]
+
+    quiz_window._show_question(0)
+    quiz_window._on_play_clicked()
+    _pump((cue.end_ms - cue.start_ms) + 500)  # long enough to cross the cue boundary if unbounded
+
+    assert quiz_window._playback.is_playing is False, (
+        "Play must stop at this cue's end, not continue playing into the next cue"
+    )
+    assert quiz_window._playback.position_ms < cue.end_ms + 200
+
+    quiz_window.close()
+
+
 def test_quiz_window_abandon_makes_it_read_only(qapp, tmp_path, monkeypatch):
     connection = open_connection(tmp_path / "smoke.db")
     migrate(connection)
