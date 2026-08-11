@@ -462,15 +462,39 @@ class PlayerWindow(QMainWindow):
         self._playback.seek(self._seek_slider.value())
         self._seeking_via_slider = False
 
+    def _navigation_anchor_index(self) -> int | None:
+        """M12 Round 1 Playback Contract S6: Previous/Next Cue must navigate
+        from a stable anchor, not `self._session.active_cue_index` directly.
+        `active_cue_index` is re-derived from the playback position on every
+        position tick and is transiently `None` in the gap right after a seek,
+        before the next tick lands -- `CueIndex.previous_index(None)` then
+        falls back to cue 0, which was the exact "repeated Previous Cue jumps
+        to the start" defect reported in human QA (intermittent, since it
+        depends on tick timing). `_editing_cue_index` (the transcript
+        workspace's Selected Cue) only changes when explicitly set by a list
+        click or by this navigation itself, so it never races with playback."""
+        if self._editing_cue_index is not None:
+            return self._editing_cue_index
+        return self._session.active_cue_index
+
+    def _navigate_to_cue(self, new_index: int) -> None:
+        # Drives _on_editing_cue_changed, which updates _editing_cue_index and
+        # refreshes the transcript workspace -- so Selected Cue, the visible
+        # list selection, and the workspace panel all move together with
+        # Media Position in one atomic action, per the Round 1 navigation
+        # contract. Never touches play/pause state.
+        self._cue_list.setCurrentRow(new_index)
+        self._playback.seek(self._session.cues[new_index].start_ms)
+
     def _on_previous_cue(self) -> None:
-        new_index = self._session.previous_cue_index(self._session.active_cue_index)
+        new_index = self._session.previous_cue_index(self._navigation_anchor_index())
         if new_index is not None:
-            self._playback.seek(self._session.cues[new_index].start_ms)
+            self._navigate_to_cue(new_index)
 
     def _on_next_cue(self) -> None:
-        new_index = self._session.next_cue_index(self._session.active_cue_index)
+        new_index = self._session.next_cue_index(self._navigation_anchor_index())
         if new_index is not None:
-            self._playback.seek(self._session.cues[new_index].start_ms)
+            self._navigate_to_cue(new_index)
 
     def _selected_cue_indices(self) -> list[int]:
         return sorted(self._cue_list.row(item) for item in self._cue_list.selectedItems())

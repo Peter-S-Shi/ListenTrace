@@ -48,6 +48,16 @@ def _two_cue_result(media_path, media_kind="audio"):
     return PlayerLoadResult(material=material, cues=cues)
 
 
+def _three_cue_result(media_path, media_kind="audio"):
+    material = Material(id=1, title="Test Lesson", media_path=str(media_path), media_kind=media_kind)
+    cues = [
+        SubtitleCue(cue_index=1, start_ms=0, end_ms=500, text="one"),
+        SubtitleCue(cue_index=2, start_ms=500, end_ms=1000, text="two"),
+        SubtitleCue(cue_index=3, start_ms=1000, end_ms=1500, text="three"),
+    ]
+    return PlayerLoadResult(material=material, cues=cues)
+
+
 def test_is_text_entry_widget_helper(qapp):
     assert _is_text_entry_widget(QLineEdit()) is True
     assert _is_text_entry_widget(QPushButton()) is False
@@ -190,6 +200,50 @@ def test_player_window_cue_list_uses_contiguous_selection_mode(qapp, conn, tmp_p
         == QAbstractItemView.SelectionMode.ContiguousSelection
     )
 
+    window.close()
+
+
+def test_previous_cue_steps_one_at_a_time_even_if_active_cue_index_is_transiently_none(qapp, conn, tmp_path):
+    """M12 Round 1 regression: reproduces the human-QA report that repeated
+    Previous Cue clicks could jump straight back to the start (m02-03,
+    m13-02). The root cause was that navigation read
+    `self._session.active_cue_index`, which is briefly `None` right after a
+    seek -- before the next position tick lands -- and
+    `CueIndex.previous_index(None)` falls back to cue 0. Navigation must
+    instead anchor on the stable, explicitly-tracked Selected Cue."""
+    wav_path = tmp_path / "lesson.wav"
+    _make_wav(wav_path)
+    window = PlayerWindow(_three_cue_result(wav_path), conn)
+    window._cue_list.setCurrentRow(2)  # start at the last cue
+    assert window._editing_cue_index == 2
+
+    # Simulate the exact race: a seek just happened and the next position tick
+    # has not landed yet, so the playback-derived index is momentarily None.
+    window._session.active_cue_index = None
+    window._on_previous_cue()
+    assert window._editing_cue_index == 1, "must step to the adjacent cue, not jump to the start"
+
+    window._session.active_cue_index = None
+    window._on_previous_cue()
+    assert window._editing_cue_index == 0
+
+    window.close()
+
+
+def test_next_cue_updates_selected_cue_and_seeks_media_position(qapp, conn, tmp_path):
+    """Round 1 S6: a navigation action must atomically move Selected Cue and
+    Media Position together."""
+    wav_path = tmp_path / "lesson.wav"
+    _make_wav(wav_path)
+    window = PlayerWindow(_three_cue_result(wav_path), conn)
+    _run_event_loop(qapp, 300)  # let the async media load finish before seeking
+    window._cue_list.setCurrentRow(0)
+
+    window._on_next_cue()
+    _run_event_loop(qapp, 300)
+
+    assert window._editing_cue_index == 1
+    assert window._playback.position_ms == pytest.approx(500, abs=150)
     window.close()
 
 
