@@ -184,11 +184,29 @@ class QuizWindow(QMainWindow):
         self._choice_button_group = QButtonGroup(panel)
         self._choice_button_group.setExclusive(True)
         self._choice_radio_buttons: list[QRadioButton] = []
+        self._choice_labels: list[QLabel] = []
+        self._choice_rows: list[QHBoxLayout] = []
         for index in range(_MAX_CHOICES):
-            radio = QRadioButton("")
+            radio = QRadioButton()
             self._choice_button_group.addButton(radio, index)
             self._choice_radio_buttons.append(radio)
-            layout.addWidget(radio)
+
+            # M12 Round 2 L2 (Quiz Text Is Primary Reading Content):
+            # QRadioButton has no word-wrap support in Qt Widgets at all --
+            # long answer text was hard-truncated with an ellipsis no matter
+            # how tall the window was. The radio now carries no text; a
+            # paired, word-wrapping QLabel is the actual reading target, and
+            # clicking anywhere on it selects the radio too.
+            label = QLabel("")
+            label.setWordWrap(True)
+            label.mousePressEvent = lambda _event, r=radio: r.setChecked(True) if r.isEnabled() else None
+            self._choice_labels.append(label)
+
+            option_row = QHBoxLayout()
+            option_row.addWidget(radio, 0)
+            option_row.addWidget(label, 1)
+            self._choice_rows.append(option_row)
+            layout.addLayout(option_row)
         layout.addStretch(1)
         return panel
 
@@ -363,15 +381,18 @@ class QuizWindow(QMainWindow):
             self._masked_text_label.setText("")
             selected_index = answer.selected_choice_index if answer is not None else None
             for index, radio in enumerate(self._choice_radio_buttons):
+                label = self._choice_labels[index]
                 if index < len(choices):
-                    radio.setText(choices[index])
+                    label.setText(choices[index])
                     radio.setVisible(True)
+                    label.setVisible(True)
                     radio.blockSignals(True)
                     radio.setChecked(index == selected_index)
                     radio.blockSignals(False)
                     radio.setEnabled(not read_only)
                 else:
                     radio.setVisible(False)
+                    label.setVisible(False)
                     radio.blockSignals(True)
                     radio.setChecked(False)
                     radio.blockSignals(False)

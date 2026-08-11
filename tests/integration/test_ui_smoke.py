@@ -497,6 +497,49 @@ def test_quiz_window_play_button_is_cue_scoped_not_whole_media(qapp, tmp_path):
     quiz_window.close()
 
 
+def test_quiz_choice_options_wrap_long_text_instead_of_truncating(qapp, tmp_path):
+    """M12 Round 2 Layout Contract (m05-01, L2): a long answer option was
+    hard-truncated with an ellipsis on a bare QRadioButton, which has no
+    word-wrap support in Qt Widgets at all -- confirmed during Phase 0 by
+    screenshot. The option text must now live on a paired, wrapping QLabel."""
+    connection = open_connection(tmp_path / "smoke.db")
+    migrate(connection)
+
+    media = tmp_path / "lesson.wav"
+    _make_wav(media)
+    subtitle = tmp_path / "lesson.srt"
+    subtitle.write_text(_MULTI_CUE_SRT, encoding="utf-8")
+    result = import_material(connection, media, subtitle, "Lesson One")
+    attempt = quiz_service.create_material_quiz(connection, result.material_id, requested_count=5, seed=1)
+
+    from listentrace.application.services.player_loading_service import load_material_for_player
+    from listentrace.ui.windows.quiz_window import QuizWindow
+
+    load_result = load_material_for_player(connection, result.material_id)
+    quiz_window = QuizWindow(connection, load_result, attempt.id, None)
+
+    import json
+
+    state = quiz_service.load_quiz_state(connection, attempt.id)
+    choice_question = next(
+        q for q in state.questions if q.question_type not in ("dictation", "review_missed")
+    )
+    index = state.questions.index(choice_question)
+    quiz_window._show_question(index)
+
+    choices = json.loads(choice_question.prompt_payload)["choices"]
+    for i, choice_text in enumerate(choices):
+        label = quiz_window._choice_labels[i]
+        assert label.wordWrap() is True
+        assert label.text() == choice_text, "the full option text must reach the label untruncated"
+        # The radio itself must never carry the option text -- QRadioButton
+        # has no word-wrap support at all, which is exactly what produced
+        # the truncated ellipsis in the human-QA screenshot.
+        assert quiz_window._choice_radio_buttons[i].text() == ""
+
+    quiz_window.close()
+
+
 def test_quiz_window_abandon_makes_it_read_only(qapp, tmp_path, monkeypatch):
     connection = open_connection(tmp_path / "smoke.db")
     migrate(connection)
