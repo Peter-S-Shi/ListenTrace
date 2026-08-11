@@ -59,6 +59,16 @@ Run the application:
 .venv/Scripts/python -m listentrace.ui.app
 ```
 
+On Windows, once `.venv` is set up, `run_listentrace.bat` (repo root) is a
+double-click launcher that starts the app without a console window. It is a
+developer convenience for anyone who already has the repo cloned and `.venv`
+installed — not an end-user installer; see `packaging/README.md` for the
+PyInstaller/Inno Setup build that produces a real Start Menu shortcut for
+people without a Python environment. To pin `run_listentrace.bat` to your
+desktop or taskbar, right-click it and choose "Send to > Desktop (create
+shortcut)"; the resulting shortcut can optionally be given the app's icon via
+its Properties > Change Icon, pointing at `packaging/assets/listentrace.ico`.
+
 Run the automated tests:
 
 ```bash
