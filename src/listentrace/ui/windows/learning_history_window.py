@@ -38,6 +38,7 @@ from listentrace.application.services import practice_session_service
 from listentrace.application.services.player_loading_service import load_material_for_player
 from listentrace.domain.services import date_range as date_range_rules
 from listentrace.ui import theme
+from listentrace.ui.time_display import format_local_timestamp
 from listentrace.ui.widgets.simple_bar_chart import SimpleBarChart
 from listentrace.ui.windows.export_dialog import ExportDialog
 from listentrace.ui.windows.guided_session_window import GuidedSessionWindow
@@ -474,7 +475,10 @@ class LearningHistoryWindow(QMainWindow):
         for entry in self._session_entries:
             outcome = f"completed {entry.completed_stage_count}, skipped {entry.skipped_stage_count}, incomplete {entry.incomplete_stage_count}"
             notes = [f"{s.stage_key}: {s.skip_note}" for s in entry.stages if s.skip_note]
-            text = f"[{entry.status}] {entry.material_title} — started {entry.started_at} — stages: {outcome}"
+            text = (
+                f"[{entry.status}] {entry.material_title} — started {format_local_timestamp(entry.started_at)} "
+                f"— stages: {outcome}"
+            )
             if notes:
                 text += " — " + "; ".join(notes)
             item = QListWidgetItem(text)
@@ -605,7 +609,7 @@ class LearningHistoryWindow(QMainWindow):
                 f"{b.question_type}: {b.correct_count}/{b.question_count}" for b in entry.breakdown
             )
             text = (
-                f"{entry.material_title} — {entry.quiz_mode} quiz — {entry.completed_at} — "
+                f"{entry.material_title} — {entry.quiz_mode} quiz — {format_local_timestamp(entry.completed_at)} — "
                 f"{entry.correct_count}/{entry.actual_count} ({_format_accuracy(entry.accuracy)})"
             )
             if breakdown:
@@ -629,7 +633,7 @@ class LearningHistoryWindow(QMainWindow):
             for entry in group.entries:
                 child = QTreeWidgetItem(
                     [
-                        f"{entry.completed_at or entry.started_at} (n={entry.actual_count})",
+                        f"{format_local_timestamp(entry.completed_at or entry.started_at)} (n={entry.actual_count})",
                         f"{entry.correct_count}/{entry.actual_count}",
                         _format_accuracy(entry.accuracy),
                     ]
@@ -751,7 +755,7 @@ class LearningHistoryWindow(QMainWindow):
         for entry in self._recording_entries:
             item = QListWidgetItem(
                 f"{entry.material_title} — \"{entry.cue_text}\" — {_format_duration_ms(entry.duration_ms)} "
-                f"— recorded {entry.created_at}"
+                f"— recorded {format_local_timestamp(entry.created_at)}"
             )
             item.setData(Qt.ItemDataRole.UserRole, entry)
             self._recording_list.addItem(item)
@@ -794,7 +798,7 @@ class LearningHistoryWindow(QMainWindow):
         return widget
 
     def _quick_practice_entry_text(self, entry: QuickPracticeHistoryEntry) -> str:
-        anchor = entry.completed_at or entry.abandoned_at or entry.started_at
+        anchor = format_local_timestamp(entry.completed_at or entry.abandoned_at or entry.started_at)
         results = ", ".join(
             f"{item.cue_text[:24]}: {item.recall_result or 'in progress'}" for item in entry.items
         )

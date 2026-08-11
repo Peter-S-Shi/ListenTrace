@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
 
 from listentrace.application.services import quiz_service as svc
 from listentrace.ui import theme
+from listentrace.ui.time_display import format_local_timestamp
 
 
 class QuizHistoryDialog(QDialog):
@@ -63,7 +64,10 @@ class QuizHistoryDialog(QDialog):
             self._list.addItem(empty)
             return
         for attempt in attempts:
-            label = f"[{attempt.status}] {attempt.quiz_mode} quiz, {attempt.actual_count} questions, started {attempt.started_at}"
+            label = (
+                f"[{attempt.status}] {attempt.quiz_mode} quiz, {attempt.actual_count} questions, "
+                f"started {format_local_timestamp(attempt.started_at)}"
+            )
             if attempt.status == "completed":
                 label += f", score {attempt.correct_count}/{attempt.actual_count}"
             item = QListWidgetItem(label)

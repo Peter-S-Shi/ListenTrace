@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
 
 from listentrace.application.services import practice_session_service as svc
 from listentrace.ui import theme
+from listentrace.ui.time_display import format_local_timestamp
 
 
 class SessionHistoryDialog(QDialog):
@@ -61,11 +62,11 @@ class SessionHistoryDialog(QDialog):
             self._list.addItem(empty)
             return
         for session in sessions:
-            label = f"[{session.status}] started {session.started_at}"
+            label = f"[{session.status}] started {format_local_timestamp(session.started_at)}"
             if session.completed_at:
-                label += f", completed {session.completed_at}"
+                label += f", completed {format_local_timestamp(session.completed_at)}"
             if session.abandoned_at:
-                label += f", abandoned {session.abandoned_at}"
+                label += f", abandoned {format_local_timestamp(session.abandoned_at)}"
             item = QListWidgetItem(label)
             item.setData(Qt.ItemDataRole.UserRole, session.id)
             self._list.addItem(item)
