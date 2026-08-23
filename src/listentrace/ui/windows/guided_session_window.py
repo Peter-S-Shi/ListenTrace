@@ -433,17 +433,20 @@ class GuidedSessionWindow(QMainWindow):
 
     def _on_position_changed(self, position_ms: int) -> None:
         tick = self._player_session.on_position_changed(position_ms)
-        if tick.pause:
+        # A Loop iteration completing is also `pause=True` (the same one-shot
+        # span primitive as Replay/Play-cue -- see player_session.py), but
+        # `restart_at_ms` means it is about to resume on its own:
+        # restart_span() owns its own pause-then-settle-then-resume sequence,
+        # and none of the "playback genuinely stopped" side effects below
+        # (button labels, comparison-replay bookkeeping) apply to it.
+        if tick.restart_at_ms is not None:
+            self._playback.restart_span(tick.restart_at_ms)
+        elif tick.pause:
             self._playback.pause()
             self._sync_playback_button_texts()
             if self._comparison_replay_pending:
                 self._comparison_replay_pending = False
                 self._recording_panel.notify_source_finished()
-        if tick.seek_to_ms is not None:
-            if tick.loop_restart:
-                self._playback.restart_loop(tick.seek_to_ms)
-            else:
-                self._playback.seek(tick.seek_to_ms)
 
         text = f"{_format_time(position_ms)} / {_format_time(self._playback.duration_ms)}"
         if hasattr(self, "_diagnosis_time_label"):

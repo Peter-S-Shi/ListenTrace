@@ -432,14 +432,14 @@ class QuizWindow(QMainWindow):
 
     def _on_position_changed(self, position_ms: int) -> None:
         tick = self._player_session.on_position_changed(position_ms)
-        if tick.pause:
+        # See player_window.py's _on_position_changed for why restart_at_ms
+        # (a Loop iteration restarting on its own) must not run the ordinary
+        # "playback genuinely stopped" side effects below.
+        if tick.restart_at_ms is not None:
+            self._playback.restart_span(tick.restart_at_ms)
+        elif tick.pause:
             self._playback.pause()
             self._sync_play_button_text()
-        if tick.seek_to_ms is not None:
-            if tick.loop_restart:
-                self._playback.restart_loop(tick.seek_to_ms)
-            else:
-                self._playback.seek(tick.seek_to_ms)
         self._time_label.setText(f"{_format_time(position_ms)} / {_format_time(self._playback.duration_ms)}")
 
     def _on_end_of_media(self) -> None:

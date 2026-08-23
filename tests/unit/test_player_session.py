@@ -26,16 +26,17 @@ def test_replay_cue_pauses_once_at_cue_end_and_does_not_loop():
     seek_to = session.replay_cue(0)
     assert seek_to == 0
 
-    tick = session.on_position_changed(1000 - LOOP_END_TOLERANCE_MS - 1)
+    tick = session.on_position_changed(1000 - 1)
     assert tick.pause is False
 
-    tick = session.on_position_changed(1000 - LOOP_END_TOLERANCE_MS)
+    tick = session.on_position_changed(1000)
     assert tick.pause is True
+    assert tick.restart_at_ms is None, "Replay is one-shot: it must never carry a restart"
 
-    # replay is one-shot: further ticks must not pause or seek again
+    # replay is one-shot: further ticks must not pause or restart again
     tick = session.on_position_changed(1500)
     assert tick.pause is False
-    assert tick.seek_to_ms is None
+    assert tick.restart_at_ms is None
 
 
 def test_play_cue_starts_at_cue_start_when_never_played():
@@ -56,7 +57,7 @@ def test_play_cue_resumes_in_place_when_paused_mid_cue():
 def test_play_cue_restarts_at_cue_start_once_it_already_reached_cue_end():
     session = PlayerSession(_cues())
     session.play_cue(1)  # cue "two": 1000-2000
-    tick = session.on_position_changed(2000 - LOOP_END_TOLERANCE_MS)
+    tick = session.on_position_changed(2000)
     assert tick.pause is True  # naturally reached cue.end and stopped
 
     seek_to = session.play_cue(1)  # pressed Play again after it finished
@@ -66,100 +67,112 @@ def test_play_cue_restarts_at_cue_start_once_it_already_reached_cue_end():
 def test_play_cue_never_drifts_past_cue_end():
     session = PlayerSession(_cues())
     session.play_cue(0)  # cue "one": 0-1000
-    tick = session.on_position_changed(1000 - LOOP_END_TOLERANCE_MS)
+    tick = session.on_position_changed(1000)
     assert tick.pause is True
     tick = session.on_position_changed(1500)
-    assert tick.pause is False  # one-shot: no further pause/seek once already stopped
+    assert tick.pause is False  # one-shot: no further pause/restart once already stopped
 
 
-def test_loop_cue_seeks_back_to_start_at_cue_end():
+# ---- Loop as repeated one-shot replay of a span (M12 Round 3) ----
+#
+# A Loop iteration reaching its end is the exact same primitive as Replay Cue
+# reaching its end: `pause=True`, always. The only thing that differs is
+# whether `restart_at_ms` also comes back, telling the caller to begin a new
+# one-shot span at the same start -- never an immediate reposition while
+# still playing, and never a bare "seek" outcome distinct from "pause."
+
+
+def test_loop_cue_schedules_a_restart_of_the_same_span_at_cue_end():
     session = PlayerSession(_cues())
     seek_to = session.loop_cue(1)  # cue "two": 1000-2000
     assert seek_to == 1000
     assert session.loop_mode is LoopMode.CUE
 
     tick = session.on_position_changed(1500)
-    assert tick.seek_to_ms is None
+    assert tick.pause is False
+    assert tick.restart_at_ms is None
 
     tick = session.on_position_changed(2000)
-    assert tick.seek_to_ms == 1000
-
-    # while the seek is "pending", further ticks near the boundary must not re-trigger
-    tick = session.on_position_changed(2000)
-    assert tick.seek_to_ms is None
-
-    # once position reflects the completed seek, the loop can trigger again next time
-    tick = session.on_position_changed(1000)
-    assert tick.seek_to_ms is None
-    tick = session.on_position_changed(2000)
-    assert tick.seek_to_ms == 1000
+    assert tick.pause is True
+    assert tick.restart_at_ms == 1000
 
 
-def test_loop_cue_does_not_seek_back_before_the_cue_actually_ends():
-    """DIAG-8f31: the prior boundary check subtracted LOOP_END_TOLERANCE_MS from
-    the target *before* comparing, so the seek fired up to 50ms early on every
-    single loop repetition -- a guaranteed, audible truncation of the cue's
-    tail, not merely a defensive margin against missing the boundary (`>=`
-    already tolerates a late/coarse tick landing past the target)."""
+def test_loop_cue_does_not_restart_before_the_cue_actually_ends():
+    """DIAG-8f31 (Round 1): the original boundary check subtracted
+    LOOP_END_TOLERANCE_MS from the target *before* comparing, so completion
+    fired up to 50ms early on every repetition -- a guaranteed, audible
+    truncation, not merely a defensive margin (`>=` already tolerates a
+    late/coarse tick landing past the target)."""
     session = PlayerSession(_cues())
     session.loop_cue(1)  # cue "two": 1000-2000
 
     tick = session.on_position_changed(2000 - LOOP_END_TOLERANCE_MS)
-    assert tick.seek_to_ms is None, "must not truncate the cue's own tail before its real end"
+    assert tick.restart_at_ms is None, "must not truncate the cue's own tail before its real end"
 
     tick = session.on_position_changed(1999)
-    assert tick.seek_to_ms is None
+    assert tick.restart_at_ms is None
 
     tick = session.on_position_changed(2000)
-    assert tick.seek_to_ms == 1000
+    assert tick.restart_at_ms == 1000
 
 
-def test_loop_cue_still_seeks_back_when_a_coarse_tick_overshoots_the_end():
+def test_loop_cue_still_completes_when_a_coarse_tick_overshoots_the_end():
     """A tick landing past the boundary (coarse update cadence) must still
-    trigger the seek -- robustness does not depend on the early-margin
+    trigger completion -- robustness does not depend on an early-margin
     subtraction, `>=` already covers overshoot."""
     session = PlayerSession(_cues())
     session.loop_cue(1)  # cue "two": 1000-2000
 
     tick = session.on_position_changed(2300)
-    assert tick.seek_to_ms == 1000
+    assert tick.restart_at_ms == 1000
 
 
-def test_loop_boundary_tick_is_flagged_as_a_loop_restart():
-    """DIAG-c21e (Round 2): Human evidence -- Replay Cue's boundary (a plain
-    pause, no reposition) sounds clean; ordinary continuous playback sounds
-    clean; only Loop's boundary (a live seek while still Playing) sounds
-    clipped, and this persisted even after Round 1 removed the early -50ms
-    trigger. The divergence is the transition *mechanism*, not its timing --
-    so the session must tell the UI layer this specific seek is a loop
-    restart (needing a pause-before-reposition transition), distinguishable
-    from a plain seek."""
+def test_repeated_ticks_after_scheduling_a_restart_do_not_reschedule_again():
+    """The pending debounce must suppress repeated completion detection while
+    a restart has already been scheduled and hasn't landed yet (stale ticks
+    still reporting a position near the old end)."""
     session = PlayerSession(_cues())
     session.loop_cue(1)  # cue "two": 1000-2000
 
-    tick = session.on_position_changed(2000)
-    assert tick.seek_to_ms == 1000
-    assert tick.loop_restart is True
+    first = session.on_position_changed(2000)
+    assert first.restart_at_ms == 1000
+
+    again = session.on_position_changed(2000)
+    assert again.pause is False
+    assert again.restart_at_ms is None
+
+    # once position reflects the completed restart, the span can complete again
+    landed = session.on_position_changed(1000)
+    assert landed.restart_at_ms is None
+    next_cycle = session.on_position_changed(2000)
+    assert next_cycle.restart_at_ms == 1000
 
 
-def test_replay_boundary_tick_is_not_flagged_as_a_loop_restart():
+def test_loop_range_treats_the_entire_selection_as_one_indivisible_span():
+    """Loop Range must never fire a completion at any *internal* cue boundary
+    inside the selection -- only at the end of the last selected cue. Cue
+    "two" (1000-2000ms) sits entirely inside the range and must produce no
+    tick at all resembling completion."""
     session = PlayerSession(_cues())
-    session.replay_cue(0)
-
-    tick = session.on_position_changed(1000 - LOOP_END_TOLERANCE_MS)
-    assert tick.pause is True
-    assert tick.loop_restart is False
-
-
-def test_loop_range_spans_first_to_last_selected_cue():
-    session = PlayerSession(_cues())
-    seek_to = session.loop_range(0, 2)
+    seek_to = session.loop_range(0, 2)  # cues 0-2: 0-3000ms as one span
     assert seek_to == 0
     assert session.loop_mode is LoopMode.RANGE
     assert session.selected_range == (0, 2)
 
-    tick = session.on_position_changed(3000)
-    assert tick.seek_to_ms == 0
+    # the internal boundary between cue 0 and cue 1 (1000ms) must not complete
+    at_internal_boundary = session.on_position_changed(1000)
+    assert at_internal_boundary.pause is False
+    assert at_internal_boundary.restart_at_ms is None
+
+    # nor the internal boundary between cue 1 and cue 2 (2000ms)
+    at_second_internal_boundary = session.on_position_changed(2000)
+    assert at_second_internal_boundary.pause is False
+    assert at_second_internal_boundary.restart_at_ms is None
+
+    # only the end of the *entire selected range* (cue 2's end, 3000ms) completes
+    at_range_end = session.on_position_changed(3000)
+    assert at_range_end.pause is True
+    assert at_range_end.restart_at_ms == 0
 
 
 def test_loop_range_normalizes_reversed_selection():
@@ -168,14 +181,31 @@ def test_loop_range_normalizes_reversed_selection():
     assert session.selected_range == (0, 2)
 
 
-def test_cancel_loop_stops_boundary_seeks():
+def test_cancel_loop_stops_future_completions_of_the_old_span():
     session = PlayerSession(_cues())
     session.loop_cue(0)
     session.cancel_loop()
     assert session.loop_mode is LoopMode.NONE
 
-    tick = session.on_position_changed(1000 - LOOP_END_TOLERANCE_MS)
-    assert tick.seek_to_ms is None
+    tick = session.on_position_changed(1000)
+    assert tick.pause is False
+    assert tick.restart_at_ms is None
+
+
+def test_cancel_loop_during_a_pending_restart_prevents_it_from_completing_again():
+    """If Loop is cancelled in the brief window after a restart has been
+    scheduled but before a position tick confirms it landed, no further
+    completion may fire for the old span."""
+    session = PlayerSession(_cues())
+    session.loop_cue(1)  # cue "two": 1000-2000
+    scheduled = session.on_position_changed(2000)
+    assert scheduled.restart_at_ms == 1000
+
+    session.cancel_loop()
+
+    tick = session.on_position_changed(2000)
+    assert tick.pause is False
+    assert tick.restart_at_ms is None
 
 
 def test_starting_a_loop_cancels_any_pending_replay():

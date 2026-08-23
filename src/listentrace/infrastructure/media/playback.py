@@ -2,8 +2,24 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtCore import QObject, QUrl, Signal
+from PySide6.QtCore import QObject, QTimer, QUrl, Signal
 from PySide6.QtMultimedia import QAudioOutput, QMediaPlayer
+
+# M12 Loop Audible Cutoff Round 3: the deliberate gap `restart_span` waits before
+# repositioning for a new Loop iteration. Two prior rounds established that neither
+# *when* the boundary is detected (Round 1) nor pausing immediately before a
+# synchronous reposition (Round 2) resolves the human-reported clipped tail -- a
+# `pause()` call stops feeding new samples, but does not itself wait for whatever the
+# OS audio output already has queued to finish draining; only real elapsed time does.
+# Replay Cue's own restart (a later, separate user click) sounds clean precisely
+# because a human's reaction time already provides that gap for free. This constant
+# gives Loop's automatic restart the same kind of real settle time, deliberately, as
+# an architectural choice -- not a boundary-detection tolerance, and not tuned by
+# trial-and-error against `LOOP_END_TOLERANCE_MS`'s already-settled value. It cannot
+# be proven correct by an automated test (audio quality is a human judgment); the
+# value is a conservative estimate of typical consumer audio output latency and is
+# meant to be confirmed or adjusted only by the Journey B2 human listening retest.
+LOOP_RESTART_SETTLE_MS = 60
 
 
 class PlaybackController(QObject):
@@ -19,6 +35,7 @@ class PlaybackController(QObject):
         self._player = QMediaPlayer(self)
         self._audio_output = QAudioOutput(self)
         self._player.setAudioOutput(self._audio_output)
+        self._pending_restart_generation = 0
 
         self._player.positionChanged.connect(lambda p: self.position_changed.emit(p))
         self._player.durationChanged.connect(lambda d: self.duration_changed.emit(d))
@@ -33,39 +50,59 @@ class PlaybackController(QObject):
         does not do this — on Windows, a stopped `QMediaPlayer` still holds an
         exclusive lock on its source file until a different source is loaded or
         the source is explicitly cleared, which blocks deleting that file."""
+        self._pending_restart_generation += 1
         self._player.stop()
         self._player.setSource(QUrl())
 
     def play(self) -> None:
+        self._pending_restart_generation += 1
         self._player.play()
 
     def pause(self) -> None:
+        self._pending_restart_generation += 1
         self._player.pause()
 
     def stop(self) -> None:
+        self._pending_restart_generation += 1
         self._player.stop()
 
     def seek(self, position_ms: int) -> None:
+        self._pending_restart_generation += 1
         self._player.setPosition(position_ms)
 
-    def restart_loop(self, position_ms: int) -> None:
-        """Reposition for a Loop boundary restart while playback is active.
+    def restart_span(self, position_ms: int) -> None:
+        """Begin a new one-shot playback span at `position_ms`, replaying a
+        just-completed Loop iteration. Pauses immediately (the same clean
+        completion Replay Cue already uses -- see `player_session.py`), then
+        repositions and resumes only after `LOOP_RESTART_SETTLE_MS` of real
+        elapsed time, not immediately. See that constant for why the settle
+        delay is the actual fix, not an incidental detail.
 
-        A live `setPosition()` call on a `PlayingState` player is not a
-        gapless reposition on QtMultimedia's default FFmpeg backend (the
-        default since Qt 6.5) -- it disrupts the pipeline in a way a plain
-        `pause()` does not, producing an audible cutoff at the cue's tail.
-        Confirmed by comparative human listening: ordinary playback and a
-        one-shot Replay (pause, no reposition) both sound clean; only a live
-        seek at the Loop boundary does not, and this was independent of how
-        early/late the seek was triggered. Pausing first lets any
-        already-decoded-but-not-yet-emitted audio drain naturally -- the
-        same mechanism Replay already relies on -- before repositioning and
-        resuming.
+        Cancellable and self-superseding: any subsequent `play`/`pause`/
+        `seek`/`stop`/`restart_span` call (including one that lands before
+        this restart fires -- e.g. the learner clicks Stop Loop, Replay, or a
+        different transport control during the settle gap) invalidates this
+        specific pending restart, so a stale queued transition can never
+        silently resume playback after the learner has already moved on.
         """
         self.pause()
+        generation = self._pending_restart_generation
+        QTimer.singleShot(
+            LOOP_RESTART_SETTLE_MS, lambda: self._fire_pending_restart(generation, position_ms)
+        )
+
+    def _fire_pending_restart(self, generation: int, position_ms: int) -> None:
+        if generation != self._pending_restart_generation:
+            return  # superseded or cancelled while the settle delay was elapsing
         self.seek(position_ms)
         self.play()
+
+    def cancel_pending_restart(self) -> None:
+        """Invalidate any restart scheduled by `restart_span`, without otherwise
+        touching playback state. Used where cancellation must be explicit and
+        no other `play`/`pause`/`seek`/`stop` call already covers it (e.g. Stop
+        Loop clicked with nothing else changing)."""
+        self._pending_restart_generation += 1
 
     def set_volume(self, volume: float) -> None:
         self._audio_output.setVolume(volume)

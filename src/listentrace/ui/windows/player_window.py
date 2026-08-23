@@ -471,14 +471,17 @@ class PlayerWindow(QMainWindow):
 
     def _on_position_changed(self, position_ms: int) -> None:
         tick = self._session.on_position_changed(position_ms)
-        if tick.pause:
+        # A Loop iteration completing is also `pause=True` (it is the same
+        # one-shot span primitive as Replay/Play-cue -- see player_session.py),
+        # but `restart_at_ms` means it is about to resume on its own:
+        # restart_span() owns its own pause-then-settle-then-resume sequence,
+        # and the Play/Pause button must not flash to "Play" for an internal
+        # transition the learner never asked to pause.
+        if tick.restart_at_ms is not None:
+            self._playback.restart_span(tick.restart_at_ms)
+        elif tick.pause:
             self._playback.pause()
             self._play_pause_button.setText("Play")
-        if tick.seek_to_ms is not None:
-            if tick.loop_restart:
-                self._playback.restart_loop(tick.seek_to_ms)
-            else:
-                self._playback.seek(tick.seek_to_ms)
 
         if not self._seeking_via_slider:
             self._seek_slider.blockSignals(True)
@@ -609,6 +612,7 @@ class PlayerWindow(QMainWindow):
         # loop, or the button becomes visually a toggle but behaviorally inert.
         if self._session.loop_mode is not LoopMode.NONE:
             self._session.cancel_loop()
+            self._playback.cancel_pending_restart()
             self._sync_loop_button_text()
             self._show_status("")
             return
@@ -752,6 +756,7 @@ class PlayerWindow(QMainWindow):
     def _on_loop_toggle_shortcut(self) -> None:
         if self._session.loop_mode is not LoopMode.NONE:
             self._session.cancel_loop()
+            self._playback.cancel_pending_restart()
             self._sync_loop_button_text()
             return
         indices = self._selected_cue_indices()
@@ -777,6 +782,7 @@ class PlayerWindow(QMainWindow):
             self._on_toggle_transcript()
         elif key == Qt.Key.Key_Escape:
             self._session.cancel_loop()
+            self._playback.cancel_pending_restart()
             self._sync_loop_button_text()
         elif not self._playback_usable:
             super().keyPressEvent(event)

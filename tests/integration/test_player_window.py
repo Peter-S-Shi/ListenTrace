@@ -14,6 +14,7 @@ from listentrace.domain.models.material import Material
 from listentrace.domain.models.subtitle import SubtitleCue
 from listentrace.infrastructure.db.connection import open_connection
 from listentrace.infrastructure.db.migrations import migrate
+from listentrace.infrastructure.media.playback import LOOP_RESTART_SETTLE_MS
 from listentrace.ui.windows.player_window import PlayerWindow, _is_text_entry_widget
 
 
@@ -370,16 +371,18 @@ def test_clicking_loop_button_again_while_active_stops_the_loop(qapp, conn, tmp_
     window.close()
 
 
-def test_loop_boundary_pauses_before_seeking_back_then_resumes_play(qapp, conn, tmp_path, monkeypatch):
-    """DIAG-c21e (Round 2): Human comparative listening isolated the defect to
-    the Loop transition specifically -- ordinary playback and one-shot Replay
-    Cue (a plain pause, no reposition) both sound clean; only Loop's boundary
-    (previously a live seek() while still Playing) sounds clipped, and this
-    persisted even after Round 1 removed the early -50ms trigger, proving the
-    timing constant was never the mechanism. This test proves the *sequence*
-    of backend calls at the loop boundary, not the audio itself (an
-    automated test cannot prove "sounds unclipped" -- that remains a human
-    perceptual check, see Journey B2)."""
+def test_loop_boundary_pauses_immediately_then_restarts_only_after_the_settle_delay(
+    qapp, conn, tmp_path, monkeypatch
+):
+    """M12 Loop Audible Cutoff Round 3: two prior rounds (removing the early
+    -50ms trigger, then an immediate pause-before-reposition) both left the
+    human-reported clipped tail in place -- because neither gave the just-
+    paused audio output any real elapsed time to finish draining before
+    repositioning. This proves the *sequence and timing* of backend calls at
+    the loop boundary (pause happens immediately; seek/play are deferred
+    behind PlaybackController.restart_span's settle delay), not the audio
+    itself -- an automated test cannot prove "sounds unclipped" (Journey
+    B2)."""
     wav_path = tmp_path / "lesson.wav"
     _make_wav(wav_path)
     window = PlayerWindow(_two_cue_result(wav_path), conn)
@@ -387,17 +390,55 @@ def test_loop_boundary_pauses_before_seeking_back_then_resumes_play(qapp, conn, 
     window._on_loop_cue_clicked()  # cue 0: 0-500ms
 
     calls: list[object] = []
-    monkeypatch.setattr(window._playback, "pause", lambda: calls.append("pause"))
-    monkeypatch.setattr(window._playback, "seek", lambda ms: calls.append(("seek", ms)))
-    monkeypatch.setattr(window._playback, "play", lambda: calls.append("play"))
+    monkeypatch.setattr(window._playback._player, "pause", lambda: calls.append("pause"))
+    monkeypatch.setattr(window._playback._player, "setPosition", lambda ms: calls.append(("seek", ms)))
+    monkeypatch.setattr(window._playback._player, "play", lambda: calls.append("play"))
 
     window._on_position_changed(500)  # cue 0's real end -- the loop boundary
 
-    assert calls == ["pause", ("seek", 0), "play"], (
-        "the loop restart must pause before repositioning (letting any "
-        "already-buffered tail drain naturally, like Replay Cue) and resume "
-        "play afterward -- not seek() while still actively playing"
+    assert calls == ["pause"], (
+        "the loop restart must pause immediately and not reposition/resume "
+        "in the same tick -- an immediate reposition is exactly what Round "
+        "2 already tried and human retest still found clipped"
     )
+
+    _run_event_loop(qapp, LOOP_RESTART_SETTLE_MS + 150)
+
+    assert calls == ["pause", ("seek", 0), "play"], (
+        "once the settle delay has genuinely elapsed, the same span must "
+        "restart -- reposition and resume, in that order"
+    )
+
+    window.close()
+
+
+def test_cancelling_loop_during_the_settle_delay_prevents_the_scheduled_restart(
+    qapp, conn, tmp_path, monkeypatch
+):
+    """The settle-delayed restart is the M12 Round 3 mechanism precisely
+    because it introduces a real, if brief, asynchronous gap -- so it must be
+    provably cancellable: Stop Loop clicked during that gap must mean the
+    player never silently resumes on its own afterward."""
+    wav_path = tmp_path / "lesson.wav"
+    _make_wav(wav_path)
+    window = PlayerWindow(_two_cue_result(wav_path), conn)
+    window._cue_list.setCurrentRow(0)
+    window._on_loop_cue_clicked()  # cue 0: 0-500ms
+
+    calls: list[object] = []
+    monkeypatch.setattr(window._playback._player, "pause", lambda: calls.append("pause"))
+    monkeypatch.setattr(window._playback._player, "setPosition", lambda ms: calls.append(("seek", ms)))
+    monkeypatch.setattr(window._playback._player, "play", lambda: calls.append("play"))
+
+    window._on_position_changed(500)  # schedules the restart
+    assert calls == ["pause"]
+
+    window._on_loop_cue_clicked()  # clicks "Stop Loop" during the settle gap
+    assert window._session.loop_mode is LoopMode.NONE
+
+    _run_event_loop(qapp, LOOP_RESTART_SETTLE_MS + 150)
+
+    assert calls == ["pause"], "a cancelled loop must never have its scheduled restart fire"
 
     window.close()
 

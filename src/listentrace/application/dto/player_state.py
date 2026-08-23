@@ -14,9 +14,11 @@ class LoopMode(str, Enum):
 class PlayerTick:
     active_cue_index: int | None
     pause: bool = False
-    seek_to_ms: int | None = None
-    # DIAG-c21e (M12 Loop Audible Cutoff Round 2): distinguishes the Loop
-    # boundary's seek from an ordinary one -- it must go through a
-    # pause-before-reposition transition (PlaybackController.restart_loop),
-    # not a live seek() while still Playing. See player_session.py.
-    loop_restart: bool = False
+    # M12 Loop Audible Cutoff Round 3: a one-shot playback span (Replay Cue,
+    # Play-cue, or a single Loop iteration) reaching its natural end is
+    # always `pause=True` -- there is no separate "seek back" outcome for
+    # Loop. `restart_at_ms` is a distinct, additional instruction: begin a
+    # new span at this position, orchestrated by
+    # PlaybackController.restart_span (a settle-delayed, cancellable
+    # transition, not an immediate reposition). See player_session.py.
+    restart_at_ms: int | None = None

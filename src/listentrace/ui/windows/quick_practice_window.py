@@ -233,17 +233,17 @@ class QuickPracticeWindow(QMainWindow):
 
     def _on_position_changed(self, position_ms: int) -> None:
         tick = self._player_session.on_position_changed(position_ms)
-        if tick.pause:
+        # See player_window.py's _on_position_changed for why restart_at_ms
+        # (a Loop iteration restarting on its own) must not run the ordinary
+        # "playback genuinely stopped" side effects below.
+        if tick.restart_at_ms is not None:
+            self._playback.restart_span(tick.restart_at_ms)
+        elif tick.pause:
             self._playback.pause()
             self._sync_playback_button_texts()
             if self._comparison_replay_pending:
                 self._comparison_replay_pending = False
                 self._recording_panel.notify_source_finished()
-        if tick.seek_to_ms is not None:
-            if tick.loop_restart:
-                self._playback.restart_loop(tick.seek_to_ms)
-            else:
-                self._playback.seek(tick.seek_to_ms)
 
         text = f"{_format_time(position_ms)} / {_format_time(self._playback.duration_ms)}"
         for attr in ("_listen_time_label", "_replay_time_label"):
