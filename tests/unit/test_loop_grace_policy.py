@@ -40,3 +40,28 @@ def test_clamp_pulls_out_of_range_values_to_the_nearest_bound():
     assert policy.clamp_loop_end_grace_ms(-500) == 60
     assert policy.clamp_loop_end_grace_ms(301) == 300
     assert policy.clamp_loop_end_grace_ms(999999) == 300
+
+
+# ---- snap_to_slider_step_ms: slider-originated input only, never the spinbox ----
+
+
+def test_snap_leaves_exact_multiples_of_the_step_untouched():
+    assert policy.snap_to_slider_step_ms(60) == 60
+    assert policy.snap_to_slider_step_ms(180) == 180
+    assert policy.snap_to_slider_step_ms(300) == 300
+
+
+def test_snap_rounds_to_the_nearest_ten():
+    assert policy.snap_to_slider_step_ms(183) == 180
+    assert policy.snap_to_slider_step_ms(186) == 190
+    assert policy.snap_to_slider_step_ms(64) == 60
+    assert policy.snap_to_slider_step_ms(66) == 70
+
+
+def test_snap_rounds_a_tie_up():
+    assert policy.snap_to_slider_step_ms(185) == 190
+
+
+def test_snap_result_stays_within_bounds():
+    assert policy.snap_to_slider_step_ms(61) == 60
+    assert policy.snap_to_slider_step_ms(298) == 300

@@ -6,6 +6,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QDialog, QHBoxLayout, QLabel, QPushButton, QSlider, QSpinBox, QVBoxLayout
 
 from listentrace.application.services import loop_grace_service
+from listentrace.domain.services import loop_grace_policy
 from listentrace.domain.services.loop_grace_policy import (
     LOOP_END_GRACE_MAX_MS,
     LOOP_END_GRACE_MIN_MS,
@@ -98,7 +99,11 @@ class PlaybackSettingsDialog(QDialog):
     # ---- interaction ----
 
     def _on_slider_changed(self, value: int) -> None:
-        self._set_controls(value)
+        # QSlider.singleStep/pageStep only govern keyboard/wheel increments,
+        # not a mouse drag, which can land on any integer in range -- snap
+        # explicitly so a drag still respects the 10ms granularity contract.
+        # The spinbox is never snapped: any integer 60-300 is legal there.
+        self._set_controls(loop_grace_policy.snap_to_slider_step_ms(value))
         self._update_apply_cancel_enabled()
 
     def _on_spinbox_changed(self, value: int) -> None:

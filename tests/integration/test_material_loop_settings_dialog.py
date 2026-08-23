@@ -61,6 +61,21 @@ def test_adjusting_the_spinbox_persists_immediately_to_any_integer(qapp, conn, m
     dialog.close()
 
 
+def test_dragging_the_slider_to_a_non_multiple_of_ten_snaps_the_persisted_value(qapp, conn, material_id):
+    """Regression: QSlider.singleStep/pageStep only govern keyboard/wheel
+    increments, not mouse-drag values -- a drag can land the slider on any
+    integer in range. Only the slider must snap; the spinbox stays free."""
+    dialog = MaterialLoopSettingsDialog(conn, material_id, "Lesson")
+    dialog._custom_radio.setChecked(True)
+
+    dialog._value_slider.setValue(183)  # simulates a mouse-drag landing off-grid
+
+    assert loop_grace_service.get_material_loop_end_grace_override_ms(conn, material_id) == 180
+    assert dialog._value_slider.value() == 180
+    assert dialog._value_spinbox.value() == 180
+    dialog.close()
+
+
 def test_spinbox_is_not_restricted_to_multiples_of_ten(qapp, conn, material_id):
     dialog = MaterialLoopSettingsDialog(conn, material_id, "Lesson")
     assert dialog._value_spinbox.singleStep() == 1

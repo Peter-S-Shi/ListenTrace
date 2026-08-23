@@ -73,6 +73,22 @@ def test_cancel_does_not_emit_global_default_changed(qapp, conn):
     dialog.close()
 
 
+def test_dragging_the_slider_to_a_non_multiple_of_ten_snaps_the_draft_value(qapp, conn):
+    """Regression: QSlider.singleStep/pageStep only govern keyboard/wheel
+    increments, not mouse-drag values -- a drag can land the slider on any
+    integer in range. Only the slider must snap; the spinbox stays free."""
+    dialog = PlaybackSettingsDialog(conn)
+
+    dialog._value_slider.setValue(183)  # simulates a mouse-drag landing off-grid
+
+    assert dialog._value_slider.value() == 180
+    assert dialog._value_spinbox.value() == 180
+
+    dialog._apply_button.click()
+    assert loop_grace_service.get_global_loop_end_grace_ms(conn) == 180
+    dialog.close()
+
+
 def test_bounds_are_enforced_by_the_controls(qapp, conn):
     dialog = PlaybackSettingsDialog(conn)
     assert dialog._value_spinbox.minimum() == 60
