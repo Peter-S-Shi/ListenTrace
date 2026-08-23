@@ -23,8 +23,8 @@ def material_id(conn):
     return insert_material(conn, Material(title="Lesson", media_path="m.mp4"))
 
 
-def test_global_default_is_180_immediately_after_migration(conn):
-    assert loop_grace_service.get_global_loop_end_grace_ms(conn) == 180
+def test_global_default_is_200_immediately_after_migration(conn):
+    assert loop_grace_service.get_global_loop_end_grace_ms(conn) == 200
 
 
 def test_set_global_loop_end_grace_ms(conn):
@@ -48,7 +48,7 @@ def test_material_with_no_override_has_none(conn, material_id):
 
 
 def test_effective_grace_inherits_the_global_default_when_no_override(conn, material_id):
-    assert loop_grace_service.effective_loop_end_grace_ms(conn, material_id) == 180
+    assert loop_grace_service.effective_loop_end_grace_ms(conn, material_id) == 200
     loop_grace_service.set_global_loop_end_grace_ms(conn, 220)
     assert loop_grace_service.effective_loop_end_grace_ms(conn, material_id) == 220
 
@@ -79,8 +79,8 @@ def test_reset_to_global_removes_the_override_and_resumes_inheritance(conn, mate
     assert loop_grace_service.get_material_loop_end_grace_override_ms(conn, material_id) is None
     # inheritance resumes -- must follow the *current* global, not a copy of
     # whatever the global was at the moment of the override.
-    loop_grace_service.set_global_loop_end_grace_ms(conn, 200)
-    assert loop_grace_service.effective_loop_end_grace_ms(conn, material_id) == 200
+    loop_grace_service.set_global_loop_end_grace_ms(conn, 210)
+    assert loop_grace_service.effective_loop_end_grace_ms(conn, material_id) == 210
 
 
 def test_reset_to_global_is_a_no_op_when_there_was_no_override(conn, material_id):
@@ -100,7 +100,7 @@ def test_effective_grace_clamps_an_already_persisted_out_of_range_global_value(c
 def test_effective_grace_falls_back_to_the_domain_default_if_the_global_row_is_missing(conn):
     conn.execute("DELETE FROM loop_grace_preference")
     conn.commit()
-    assert loop_grace_service.effective_loop_end_grace_ms(conn, 1) == 180
+    assert loop_grace_service.effective_loop_end_grace_ms(conn, 1) == 200
 
 
 def test_material_deletion_cascades_the_override(conn, material_id):

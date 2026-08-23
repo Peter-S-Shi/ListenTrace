@@ -433,6 +433,25 @@ MIGRATIONS: list[tuple[int, str]] = [
         );
         """,
     ),
+    (
+        12,
+        """
+        -- M12 Loop End Grace -- Calibration Closure (2026-08-23): human retest
+        -- across three materially different samples found the 180ms default
+        -- (migration 11's seed) insufficient on all three, and 200ms sufficient
+        -- on all three (complete tail, no next-cue leakage, continuous multi-cue
+        -- playback). Migration 11 already shipped and applied, so this is a new
+        -- migration rather than an edit to it, per this schema's additive-only
+        -- discipline.
+        --
+        -- Only bumps rows still exactly at the old seeded default (180) -- a
+        -- global default a user (or QA tester) already customized away from
+        -- 180 is a deliberate choice and must not be silently overwritten.
+        UPDATE loop_grace_preference
+        SET grace_ms = 200, updated_at = datetime('now')
+        WHERE id = 1 AND grace_ms = 180;
+        """,
+    ),
 ]
 
 

@@ -19,8 +19,8 @@ def conn(tmp_path):
 
 def test_opens_showing_the_currently_saved_global_default(qapp, conn):
     dialog = PlaybackSettingsDialog(conn)
-    assert dialog._value_spinbox.value() == 180
-    assert dialog._value_slider.value() == 180
+    assert dialog._value_spinbox.value() == 200
+    assert dialog._value_slider.value() == 200
     dialog.close()
 
 
@@ -28,7 +28,7 @@ def test_adjusting_the_controls_does_not_persist_until_apply(qapp, conn):
     dialog = PlaybackSettingsDialog(conn)
     dialog._value_spinbox.setValue(260)
 
-    assert loop_grace_service.get_global_loop_end_grace_ms(conn) == 180, "must still be the old value"
+    assert loop_grace_service.get_global_loop_end_grace_ms(conn) == 200, "must still be the old value"
     dialog.close()
 
 
@@ -46,8 +46,8 @@ def test_cancel_discards_the_draft_and_never_persists(qapp, conn):
     dialog._value_spinbox.setValue(260)
     dialog._cancel_button.click()
 
-    assert loop_grace_service.get_global_loop_end_grace_ms(conn) == 180
-    assert dialog._value_spinbox.value() == 180, "the dialog's own display must revert too"
+    assert loop_grace_service.get_global_loop_end_grace_ms(conn) == 200
+    assert dialog._value_spinbox.value() == 200, "the dialog's own display must revert too"
     dialog.close()
 
 
@@ -117,7 +117,7 @@ def test_reshowing_a_reused_instance_discards_a_dirty_unsaved_draft(qapp, conn):
 
     dialog.show()
 
-    assert dialog._value_spinbox.value() == 180
+    assert dialog._value_spinbox.value() == 200
     assert dialog._apply_button.isEnabled() is False
     dialog.close()
 
@@ -127,7 +127,7 @@ def test_apply_and_cancel_buttons_are_disabled_until_the_value_changes(qapp, con
     assert dialog._apply_button.isEnabled() is False
     assert dialog._cancel_button.isEnabled() is False
 
-    dialog._value_spinbox.setValue(200)
+    dialog._value_spinbox.setValue(220)
     assert dialog._apply_button.isEnabled() is True
     assert dialog._cancel_button.isEnabled() is True
 

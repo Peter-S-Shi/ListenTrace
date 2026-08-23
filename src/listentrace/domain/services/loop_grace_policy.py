@@ -9,7 +9,7 @@ from __future__ import annotations
 
 LOOP_END_GRACE_MIN_MS = 60
 LOOP_END_GRACE_MAX_MS = 300
-LOOP_END_GRACE_DEFAULT_MS = 180
+LOOP_END_GRACE_DEFAULT_MS = 200  # Calibration Closure (2026-08-23): 180ms failed all 3 human retest materials, 200ms passed all 3
 LOOP_END_GRACE_STEP_MS = 10  # UI-only concern, kept here anyway: one authoritative location
 
 

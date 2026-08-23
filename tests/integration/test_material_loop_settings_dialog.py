@@ -29,7 +29,7 @@ def test_opens_showing_inherit_state_by_default(qapp, conn, material_id):
     dialog = MaterialLoopSettingsDialog(conn, material_id, "Lesson")
     assert dialog._inherit_radio.isChecked() is True
     assert dialog._custom_radio.isChecked() is False
-    assert "180" in dialog._effective_label.text()
+    assert "200" in dialog._effective_label.text()
     dialog.close()
 
 
@@ -46,7 +46,7 @@ def test_switching_to_custom_persists_immediately_starting_from_the_effective_va
     dialog = MaterialLoopSettingsDialog(conn, material_id, "Lesson")
     dialog._custom_radio.setChecked(True)
 
-    assert loop_grace_service.get_material_loop_end_grace_override_ms(conn, material_id) == 180
+    assert loop_grace_service.get_material_loop_end_grace_override_ms(conn, material_id) == 200
     dialog.close()
 
 

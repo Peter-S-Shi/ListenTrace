@@ -6,7 +6,7 @@ from listentrace.domain.services import loop_grace_policy as policy
 def test_bounds_and_default_match_the_frozen_product_contract():
     assert policy.LOOP_END_GRACE_MIN_MS == 60
     assert policy.LOOP_END_GRACE_MAX_MS == 300
-    assert policy.LOOP_END_GRACE_DEFAULT_MS == 180
+    assert policy.LOOP_END_GRACE_DEFAULT_MS == 200
     assert policy.LOOP_END_GRACE_STEP_MS == 10
 
 

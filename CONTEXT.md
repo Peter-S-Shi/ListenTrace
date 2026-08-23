@@ -29,7 +29,7 @@ The subtitle-defined end timestamp of a bounded playback span (a Cue's or a rang
 _Avoid_: Boundary, endpoint (ambiguous with effective completion end).
 
 **Loop End Grace**:
-A configurable extra duration (`loop_end_grace_ms`, product range 60–300ms, default 180ms) that a Loop-mode bounded playback span is allowed to keep playing past its logical end before that iteration completes and the loop restarts. Lets the Material's own tail audio finish naturally instead of being cut at the subtitle-defined boundary. Applies only to Loop iterations, never to Replay Cue or Play-cue. May be overridden per Material; a Material with no override inherits the global default.
+A configurable extra duration (`loop_end_grace_ms`, product range 60–300ms, default 200ms — raised from an initial 180ms after human calibration across three materially different samples all required 200ms for a complete tail) that a Loop-mode bounded playback span is allowed to keep playing past its logical end before that iteration completes and the loop restarts. Lets the Material's own tail audio finish naturally instead of being cut at the subtitle-defined boundary. Applies only to Loop iterations, never to Replay Cue or Play-cue. May be overridden per Material; a Material with no override inherits the global default.
 _Avoid_: Pause, settle delay, restart delay — those describe unrelated backend playback-transition timing, not this concept.
 
 **Effective completion end**:
