@@ -33,6 +33,22 @@ v1.0.x, 2 QA-spec corrected.** No release-blocking or high-risk unresolved
 defect is known. Zero destructive actions taken; `main` untouched throughout
 — all work on `milestone/12-product-hardening`.
 
+**Addendum — Loop Cue audible-endpoint defect, closed (2026-08-23):** the
+Loop Cue toggle-label fix above (#24 area / Batch B) did not resolve the
+underlying audible clipping at a Loop's boundary. This was not one further
+"finding" fixable in this backlog's usual shape — it took three further
+corrective rounds (each human-retested and found insufficient) before a full
+redesign into a calibratable **Loop End Grace** feature (its own persistence
+schema and Settings UI, not a bounded bug fix — see `PROJECT_STATUS.md`'s
+Completed section for the full round-by-round record). Closed with a
+3-material human calibration retest: the
+180ms built-in default failed all three materially different samples, 200ms
+passed all three (complete tail, no next-cue leakage, continuous multi-cue
+playback). **Loop audible-end blocker: HUMAN ACCEPTED / CLOSED.** This is
+the last piece of Milestone 12 Phase 12-A (Pre-UI Product Hardening), now
+complete — see `PROJECT_STATUS.md` and `ROADMAP.md`. 93 further tests added
+across this addendum (666 -> 759).
+
 ## Batch 1 — Diagnosis-evidence write atomicity
 
 Audit method: read `src/listentrace/infrastructure/db/connection.py` (plain
