@@ -68,7 +68,17 @@ class PlayerSession:
             # audibly truncating its tail. The seek must wait for the real end.
             if position_ms >= self._loop_end_ms:
                 self._loop_seek_pending = True
-                return PlayerTick(self.active_cue_index, seek_to_ms=self._loop_start_ms)
+                # DIAG-c21e (Round 2): removing the early trigger above did not
+                # resolve the human-reported clipped tail -- comparative
+                # listening showed ordinary playback and one-shot Replay Cue
+                # (a plain pause, no reposition) both sound clean, while only
+                # Loop's boundary (a live seek while still Playing) is
+                # clipped. `loop_restart=True` tells the UI layer this seek
+                # needs the same pause-before-reposition transition Replay
+                # already uses, not a live reposition.
+                return PlayerTick(
+                    self.active_cue_index, seek_to_ms=self._loop_start_ms, loop_restart=True
+                )
 
         return PlayerTick(self.active_cue_index)
 

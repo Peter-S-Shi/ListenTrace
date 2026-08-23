@@ -48,6 +48,25 @@ class PlaybackController(QObject):
     def seek(self, position_ms: int) -> None:
         self._player.setPosition(position_ms)
 
+    def restart_loop(self, position_ms: int) -> None:
+        """Reposition for a Loop boundary restart while playback is active.
+
+        A live `setPosition()` call on a `PlayingState` player is not a
+        gapless reposition on QtMultimedia's default FFmpeg backend (the
+        default since Qt 6.5) -- it disrupts the pipeline in a way a plain
+        `pause()` does not, producing an audible cutoff at the cue's tail.
+        Confirmed by comparative human listening: ordinary playback and a
+        one-shot Replay (pause, no reposition) both sound clean; only a live
+        seek at the Loop boundary does not, and this was independent of how
+        early/late the seek was triggered. Pausing first lets any
+        already-decoded-but-not-yet-emitted audio drain naturally -- the
+        same mechanism Replay already relies on -- before repositioning and
+        resuming.
+        """
+        self.pause()
+        self.seek(position_ms)
+        self.play()
+
     def set_volume(self, volume: float) -> None:
         self._audio_output.setVolume(volume)
 

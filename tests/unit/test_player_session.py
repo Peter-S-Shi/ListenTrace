@@ -125,6 +125,32 @@ def test_loop_cue_still_seeks_back_when_a_coarse_tick_overshoots_the_end():
     assert tick.seek_to_ms == 1000
 
 
+def test_loop_boundary_tick_is_flagged_as_a_loop_restart():
+    """DIAG-c21e (Round 2): Human evidence -- Replay Cue's boundary (a plain
+    pause, no reposition) sounds clean; ordinary continuous playback sounds
+    clean; only Loop's boundary (a live seek while still Playing) sounds
+    clipped, and this persisted even after Round 1 removed the early -50ms
+    trigger. The divergence is the transition *mechanism*, not its timing --
+    so the session must tell the UI layer this specific seek is a loop
+    restart (needing a pause-before-reposition transition), distinguishable
+    from a plain seek."""
+    session = PlayerSession(_cues())
+    session.loop_cue(1)  # cue "two": 1000-2000
+
+    tick = session.on_position_changed(2000)
+    assert tick.seek_to_ms == 1000
+    assert tick.loop_restart is True
+
+
+def test_replay_boundary_tick_is_not_flagged_as_a_loop_restart():
+    session = PlayerSession(_cues())
+    session.replay_cue(0)
+
+    tick = session.on_position_changed(1000 - LOOP_END_TOLERANCE_MS)
+    assert tick.pause is True
+    assert tick.loop_restart is False
+
+
 def test_loop_range_spans_first_to_last_selected_cue():
     session = PlayerSession(_cues())
     seek_to = session.loop_range(0, 2)

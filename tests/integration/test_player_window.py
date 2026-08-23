@@ -370,6 +370,38 @@ def test_clicking_loop_button_again_while_active_stops_the_loop(qapp, conn, tmp_
     window.close()
 
 
+def test_loop_boundary_pauses_before_seeking_back_then_resumes_play(qapp, conn, tmp_path, monkeypatch):
+    """DIAG-c21e (Round 2): Human comparative listening isolated the defect to
+    the Loop transition specifically -- ordinary playback and one-shot Replay
+    Cue (a plain pause, no reposition) both sound clean; only Loop's boundary
+    (previously a live seek() while still Playing) sounds clipped, and this
+    persisted even after Round 1 removed the early -50ms trigger, proving the
+    timing constant was never the mechanism. This test proves the *sequence*
+    of backend calls at the loop boundary, not the audio itself (an
+    automated test cannot prove "sounds unclipped" -- that remains a human
+    perceptual check, see Journey B2)."""
+    wav_path = tmp_path / "lesson.wav"
+    _make_wav(wav_path)
+    window = PlayerWindow(_two_cue_result(wav_path), conn)
+    window._cue_list.setCurrentRow(0)
+    window._on_loop_cue_clicked()  # cue 0: 0-500ms
+
+    calls: list[object] = []
+    monkeypatch.setattr(window._playback, "pause", lambda: calls.append("pause"))
+    monkeypatch.setattr(window._playback, "seek", lambda ms: calls.append(("seek", ms)))
+    monkeypatch.setattr(window._playback, "play", lambda: calls.append("play"))
+
+    window._on_position_changed(500)  # cue 0's real end -- the loop boundary
+
+    assert calls == ["pause", ("seek", 0), "play"], (
+        "the loop restart must pause before repositioning (letting any "
+        "already-buffered tail drain naturally, like Replay Cue) and resume "
+        "play afterward -- not seek() while still actively playing"
+    )
+
+    window.close()
+
+
 def test_loop_button_resets_when_replay_cue_cancels_the_active_loop(qapp, conn, tmp_path):
     wav_path = tmp_path / "lesson.wav"
     _make_wav(wav_path)

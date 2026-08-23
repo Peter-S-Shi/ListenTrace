@@ -240,7 +240,10 @@ class QuickPracticeWindow(QMainWindow):
                 self._comparison_replay_pending = False
                 self._recording_panel.notify_source_finished()
         if tick.seek_to_ms is not None:
-            self._playback.seek(tick.seek_to_ms)
+            if tick.loop_restart:
+                self._playback.restart_loop(tick.seek_to_ms)
+            else:
+                self._playback.seek(tick.seek_to_ms)
 
         text = f"{_format_time(position_ms)} / {_format_time(self._playback.duration_ms)}"
         for attr in ("_listen_time_label", "_replay_time_label"):

@@ -475,7 +475,10 @@ class PlayerWindow(QMainWindow):
             self._playback.pause()
             self._play_pause_button.setText("Play")
         if tick.seek_to_ms is not None:
-            self._playback.seek(tick.seek_to_ms)
+            if tick.loop_restart:
+                self._playback.restart_loop(tick.seek_to_ms)
+            else:
+                self._playback.seek(tick.seek_to_ms)
 
         if not self._seeking_via_slider:
             self._seek_slider.blockSignals(True)

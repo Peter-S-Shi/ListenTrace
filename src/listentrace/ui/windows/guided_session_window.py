@@ -440,7 +440,10 @@ class GuidedSessionWindow(QMainWindow):
                 self._comparison_replay_pending = False
                 self._recording_panel.notify_source_finished()
         if tick.seek_to_ms is not None:
-            self._playback.seek(tick.seek_to_ms)
+            if tick.loop_restart:
+                self._playback.restart_loop(tick.seek_to_ms)
+            else:
+                self._playback.seek(tick.seek_to_ms)
 
         text = f"{_format_time(position_ms)} / {_format_time(self._playback.duration_ms)}"
         if hasattr(self, "_diagnosis_time_label"):
