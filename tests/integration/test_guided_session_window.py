@@ -8,12 +8,15 @@ from PySide6.QtCore import QEventLoop, QTimer
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import QMessageBox
 
+from listentrace.application.services import loop_grace_service
 from listentrace.application.services import practice_session_service as svc
 from listentrace.application.services.material_import_service import import_material
 from listentrace.application.services.player_loading_service import load_material_for_player
 from listentrace.infrastructure.db.connection import open_connection
 from listentrace.infrastructure.db.migrations import migrate
+from listentrace.ui.widgets.loop_grace_change_bus import loop_grace_change_bus
 from listentrace.ui.windows.guided_session_window import GuidedSessionWindow
+from listentrace.ui.windows.material_loop_settings_dialog import MaterialLoopSettingsDialog
 
 
 @pytest.fixture()
@@ -258,4 +261,26 @@ def test_unsaved_capture_draft_survives_unrelated_stage3_refresh(qapp, conn, tmp
     # save) must not wipe an unsaved draft still sitting in the input field.
     window._refresh_state()
     assert window._capture_text_edit.text() == "draft fragment"
+    window.close()
+
+
+def test_loop_settings_button_opens_the_shared_dialog_from_either_stage(qapp, conn, tmp_path):
+    window, material_id, _ = _open_guided_window(conn, tmp_path)
+
+    window._on_open_loop_settings()
+    assert isinstance(window._loop_settings_dialog, MaterialLoopSettingsDialog)
+    first = window._loop_settings_dialog
+    window._diagnosis_loop_settings_button.click()
+    window._shadowing_loop_settings_button.click()
+    assert window._loop_settings_dialog is first, "one shared dialog regardless of which stage opened it"
+    window.close()
+
+
+def test_material_override_changed_updates_this_windows_live_session_grace(qapp, conn, tmp_path):
+    window, material_id, _ = _open_guided_window(conn, tmp_path)
+
+    loop_grace_service.set_material_loop_end_grace_override_ms(conn, material_id, 90)
+    loop_grace_change_bus.material_override_changed.emit(material_id)
+
+    assert window._player_session._loop_end_grace_ms == 90
     window.close()

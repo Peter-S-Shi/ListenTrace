@@ -10,12 +10,16 @@ from PySide6.QtWidgets import QAbstractItemView, QLineEdit, QPushButton
 
 from listentrace.application.dto.player_load import PlayerLoadResult
 from listentrace.application.dto.player_state import LoopMode
+from listentrace.application.services import loop_grace_service
 from listentrace.domain.models.material import Material
 from listentrace.domain.models.subtitle import SubtitleCue
 from listentrace.domain.services.loop_grace_policy import LOOP_END_GRACE_DEFAULT_MS
 from listentrace.infrastructure.db.connection import open_connection
 from listentrace.infrastructure.db.migrations import migrate
+from listentrace.infrastructure.db.repository import insert_material
 from listentrace.infrastructure.media.playback import LOOP_RESTART_SETTLE_MS
+from listentrace.ui.widgets.loop_grace_change_bus import loop_grace_change_bus
+from listentrace.ui.windows.material_loop_settings_dialog import MaterialLoopSettingsDialog
 from listentrace.ui.windows.player_window import PlayerWindow, _is_text_entry_widget
 
 
@@ -43,6 +47,21 @@ def _make_wav(path, seconds=2, framerate=8000):
 
 def _two_cue_result(media_path, media_kind="audio"):
     material = Material(id=1, title="Test Lesson", media_path=str(media_path), media_kind=media_kind)
+    cues = [
+        SubtitleCue(cue_index=1, start_ms=0, end_ms=500, text="hello"),
+        SubtitleCue(cue_index=2, start_ms=500, end_ms=1000, text="world"),
+    ]
+    return PlayerLoadResult(material=material, cues=cues)
+
+
+def _two_cue_result_with_real_material(conn, media_path, media_kind="audio"):
+    """Loop End Grace persistence writes to `material_loop_grace_override`,
+    which FK-references `material(id)` -- unlike `_two_cue_result`'s
+    synthetic `id=1`, this actually inserts a row so those writes succeed."""
+    material_id = insert_material(conn, Material(title="Test Lesson", media_path=str(media_path), media_kind=media_kind))
+    material = Material(
+        id=material_id, title="Test Lesson", media_path=str(media_path), media_kind=media_kind
+    )
     cues = [
         SubtitleCue(cue_index=1, start_ms=0, end_ms=500, text="hello"),
         SubtitleCue(cue_index=2, start_ms=500, end_ms=1000, text="world"),
@@ -573,4 +592,86 @@ def test_player_window_mute_toggle(qapp, conn, tmp_path):
     window._on_toggle_mute()
     assert window._playback.is_muted is False
 
+    window.close()
+
+
+# ---- Loop Settings (M12 Loop End Grace / Batch C) ----
+
+
+def test_loop_settings_button_opens_a_material_loop_settings_dialog(qapp, conn, tmp_path):
+    wav_path = tmp_path / "lesson.wav"
+    _make_wav(wav_path)
+    window = PlayerWindow(_two_cue_result_with_real_material(conn, wav_path), conn)
+
+    window._on_open_loop_settings()
+
+    assert isinstance(window._loop_settings_dialog, MaterialLoopSettingsDialog)
+    assert window._loop_settings_dialog.isVisible()
+    window.close()
+
+
+def test_loop_settings_button_reuses_the_same_dialog_instance(qapp, conn, tmp_path):
+    wav_path = tmp_path / "lesson.wav"
+    _make_wav(wav_path)
+    window = PlayerWindow(_two_cue_result_with_real_material(conn, wav_path), conn)
+
+    window._on_open_loop_settings()
+    first = window._loop_settings_dialog
+    window._on_open_loop_settings()
+
+    assert window._loop_settings_dialog is first
+    window.close()
+
+
+def test_switching_material_to_custom_updates_this_windows_live_session_grace(qapp, conn, tmp_path):
+    wav_path = tmp_path / "lesson.wav"
+    _make_wav(wav_path)
+    load_result = _two_cue_result_with_real_material(conn, wav_path)
+    window = PlayerWindow(load_result, conn)
+    assert window._session._loop_end_grace_ms == LOOP_END_GRACE_DEFAULT_MS
+
+    loop_grace_service.set_material_loop_end_grace_override_ms(conn, load_result.material.id, 90)
+    loop_grace_change_bus.material_override_changed.emit(load_result.material.id)
+
+    assert window._session._loop_end_grace_ms == 90
+    window.close()
+
+
+def test_material_override_changed_for_a_different_material_is_ignored(qapp, conn, tmp_path):
+    wav_path = tmp_path / "lesson.wav"
+    _make_wav(wav_path)
+    load_result = _two_cue_result_with_real_material(conn, wav_path)
+    window = PlayerWindow(load_result, conn)
+
+    loop_grace_change_bus.material_override_changed.emit(load_result.material.id + 999)
+
+    assert window._session._loop_end_grace_ms == LOOP_END_GRACE_DEFAULT_MS
+    window.close()
+
+
+def test_global_default_changed_updates_an_inheriting_windows_live_session_grace(qapp, conn, tmp_path):
+    wav_path = tmp_path / "lesson.wav"
+    _make_wav(wav_path)
+    load_result = _two_cue_result_with_real_material(conn, wav_path)
+    window = PlayerWindow(load_result, conn)
+
+    loop_grace_service.set_global_loop_end_grace_ms(conn, 250)
+    loop_grace_change_bus.global_default_changed.emit()
+
+    assert window._session._loop_end_grace_ms == 250
+    window.close()
+
+
+def test_global_default_changed_does_not_move_a_windows_custom_override(qapp, conn, tmp_path):
+    wav_path = tmp_path / "lesson.wav"
+    _make_wav(wav_path)
+    load_result = _two_cue_result_with_real_material(conn, wav_path)
+    loop_grace_service.set_material_loop_end_grace_override_ms(conn, load_result.material.id, 90)
+    window = PlayerWindow(load_result, conn)
+    assert window._session._loop_end_grace_ms == 90
+
+    loop_grace_service.set_global_loop_end_grace_ms(conn, 250)
+    loop_grace_change_bus.global_default_changed.emit()
+
+    assert window._session._loop_end_grace_ms == 90, "a custom override must never be touched by a global change"
     window.close()

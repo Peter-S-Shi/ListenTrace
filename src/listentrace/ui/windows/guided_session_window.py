@@ -53,7 +53,9 @@ from listentrace.ui.text_offset_conversion import (
     codepoint_index_to_qt_offset,
     qt_offset_to_codepoint_index,
 )
+from listentrace.ui.widgets.loop_grace_change_bus import loop_grace_change_bus
 from listentrace.ui.widgets.recording_panel import RecordingPanel
+from listentrace.ui.windows.material_loop_settings_dialog import MaterialLoopSettingsDialog
 from listentrace.ui.windows.player_window import _OVERLAP_HIGHLIGHT, _color_badge_icon, _format_time
 
 _STAGE_TITLES: dict[str, str] = {
@@ -103,6 +105,9 @@ class GuidedSessionWindow(QMainWindow):
         grace_ms = loop_grace_service.effective_loop_end_grace_ms(connection, self._material.id)
         self._player_session = PlayerSession(self._cues, loop_end_grace_ms=grace_ms)
         self._playback_usable = True
+        self._loop_settings_dialog: MaterialLoopSettingsDialog | None = None
+        loop_grace_change_bus.global_default_changed.connect(self._on_loop_grace_global_default_changed)
+        loop_grace_change_bus.material_override_changed.connect(self._on_loop_grace_material_override_changed)
         self._current_stage = StageKey.GLOBAL_COMPREHENSION.value
         self._state: PracticeSessionState | None = None
         self._diagnosis_cue_index: int | None = None
@@ -427,6 +432,29 @@ class GuidedSessionWindow(QMainWindow):
 
     # ---- shared playback plumbing (Stages 3 and 4) ----
 
+    def _on_open_loop_settings(self) -> None:
+        # Modeless: one shared dialog regardless of which stage's Loop
+        # Settings button opened it, since there is only one Material/
+        # PlayerSession for the whole window.
+        if self._loop_settings_dialog is None:
+            self._loop_settings_dialog = MaterialLoopSettingsDialog(
+                self._connection, self._material.id, self._material.title, self
+            )
+        self._loop_settings_dialog.show()
+        self._loop_settings_dialog.raise_()
+        self._loop_settings_dialog.activateWindow()
+
+    def _on_loop_grace_global_default_changed(self) -> None:
+        self._refresh_loop_end_grace()
+
+    def _on_loop_grace_material_override_changed(self, material_id: int) -> None:
+        if material_id == self._material.id:
+            self._refresh_loop_end_grace()
+
+    def _refresh_loop_end_grace(self) -> None:
+        grace_ms = loop_grace_service.effective_loop_end_grace_ms(self._connection, self._material.id)
+        self._player_session.set_loop_end_grace_ms(grace_ms)
+
     def _sync_playback_button_texts(self) -> None:
         text = "Pause" if self._playback.is_playing else "Play"
         if hasattr(self, "_diagnosis_play_button"):
@@ -743,8 +771,16 @@ class GuidedSessionWindow(QMainWindow):
         self._diagnosis_loop_button = QPushButton("Loop Cue")
         self._diagnosis_loop_button.clicked.connect(self._on_diagnosis_loop_clicked)
         theme.apply_role(self._diagnosis_loop_button, "secondary")
+        self._diagnosis_loop_settings_button = QPushButton("Loop Settings...")
+        self._diagnosis_loop_settings_button.clicked.connect(self._on_open_loop_settings)
+        theme.apply_role(self._diagnosis_loop_settings_button, "secondary")
         self._diagnosis_time_label = QLabel("00:00 / 00:00")
-        for button in (self._diagnosis_play_button, self._diagnosis_replay_button, self._diagnosis_loop_button):
+        for button in (
+            self._diagnosis_play_button,
+            self._diagnosis_replay_button,
+            self._diagnosis_loop_button,
+            self._diagnosis_loop_settings_button,
+        ):
             transport_row.addWidget(button)
         transport_row.addWidget(self._diagnosis_time_label)
         left_column.addLayout(transport_row)
@@ -1054,6 +1090,9 @@ class GuidedSessionWindow(QMainWindow):
         self._shadowing_loop_button = QPushButton("Loop Cue")
         self._shadowing_loop_button.clicked.connect(self._on_shadowing_loop_clicked)
         theme.apply_role(self._shadowing_loop_button, "secondary")
+        self._shadowing_loop_settings_button = QPushButton("Loop Settings...")
+        self._shadowing_loop_settings_button.clicked.connect(self._on_open_loop_settings)
+        theme.apply_role(self._shadowing_loop_settings_button, "secondary")
         self._shadowing_time_label = QLabel("00:00 / 00:00")
         for button in (
             self._shadowing_previous_button,
@@ -1061,6 +1100,7 @@ class GuidedSessionWindow(QMainWindow):
             self._shadowing_play_button,
             self._shadowing_replay_button,
             self._shadowing_loop_button,
+            self._shadowing_loop_settings_button,
         ):
             transport_row.addWidget(button)
         transport_row.addWidget(self._shadowing_time_label)

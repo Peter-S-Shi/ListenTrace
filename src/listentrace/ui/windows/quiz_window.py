@@ -29,6 +29,8 @@ from listentrace.domain.enums.question_type import QuestionType
 from listentrace.domain.enums.quiz_status import QuizStatus
 from listentrace.infrastructure.media.playback import PlaybackController
 from listentrace.ui import theme
+from listentrace.ui.widgets.loop_grace_change_bus import loop_grace_change_bus
+from listentrace.ui.windows.material_loop_settings_dialog import MaterialLoopSettingsDialog
 from listentrace.ui.windows.player_window import _format_time
 from listentrace.ui.windows.quiz_review_dialog import QuizReviewDialog
 
@@ -70,6 +72,9 @@ class QuizWindow(QMainWindow):
         grace_ms = loop_grace_service.effective_loop_end_grace_ms(connection, self._material.id)
         self._player_session = PlayerSession(self._cues, loop_end_grace_ms=grace_ms)
         self._playback_usable = True
+        self._loop_settings_dialog: MaterialLoopSettingsDialog | None = None
+        loop_grace_change_bus.global_default_changed.connect(self._on_loop_grace_global_default_changed)
+        loop_grace_change_bus.material_override_changed.connect(self._on_loop_grace_material_override_changed)
         self._state: QuizState | None = None
         self._current_index = 0
         self._current_cue_index: int | None = None
@@ -102,8 +107,11 @@ class QuizWindow(QMainWindow):
         self._loop_button = QPushButton("Loop Cue")
         self._loop_button.clicked.connect(self._on_loop_clicked)
         theme.apply_role(self._loop_button, "secondary")
+        self._loop_settings_button = QPushButton("Loop Settings...")
+        self._loop_settings_button.clicked.connect(self._on_open_loop_settings)
+        theme.apply_role(self._loop_settings_button, "secondary")
         self._time_label = QLabel("00:00 / 00:00")
-        for widget in (self._play_button, self._replay_button, self._loop_button):
+        for widget in (self._play_button, self._replay_button, self._loop_button, self._loop_settings_button):
             transport_row.addWidget(widget)
         transport_row.addWidget(self._time_label)
         layout.addLayout(transport_row)
@@ -429,6 +437,26 @@ class QuizWindow(QMainWindow):
         self._review_button.setEnabled(self._state.attempt.status == QuizStatus.COMPLETED.value)
 
     # ---- shared playback plumbing ----
+
+    def _on_open_loop_settings(self) -> None:
+        if self._loop_settings_dialog is None:
+            self._loop_settings_dialog = MaterialLoopSettingsDialog(
+                self._connection, self._material.id, self._material.title, self
+            )
+        self._loop_settings_dialog.show()
+        self._loop_settings_dialog.raise_()
+        self._loop_settings_dialog.activateWindow()
+
+    def _on_loop_grace_global_default_changed(self) -> None:
+        self._refresh_loop_end_grace()
+
+    def _on_loop_grace_material_override_changed(self, material_id: int) -> None:
+        if material_id == self._material.id:
+            self._refresh_loop_end_grace()
+
+    def _refresh_loop_end_grace(self) -> None:
+        grace_ms = loop_grace_service.effective_loop_end_grace_ms(self._connection, self._material.id)
+        self._player_session.set_loop_end_grace_ms(grace_ms)
 
     def _sync_play_button_text(self) -> None:
         self._play_button.setText("Pause" if self._playback.is_playing else "Play")

@@ -360,3 +360,71 @@ def test_on_media_ended_is_a_no_op_while_a_tick_driven_restart_is_already_pendin
     redundant = session.on_media_ended()
     assert redundant.pause is False
     assert redundant.restart_at_ms is None
+
+
+# ---- set_loop_end_grace_ms: next-iteration-only effect (Batch C) ----
+#
+# A live change must never move the effective completion end of a Loop
+# iteration already in flight -- only the iteration that begins after the
+# current one completes and restarts may use it.
+
+
+def test_set_loop_end_grace_ms_does_not_move_the_in_flight_iterations_threshold():
+    session = _session(_cues(), loop_end_grace_ms=180)
+    session.loop_cue(1)  # cue "two": logical end 2000ms, effective end 2180ms
+
+    session.set_loop_end_grace_ms(70)  # learner drags the slider mid-iteration
+
+    still_using_old_threshold = session.on_position_changed(2071)
+    assert still_using_old_threshold.pause is False
+    assert still_using_old_threshold.restart_at_ms is None, (
+        "the iteration already playing must keep using 180ms, not jump to 70ms"
+    )
+
+    at_old_effective_end = session.on_position_changed(2180)
+    assert at_old_effective_end.restart_at_ms == 1000, "still completes at the OLD effective end"
+
+
+def test_set_loop_end_grace_ms_applies_starting_the_next_iteration():
+    session = _session(_cues(), loop_end_grace_ms=180)
+    session.loop_cue(1)  # cue "two": 1000-2000
+    session.set_loop_end_grace_ms(70)
+
+    completed = session.on_position_changed(2180)  # old threshold, iteration completes
+    assert completed.restart_at_ms == 1000
+
+    # the restart "lands": position drops back below the (now-clearing)
+    # pending debounce, confirming the next iteration has genuinely begun
+    landed = session.on_position_changed(1000)
+    assert landed.restart_at_ms is None
+
+    next_iteration = session.on_position_changed(2070)  # new 70ms effective end
+    assert next_iteration.pause is True
+    assert next_iteration.restart_at_ms == 1000, "the next iteration now uses the new 70ms grace"
+
+
+def test_set_loop_end_grace_ms_before_looping_at_all_is_just_the_starting_value():
+    session = _session(_cues(), loop_end_grace_ms=180)
+    session.set_loop_end_grace_ms(60)
+    session.loop_cue(1)  # cue "two": 1000-2000
+
+    tick = session.on_position_changed(2060)
+    assert tick.restart_at_ms == 1000
+
+
+def test_set_loop_end_grace_ms_does_not_affect_replay_cue_or_play_cue():
+    session = _session(_cues(), loop_end_grace_ms=180)
+    session.replay_cue(0)  # cue "one": 0-1000
+    session.set_loop_end_grace_ms(300)
+
+    tick = session.on_position_changed(1000)
+    assert tick.pause is True, "Replay must still complete at the bare logical end"
+
+
+def test_starting_a_new_loop_snapshots_whatever_grace_is_live_at_that_moment():
+    session = _session(_cues(), loop_end_grace_ms=180)
+    session.set_loop_end_grace_ms(250)  # changed before any loop ever started
+
+    session.loop_cue(1)  # cue "two": 1000-2000
+    tick = session.on_position_changed(2250)
+    assert tick.restart_at_ms == 1000

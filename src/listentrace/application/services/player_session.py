@@ -77,20 +77,48 @@ class PlayerSession:
         # from, and never learns the Material's actual duration either; see
         # `_completion_end_ms` and `on_media_ended`.
         self._loop_end_grace_ms = loop_end_grace_ms
+        # The grace value actually in effect for the CURRENTLY PLAYING Loop
+        # iteration -- snapshotted once when that iteration begins (starting
+        # a loop, or a restart landing) and never updated mid-iteration. Kept
+        # deliberately distinct from `_loop_end_grace_ms`, which is simply
+        # "whatever is live right now" -- see `set_loop_end_grace_ms`.
+        self._active_iteration_grace_ms: int | None = None
 
     @property
     def cues(self) -> list[SubtitleCue]:
         return self._cue_index.cues
 
+    def set_loop_end_grace_ms(self, value: int) -> None:
+        """Update the live grace value (e.g. the learner adjusted Loop
+        Settings while a Material is already open). Deliberately does NOT
+        touch `_active_iteration_grace_ms` -- an iteration already in flight
+        keeps the effective completion end it started with; only the
+        iteration that begins after the next restart adopts this value (see
+        `_begin_loop_iteration`)."""
+        self._loop_end_grace_ms = value
+
+    def _begin_loop_iteration(self) -> None:
+        """Snapshot the grace value for the Loop iteration now beginning --
+        called when a loop first starts, and again each time a restarted
+        iteration is confirmed to have landed (see the debounce-clear branch
+        in `on_position_changed`). This is the one place `_loop_end_grace_ms`
+        (live) is allowed to flow into `_active_iteration_grace_ms` (frozen
+        for the duration of that iteration)."""
+        self._active_iteration_grace_ms = self._loop_end_grace_ms
+
     def _completion_end_ms(self, span: _ActiveSpan) -> int:
         """The *effective* completion end for `span`: its own logical end for
-        Replay Cue/Play-cue, or logical end + grace while looping. `span.end_ms`
-        itself always stays the subtitle-defined logical end -- never mutated
-        to bake grace in -- so the two concepts (Logical end, Effective
-        completion end; see CONTEXT.md) can never be confused by a future
-        reader of `span.end_ms` alone."""
+        Replay Cue/Play-cue, or logical end + the CURRENT iteration's frozen
+        grace snapshot while looping. `span.end_ms` itself always stays the
+        subtitle-defined logical end -- never mutated to bake grace in -- so
+        the two concepts (Logical end, Effective completion end; see
+        CONTEXT.md) can never be confused by a future reader of `span.end_ms`
+        alone."""
         if self.loop_mode is not LoopMode.NONE:
-            return span.end_ms + self._loop_end_grace_ms
+            grace = self._active_iteration_grace_ms
+            if grace is None:  # defensive: should always be set once looping
+                grace = self._loop_end_grace_ms
+            return span.end_ms + grace
         return span.end_ms
 
     def _complete_active_span(self) -> PlayerTick:
@@ -134,6 +162,7 @@ class PlayerSession:
             # a second time before the first restart has taken effect.
             if position_ms < completion_end_ms - LOOP_END_TOLERANCE_MS:
                 self._span_restart_pending = False
+                self._begin_loop_iteration()
             return PlayerTick(self.active_cue_index)
 
         if position_ms < completion_end_ms:
@@ -211,6 +240,7 @@ class PlayerSession:
         self.loop_mode = LoopMode.CUE
         self._active_span = _ActiveSpan(cue.start_ms, cue.end_ms)
         self._span_restart_pending = False
+        self._begin_loop_iteration()
         self.selected_range = (cue_index, cue_index)
         return self._active_span.start_ms
 
@@ -228,6 +258,7 @@ class PlayerSession:
         self.loop_mode = LoopMode.RANGE
         self._active_span = _ActiveSpan(cues[lo].start_ms, cues[hi].end_ms)
         self._span_restart_pending = False
+        self._begin_loop_iteration()
         self.selected_range = (lo, hi)
         return self._active_span.start_ms
 
@@ -235,6 +266,7 @@ class PlayerSession:
         self.loop_mode = LoopMode.NONE
         self._active_span = None
         self._span_restart_pending = False
+        self._active_iteration_grace_ms = None
 
     def previous_cue_index(self, current_index: int | None) -> int | None:
         return self._cue_index.previous_index(current_index)

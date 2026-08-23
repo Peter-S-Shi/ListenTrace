@@ -47,7 +47,9 @@ from listentrace.ui.text_offset_conversion import (
     codepoint_index_to_qt_offset,
     qt_offset_to_codepoint_index,
 )
+from listentrace.ui.widgets.loop_grace_change_bus import loop_grace_change_bus
 from listentrace.ui.widgets.recording_panel import RecordingPanel
+from listentrace.ui.windows.material_loop_settings_dialog import MaterialLoopSettingsDialog
 from listentrace.ui.windows.player_window import _OVERLAP_HIGHLIGHT, _color_badge_icon, _format_time
 
 _STEP_LISTEN_RECALL = 0
@@ -101,6 +103,9 @@ class QuickPracticeWindow(QMainWindow):
         self._playback = PlaybackController(self)
         grace_ms = loop_grace_service.effective_loop_end_grace_ms(connection, self._material.id)
         self._player_session = PlayerSession(load_result.cues, loop_end_grace_ms=grace_ms)
+        self._loop_settings_dialog: MaterialLoopSettingsDialog | None = None
+        loop_grace_change_bus.global_default_changed.connect(self._on_loop_grace_global_default_changed)
+        loop_grace_change_bus.material_override_changed.connect(self._on_loop_grace_material_override_changed)
         self._playback_usable = True
         self._state: QuickPracticeSessionState | None = None
         self._index = 0
@@ -168,9 +173,11 @@ class QuickPracticeWindow(QMainWindow):
             "_listen_play_button",
             "_listen_replay_button",
             "_listen_loop_button",
+            "_listen_loop_settings_button",
             "_replay_play_button",
             "_replay_replay_button",
             "_replay_loop_button",
+            "_replay_loop_settings_button",
         ):
             theme.apply_role(getattr(self, attr), "secondary")
         theme.apply_role(self._save_diagnosis_button, "secondary")
@@ -228,6 +235,26 @@ class QuickPracticeWindow(QMainWindow):
 
     # ---- shared playback plumbing ----
 
+    def _on_open_loop_settings(self) -> None:
+        if self._loop_settings_dialog is None:
+            self._loop_settings_dialog = MaterialLoopSettingsDialog(
+                self._connection, self._material.id, self._material.title, self
+            )
+        self._loop_settings_dialog.show()
+        self._loop_settings_dialog.raise_()
+        self._loop_settings_dialog.activateWindow()
+
+    def _on_loop_grace_global_default_changed(self) -> None:
+        self._refresh_loop_end_grace()
+
+    def _on_loop_grace_material_override_changed(self, material_id: int) -> None:
+        if material_id == self._material.id:
+            self._refresh_loop_end_grace()
+
+    def _refresh_loop_end_grace(self) -> None:
+        grace_ms = loop_grace_service.effective_loop_end_grace_ms(self._connection, self._material.id)
+        self._player_session.set_loop_end_grace_ms(grace_ms)
+
     def _sync_playback_button_texts(self) -> None:
         text = "Pause" if self._playback.is_playing else "Play"
         for attr in ("_listen_play_button", "_replay_play_button"):
@@ -280,9 +307,11 @@ class QuickPracticeWindow(QMainWindow):
             "_listen_play_button",
             "_listen_replay_button",
             "_listen_loop_button",
+            "_listen_loop_settings_button",
             "_replay_play_button",
             "_replay_replay_button",
             "_replay_loop_button",
+            "_replay_loop_settings_button",
         ):
             if hasattr(self, attr):
                 getattr(self, attr).setEnabled(enabled)
@@ -383,8 +412,15 @@ class QuickPracticeWindow(QMainWindow):
         self._listen_replay_button.clicked.connect(self._on_replay_clicked)
         self._listen_loop_button = QPushButton("Loop Cue")
         self._listen_loop_button.clicked.connect(self._on_loop_clicked)
+        self._listen_loop_settings_button = QPushButton("Loop Settings...")
+        self._listen_loop_settings_button.clicked.connect(self._on_open_loop_settings)
         self._listen_time_label = QLabel("00:00 / 00:00")
-        for button in (self._listen_play_button, self._listen_replay_button, self._listen_loop_button):
+        for button in (
+            self._listen_play_button,
+            self._listen_replay_button,
+            self._listen_loop_button,
+            self._listen_loop_settings_button,
+        ):
             transport_row.addWidget(button)
         transport_row.addWidget(self._listen_time_label)
         layout.addLayout(transport_row)
@@ -631,8 +667,15 @@ class QuickPracticeWindow(QMainWindow):
         self._replay_replay_button.clicked.connect(self._on_replay_clicked)
         self._replay_loop_button = QPushButton("Loop Cue")
         self._replay_loop_button.clicked.connect(self._on_loop_clicked)
+        self._replay_loop_settings_button = QPushButton("Loop Settings...")
+        self._replay_loop_settings_button.clicked.connect(self._on_open_loop_settings)
         self._replay_time_label = QLabel("00:00 / 00:00")
-        for button in (self._replay_play_button, self._replay_replay_button, self._replay_loop_button):
+        for button in (
+            self._replay_play_button,
+            self._replay_replay_button,
+            self._replay_loop_button,
+            self._replay_loop_settings_button,
+        ):
             transport_row.addWidget(button)
         transport_row.addWidget(self._replay_time_label)
         layout.addLayout(transport_row)

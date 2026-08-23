@@ -20,7 +20,9 @@ from listentrace.application.services import recording_service
 from listentrace.application.services.player_session import PlayerSession
 from listentrace.infrastructure.media.playback import PlaybackController
 from listentrace.ui import theme
+from listentrace.ui.widgets.loop_grace_change_bus import loop_grace_change_bus
 from listentrace.ui.widgets.recording_panel import RecordingPanel, recording_change_bus
+from listentrace.ui.windows.material_loop_settings_dialog import MaterialLoopSettingsDialog
 from listentrace.ui.windows.player_window import _format_time
 
 
@@ -52,6 +54,9 @@ class ShadowingPracticeWindow(QMainWindow):
         self._playback = PlaybackController(self)
         grace_ms = loop_grace_service.effective_loop_end_grace_ms(connection, self._material.id)
         self._player_session = PlayerSession(self._cues, loop_end_grace_ms=grace_ms)
+        self._loop_settings_dialog: MaterialLoopSettingsDialog | None = None
+        loop_grace_change_bus.global_default_changed.connect(self._on_loop_grace_global_default_changed)
+        loop_grace_change_bus.material_override_changed.connect(self._on_loop_grace_material_override_changed)
         self._playback_usable = True
         self._cue_index: int | None = 0 if self._cues else None
         if initial_cue_id is not None:
@@ -99,6 +104,9 @@ class ShadowingPracticeWindow(QMainWindow):
         self._loop_button = QPushButton("Loop Cue")
         self._loop_button.clicked.connect(self._on_loop_clicked)
         theme.apply_role(self._loop_button, "secondary")
+        self._loop_settings_button = QPushButton("Loop Settings...")
+        self._loop_settings_button.clicked.connect(self._on_open_loop_settings)
+        theme.apply_role(self._loop_settings_button, "secondary")
         self._time_label = QLabel("00:00 / 00:00")
         for widget in (
             self._previous_button,
@@ -106,6 +114,7 @@ class ShadowingPracticeWindow(QMainWindow):
             self._play_button,
             self._replay_button,
             self._loop_button,
+            self._loop_settings_button,
         ):
             transport_row.addWidget(widget)
         transport_row.addWidget(self._time_label)
@@ -203,6 +212,26 @@ class ShadowingPracticeWindow(QMainWindow):
             )
         self._refresh()
         recording_change_bus.material_changed.emit(self._material.id)
+
+    def _on_open_loop_settings(self) -> None:
+        if self._loop_settings_dialog is None:
+            self._loop_settings_dialog = MaterialLoopSettingsDialog(
+                self._connection, self._material.id, self._material.title, self
+            )
+        self._loop_settings_dialog.show()
+        self._loop_settings_dialog.raise_()
+        self._loop_settings_dialog.activateWindow()
+
+    def _on_loop_grace_global_default_changed(self) -> None:
+        self._refresh_loop_end_grace()
+
+    def _on_loop_grace_material_override_changed(self, material_id: int) -> None:
+        if material_id == self._material.id:
+            self._refresh_loop_end_grace()
+
+    def _refresh_loop_end_grace(self) -> None:
+        grace_ms = loop_grace_service.effective_loop_end_grace_ms(self._connection, self._material.id)
+        self._player_session.set_loop_end_grace_ms(grace_ms)
 
     # ---- shared playback plumbing ----
 

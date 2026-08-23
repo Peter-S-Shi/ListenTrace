@@ -6,10 +6,13 @@ import wave
 import pytest
 from PySide6.QtCore import QEventLoop, QTimer
 
+from listentrace.application.services import loop_grace_service
 from listentrace.application.services.material_import_service import import_material
 from listentrace.application.services.player_loading_service import load_material_for_player
 from listentrace.infrastructure.db.connection import open_connection
 from listentrace.infrastructure.db.migrations import migrate
+from listentrace.ui.widgets.loop_grace_change_bus import loop_grace_change_bus
+from listentrace.ui.windows.material_loop_settings_dialog import MaterialLoopSettingsDialog
 from listentrace.ui.windows.shadowing_practice_window import ShadowingPracticeWindow
 
 
@@ -62,4 +65,35 @@ def test_play_button_is_cue_scoped_not_whole_media(qapp, conn, tmp_path):
         "Play must stop at this cue's end, not continue playing into the next cue"
     )
     assert window._playback.position_ms < cue.end_ms + 200
+    window.close()
+
+
+def test_loop_settings_button_opens_a_material_loop_settings_dialog(qapp, conn, tmp_path):
+    media_path = tmp_path / "lesson.wav"
+    _make_wav(media_path)
+    srt = tmp_path / "lesson.srt"
+    srt.write_text("1\n00:00:00,000 --> 00:00:01,000\nBonjour\n", encoding="utf-8")
+    result = import_material(conn, media_path, srt, "Shadowing Lesson 2")
+    load_result = load_material_for_player(conn, result.material_id)
+    window = ShadowingPracticeWindow(conn, load_result, tmp_path / "recordings")
+
+    window._on_open_loop_settings()
+
+    assert isinstance(window._loop_settings_dialog, MaterialLoopSettingsDialog)
+    window.close()
+
+
+def test_material_override_changed_updates_this_windows_live_session_grace(qapp, conn, tmp_path):
+    media_path = tmp_path / "lesson.wav"
+    _make_wav(media_path)
+    srt = tmp_path / "lesson.srt"
+    srt.write_text("1\n00:00:00,000 --> 00:00:01,000\nBonjour\n", encoding="utf-8")
+    result = import_material(conn, media_path, srt, "Shadowing Lesson 3")
+    load_result = load_material_for_player(conn, result.material_id)
+    window = ShadowingPracticeWindow(conn, load_result, tmp_path / "recordings")
+
+    loop_grace_service.set_material_loop_end_grace_override_ms(conn, result.material_id, 90)
+    loop_grace_change_bus.material_override_changed.emit(result.material_id)
+
+    assert window._player_session._loop_end_grace_ms == 90
     window.close()

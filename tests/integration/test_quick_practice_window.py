@@ -6,6 +6,7 @@ import wave
 import pytest
 from PySide6.QtWidgets import QMessageBox
 
+from listentrace.application.services import loop_grace_service
 from listentrace.application.services import quick_practice_service as svc
 from listentrace.application.services import recording_service
 from listentrace.application.services.material_import_service import import_material
@@ -13,6 +14,8 @@ from listentrace.application.services.player_loading_service import load_materia
 from listentrace.infrastructure.db import recording_repository
 from listentrace.infrastructure.db.connection import open_connection
 from listentrace.infrastructure.db.migrations import migrate
+from listentrace.ui.widgets.loop_grace_change_bus import loop_grace_change_bus
+from listentrace.ui.windows.material_loop_settings_dialog import MaterialLoopSettingsDialog
 from listentrace.ui.windows.quick_practice_window import (
     _STEP_DIAGNOSE,
     _STEP_LISTEN_RECALL,
@@ -58,6 +61,29 @@ def _open_window(conn, tmp_path, cue_ids, recordings_dir=None):
     session = svc.start_selected_session(conn, load_result.material.id, cue_ids or [c.id for c in load_result.cues[:2]])
     window = QuickPracticeWindow(conn, load_result, session.id, recordings_dir or (tmp_path / "recordings"))
     return window, load_result, session.id
+
+
+def test_loop_settings_button_opens_the_shared_dialog_from_either_step(qapp, conn, tmp_path):
+    window, load_result, _ = _open_window(conn, tmp_path, None)
+
+    window._on_open_loop_settings()
+    assert isinstance(window._loop_settings_dialog, MaterialLoopSettingsDialog)
+    first = window._loop_settings_dialog
+    window._listen_loop_settings_button.click()
+    window._replay_loop_settings_button.click()
+    assert window._loop_settings_dialog is first
+    window.close()
+
+
+def test_material_override_changed_updates_this_windows_live_session_grace(qapp, conn, tmp_path):
+    window, load_result, _ = _open_window(conn, tmp_path, None)
+    material_id = load_result.material.id
+
+    loop_grace_service.set_material_loop_end_grace_override_ms(conn, material_id, 90)
+    loop_grace_change_bus.material_override_changed.emit(material_id)
+
+    assert window._player_session._loop_end_grace_ms == 90
+    window.close()
 
 
 def test_window_opens_with_transcript_hidden_at_listen_recall_step(qapp, conn, tmp_path):

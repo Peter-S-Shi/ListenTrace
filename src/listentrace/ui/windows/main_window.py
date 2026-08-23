@@ -37,6 +37,7 @@ from listentrace.ui.widgets.recording_panel import recording_change_bus
 from listentrace.ui.windows.guided_session_window import GuidedSessionWindow
 from listentrace.ui.windows.import_dialog import ImportDialog
 from listentrace.ui.windows.learning_history_window import LearningHistoryWindow
+from listentrace.ui.windows.playback_settings_dialog import PlaybackSettingsDialog
 from listentrace.ui.windows.player_window import PlayerWindow
 from listentrace.ui.windows.quick_practice_start_dialog import QuickPracticeStartDialog
 from listentrace.ui.windows.quick_practice_window import QuickPracticeWindow
@@ -66,6 +67,7 @@ class MainWindow(QMainWindow):
         self._shadowing_practice_window: ShadowingPracticeWindow | None = None
         self._learning_history_window: LearningHistoryWindow | None = None
         self._quick_practice_window: QuickPracticeWindow | None = None
+        self._playback_settings_dialog: PlaybackSettingsDialog | None = None
 
         central = QWidget(self)
         outer_layout = QVBoxLayout(central)
@@ -89,10 +91,13 @@ class MainWindow(QMainWindow):
         self._open_player_button.clicked.connect(self._on_open_player_clicked)
         self._toggle_archived_button = QPushButton("Show Archived")
         self._toggle_archived_button.clicked.connect(self._on_toggle_archived)
+        self._playback_settings_button = QPushButton("Playback Settings...")
+        self._playback_settings_button.clicked.connect(self._on_open_playback_settings)
         library_row = QHBoxLayout()
         library_row.addWidget(self._import_button)
         library_row.addWidget(self._open_player_button)
         library_row.addWidget(self._toggle_archived_button)
+        library_row.addWidget(self._playback_settings_button)
         library_layout.addLayout(library_row)
         library_layout.addStretch(1)
         cards_row.addWidget(library_card, 2)
@@ -199,6 +204,7 @@ class MainWindow(QMainWindow):
         apply_role(self._import_button, "secondary")
         apply_role(self._open_player_button, "primary")
         apply_role(self._toggle_archived_button, "secondary")
+        apply_role(self._playback_settings_button, "secondary")
         apply_role(self._start_intensive_button, "secondary")
         apply_role(self._resume_intensive_button, "secondary")
         apply_role(self._session_history_button, "quiet")
@@ -336,6 +342,16 @@ class MainWindow(QMainWindow):
         dialog = ImportDialog(self._connection, self)
         if dialog.exec() == QDialog.DialogCode.Accepted:
             self.refresh_library()
+
+    def _on_open_playback_settings(self) -> None:
+        # Modeless: no Material context to jump back to here, but keeping it
+        # non-blocking is consistent with the Material-level Loop Settings
+        # control and avoids a gratuitous exec() where a plain show() suffices.
+        if self._playback_settings_dialog is None:
+            self._playback_settings_dialog = PlaybackSettingsDialog(self._connection, self)
+        self._playback_settings_dialog.show()
+        self._playback_settings_dialog.raise_()
+        self._playback_settings_dialog.activateWindow()
 
     def _on_material_double_clicked(self, item: QListWidgetItem) -> None:
         if self._showing_archived:

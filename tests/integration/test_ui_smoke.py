@@ -50,6 +50,23 @@ def test_main_window_starts_with_initialized_database(qapp, tmp_path):
     window.close()
 
 
+def test_main_window_playback_settings_button_opens_the_global_dialog(qapp, tmp_path):
+    from listentrace.ui.windows.playback_settings_dialog import PlaybackSettingsDialog
+
+    db_path = tmp_path / "smoke.db"
+    connection = open_connection(db_path)
+    migrate(connection)
+    window = MainWindow(connection, db_path, tmp_path / "recordings")
+
+    window._on_open_playback_settings()
+
+    assert isinstance(window._playback_settings_dialog, PlaybackSettingsDialog)
+    first = window._playback_settings_dialog
+    window._on_open_playback_settings()
+    assert window._playback_settings_dialog is first, "reuses the same dialog instance"
+    window.close()
+
+
 def test_main_window_shows_empty_library_state(qapp, tmp_path):
     connection = open_connection(tmp_path / "empty.db")
     migrate(connection)
@@ -531,6 +548,52 @@ def test_quiz_window_full_take_submit_and_review_flow(qapp, tmp_path):
     assert review_dialog._list.count() == len(state.questions)
 
     review_dialog.close()
+    quiz_window.close()
+
+
+def test_quiz_window_loop_settings_button_opens_a_material_loop_settings_dialog(qapp, tmp_path):
+    from listentrace.application.services.player_loading_service import load_material_for_player
+    from listentrace.ui.windows.material_loop_settings_dialog import MaterialLoopSettingsDialog
+    from listentrace.ui.windows.quiz_window import QuizWindow
+
+    connection = open_connection(tmp_path / "smoke.db")
+    migrate(connection)
+    media = tmp_path / "lesson.wav"
+    _make_wav(media)
+    subtitle = tmp_path / "lesson.srt"
+    subtitle.write_text(_MULTI_CUE_SRT, encoding="utf-8")
+    result = import_material(connection, media, subtitle, "Lesson One")
+    attempt = quiz_service.create_material_quiz(connection, result.material_id, requested_count=5, seed=1)
+    load_result = load_material_for_player(connection, result.material_id)
+    quiz_window = QuizWindow(connection, load_result, attempt.id, None)
+
+    quiz_window._on_open_loop_settings()
+
+    assert isinstance(quiz_window._loop_settings_dialog, MaterialLoopSettingsDialog)
+    quiz_window.close()
+
+
+def test_quiz_window_material_override_changed_updates_its_live_session_grace(qapp, tmp_path):
+    from listentrace.application.services import loop_grace_service
+    from listentrace.application.services.player_loading_service import load_material_for_player
+    from listentrace.ui.widgets.loop_grace_change_bus import loop_grace_change_bus
+    from listentrace.ui.windows.quiz_window import QuizWindow
+
+    connection = open_connection(tmp_path / "smoke.db")
+    migrate(connection)
+    media = tmp_path / "lesson.wav"
+    _make_wav(media)
+    subtitle = tmp_path / "lesson.srt"
+    subtitle.write_text(_MULTI_CUE_SRT, encoding="utf-8")
+    result = import_material(connection, media, subtitle, "Lesson One")
+    attempt = quiz_service.create_material_quiz(connection, result.material_id, requested_count=5, seed=1)
+    load_result = load_material_for_player(connection, result.material_id)
+    quiz_window = QuizWindow(connection, load_result, attempt.id, None)
+
+    loop_grace_service.set_material_loop_end_grace_override_ms(connection, result.material_id, 90)
+    loop_grace_change_bus.material_override_changed.emit(result.material_id)
+
+    assert quiz_window._player_session._loop_end_grace_ms == 90
     quiz_window.close()
 
 

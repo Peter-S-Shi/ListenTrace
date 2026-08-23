@@ -57,7 +57,9 @@ from listentrace.ui.text_offset_conversion import (
     codepoint_index_to_qt_offset,
     qt_offset_to_codepoint_index,
 )
+from listentrace.ui.widgets.loop_grace_change_bus import loop_grace_change_bus
 from listentrace.ui.windows.label_color_dialog import LabelColorDialog
+from listentrace.ui.windows.material_loop_settings_dialog import MaterialLoopSettingsDialog
 
 _SEEK_STEP_MS = 5000
 # Milestone 11: sourced from theme.py's dedicated product-semantic tokens
@@ -108,6 +110,9 @@ class PlayerWindow(QMainWindow):
         self._playback_usable = True
         self._editing_cue_index: int | None = None
         self._quick_practice_window: QWidget | None = None
+        self._loop_settings_dialog: MaterialLoopSettingsDialog | None = None
+        loop_grace_change_bus.global_default_changed.connect(self._on_loop_grace_global_default_changed)
+        loop_grace_change_bus.material_override_changed.connect(self._on_loop_grace_material_override_changed)
 
         central = QWidget(self)
         layout = QVBoxLayout(central)
@@ -159,6 +164,8 @@ class PlayerWindow(QMainWindow):
         self._mute_button.clicked.connect(self._on_toggle_mute)
         self._label_colors_button = QPushButton("Label Colors...")
         self._label_colors_button.clicked.connect(self._on_open_label_colors)
+        self._loop_settings_button = QPushButton("Loop Settings...")
+        self._loop_settings_button.clicked.connect(self._on_open_loop_settings)
         for button in (
             self._play_pause_button,
             self._previous_button,
@@ -169,6 +176,7 @@ class PlayerWindow(QMainWindow):
             self._transcript_button,
             self._mute_button,
             self._label_colors_button,
+            self._loop_settings_button,
         ):
             transport_row.addWidget(button)
         layout.addLayout(transport_row)
@@ -1211,6 +1219,33 @@ class PlayerWindow(QMainWindow):
         dialog = LabelColorDialog(self._connection, self)
         dialog.exec()
         self._refresh_annotation_presentation()
+
+    def _on_open_loop_settings(self) -> None:
+        # Modeless (unlike Label Colors' `.exec()`): the whole point of this
+        # control is that the learner keeps using Play/Loop while it's open
+        # (listen -> adjust -> listen), per the frozen UX contract.
+        if self._loop_settings_dialog is None:
+            self._loop_settings_dialog = MaterialLoopSettingsDialog(
+                self._connection, self._material.id, self._material.title, self
+            )
+        self._loop_settings_dialog.show()
+        self._loop_settings_dialog.raise_()
+        self._loop_settings_dialog.activateWindow()
+
+    def _on_loop_grace_global_default_changed(self) -> None:
+        self._refresh_loop_end_grace()
+
+    def _on_loop_grace_material_override_changed(self, material_id: int) -> None:
+        if material_id == self._material.id:
+            self._refresh_loop_end_grace()
+
+    def _refresh_loop_end_grace(self) -> None:
+        # Always re-resolves through the single resolver rather than
+        # inspecting override-vs-inherit itself -- see loop_grace_service.
+        # Only updates the LIVE value (PlayerSession.set_loop_end_grace_ms);
+        # a Loop iteration already in flight keeps the grace it started with.
+        grace_ms = loop_grace_service.effective_loop_end_grace_ms(self._connection, self._material.id)
+        self._session.set_loop_end_grace_ms(grace_ms)
 
     def _refresh_annotation_presentation(self) -> None:
         """Refresh only label-color-derived presentation: reload label preferences,
