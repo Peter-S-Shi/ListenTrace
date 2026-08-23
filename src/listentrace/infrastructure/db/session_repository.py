@@ -151,6 +151,17 @@ def set_session_status(conn: sqlite3.Connection, session_id: int, status: str) -
     conn.commit()
 
 
+def delete_practice_session(conn: sqlite3.Connection, session_id: int) -> None:
+    """Hard delete. Cascades (see migrations.py) to session_stage_progress,
+    stage_response, keyword_capture, session_diagnosis_evidence, and
+    shadowing_cue_progress -- all genuinely session-owned. Does NOT cascade to
+    `annotation`, `saved_language_item` (never referenced from here), or
+    `recording` (`practice_session_id` is `ON DELETE SET NULL`, so retained
+    recordings survive as standalone rows, still discoverable by material/cue)."""
+    conn.execute("DELETE FROM practice_session WHERE id = ?", (session_id,))
+    conn.commit()
+
+
 def touch_session_resumed(conn: sqlite3.Connection, session_id: int) -> None:
     conn.execute(
         "UPDATE practice_session SET last_resumed_at = datetime('now'), "
@@ -160,15 +171,18 @@ def touch_session_resumed(conn: sqlite3.Connection, session_id: int) -> None:
     conn.commit()
 
 
-def set_current_stage(conn: sqlite3.Connection, session_id: int, stage_key: str) -> None:
+def set_current_stage(
+    conn: sqlite3.Connection, session_id: int, stage_key: str, commit: bool = True
+) -> None:
     conn.execute(
         "UPDATE practice_session SET current_stage = ?, updated_at = datetime('now') WHERE id = ?",
         (stage_key, session_id),
     )
-    conn.commit()
+    if commit:
+        conn.commit()
 
 
-def set_transcript_revealed(conn: sqlite3.Connection, session_id: int) -> None:
+def set_transcript_revealed(conn: sqlite3.Connection, session_id: int, commit: bool = True) -> None:
     """Idempotent: only the first call actually sets the timestamp."""
     conn.execute(
         "UPDATE practice_session SET "
@@ -176,7 +190,8 @@ def set_transcript_revealed(conn: sqlite3.Connection, session_id: int) -> None:
         "updated_at = datetime('now') WHERE id = ?",
         (session_id,),
     )
-    conn.commit()
+    if commit:
+        conn.commit()
 
 
 # ---- session_stage_progress ----
@@ -207,6 +222,7 @@ def set_stage_status(
     stage_key: str,
     status: str,
     skip_note: str | None = None,
+    commit: bool = True,
 ) -> None:
     timestamp_column = {"in_progress": "started_at", "completed": "completed_at", "skipped": "skipped_at"}.get(
         status
@@ -232,18 +248,24 @@ def set_stage_status(
             "WHERE practice_session_id = ? AND stage_key = ?",
             (status, session_id, stage_key),
         )
-    conn.commit()
+    if commit:
+        conn.commit()
 
 
 def set_stage_outcome(
-    conn: sqlite3.Connection, session_id: int, stage_key: str, outcome_key: str | None
+    conn: sqlite3.Connection,
+    session_id: int,
+    stage_key: str,
+    outcome_key: str | None,
+    commit: bool = True,
 ) -> None:
     conn.execute(
         "UPDATE session_stage_progress SET outcome_key = ?, updated_at = datetime('now') "
         "WHERE practice_session_id = ? AND stage_key = ?",
         (outcome_key, session_id, stage_key),
     )
-    conn.commit()
+    if commit:
+        conn.commit()
 
 
 # ---- stage_response ----
@@ -380,7 +402,9 @@ def find_session_diagnosis_exact(
     return _row_to_diagnosis(row) if row is not None else None
 
 
-def insert_session_diagnosis(conn: sqlite3.Connection, evidence: SessionDiagnosisEvidence) -> int:
+def insert_session_diagnosis(
+    conn: sqlite3.Connection, evidence: SessionDiagnosisEvidence, commit: bool = True
+) -> int:
     cursor = conn.execute(
         """
         INSERT INTO session_diagnosis_evidence (
@@ -400,7 +424,8 @@ def insert_session_diagnosis(conn: sqlite3.Connection, evidence: SessionDiagnosi
             evidence.note,
         ),
     )
-    conn.commit()
+    if commit:
+        conn.commit()
     return int(cursor.lastrowid)
 
 

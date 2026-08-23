@@ -10,10 +10,16 @@ from PySide6.QtWidgets import QAbstractItemView, QLineEdit, QPushButton
 
 from listentrace.application.dto.player_load import PlayerLoadResult
 from listentrace.application.dto.player_state import LoopMode
+from listentrace.application.services import loop_grace_service
 from listentrace.domain.models.material import Material
 from listentrace.domain.models.subtitle import SubtitleCue
+from listentrace.domain.services.loop_grace_policy import LOOP_END_GRACE_DEFAULT_MS
 from listentrace.infrastructure.db.connection import open_connection
 from listentrace.infrastructure.db.migrations import migrate
+from listentrace.infrastructure.db.repository import insert_material
+from listentrace.infrastructure.media.playback import LOOP_RESTART_SETTLE_MS
+from listentrace.ui.widgets.loop_grace_change_bus import loop_grace_change_bus
+from listentrace.ui.windows.material_loop_settings_dialog import MaterialLoopSettingsDialog
 from listentrace.ui.windows.player_window import PlayerWindow, _is_text_entry_widget
 
 
@@ -44,6 +50,31 @@ def _two_cue_result(media_path, media_kind="audio"):
     cues = [
         SubtitleCue(cue_index=1, start_ms=0, end_ms=500, text="hello"),
         SubtitleCue(cue_index=2, start_ms=500, end_ms=1000, text="world"),
+    ]
+    return PlayerLoadResult(material=material, cues=cues)
+
+
+def _two_cue_result_with_real_material(conn, media_path, media_kind="audio"):
+    """Loop End Grace persistence writes to `material_loop_grace_override`,
+    which FK-references `material(id)` -- unlike `_two_cue_result`'s
+    synthetic `id=1`, this actually inserts a row so those writes succeed."""
+    material_id = insert_material(conn, Material(title="Test Lesson", media_path=str(media_path), media_kind=media_kind))
+    material = Material(
+        id=material_id, title="Test Lesson", media_path=str(media_path), media_kind=media_kind
+    )
+    cues = [
+        SubtitleCue(cue_index=1, start_ms=0, end_ms=500, text="hello"),
+        SubtitleCue(cue_index=2, start_ms=500, end_ms=1000, text="world"),
+    ]
+    return PlayerLoadResult(material=material, cues=cues)
+
+
+def _three_cue_result(media_path, media_kind="audio"):
+    material = Material(id=1, title="Test Lesson", media_path=str(media_path), media_kind=media_kind)
+    cues = [
+        SubtitleCue(cue_index=1, start_ms=0, end_ms=500, text="one"),
+        SubtitleCue(cue_index=2, start_ms=500, end_ms=1000, text="two"),
+        SubtitleCue(cue_index=3, start_ms=1000, end_ms=1500, text="three"),
     ]
     return PlayerLoadResult(material=material, cues=cues)
 
@@ -193,6 +224,50 @@ def test_player_window_cue_list_uses_contiguous_selection_mode(qapp, conn, tmp_p
     window.close()
 
 
+def test_previous_cue_steps_one_at_a_time_even_if_active_cue_index_is_transiently_none(qapp, conn, tmp_path):
+    """M12 Round 1 regression: reproduces the human-QA report that repeated
+    Previous Cue clicks could jump straight back to the start (m02-03,
+    m13-02). The root cause was that navigation read
+    `self._session.active_cue_index`, which is briefly `None` right after a
+    seek -- before the next position tick lands -- and
+    `CueIndex.previous_index(None)` falls back to cue 0. Navigation must
+    instead anchor on the stable, explicitly-tracked Selected Cue."""
+    wav_path = tmp_path / "lesson.wav"
+    _make_wav(wav_path)
+    window = PlayerWindow(_three_cue_result(wav_path), conn)
+    window._cue_list.setCurrentRow(2)  # start at the last cue
+    assert window._editing_cue_index == 2
+
+    # Simulate the exact race: a seek just happened and the next position tick
+    # has not landed yet, so the playback-derived index is momentarily None.
+    window._session.active_cue_index = None
+    window._on_previous_cue()
+    assert window._editing_cue_index == 1, "must step to the adjacent cue, not jump to the start"
+
+    window._session.active_cue_index = None
+    window._on_previous_cue()
+    assert window._editing_cue_index == 0
+
+    window.close()
+
+
+def test_next_cue_updates_selected_cue_and_seeks_media_position(qapp, conn, tmp_path):
+    """Round 1 S6: a navigation action must atomically move Selected Cue and
+    Media Position together."""
+    wav_path = tmp_path / "lesson.wav"
+    _make_wav(wav_path)
+    window = PlayerWindow(_three_cue_result(wav_path), conn)
+    _run_event_loop(qapp, 300)  # let the async media load finish before seeking
+    window._cue_list.setCurrentRow(0)
+
+    window._on_next_cue()
+    _run_event_loop(qapp, 300)
+
+    assert window._editing_cue_index == 1
+    assert window._playback.position_ms == pytest.approx(500, abs=150)
+    window.close()
+
+
 def test_player_window_replay_cue_pauses_at_cue_end(qapp, conn, tmp_path):
     wav_path = tmp_path / "lesson.wav"
     _make_wav(wav_path)
@@ -261,6 +336,232 @@ def test_player_window_cancel_loop_stops_boundary_seeks(qapp, conn, tmp_path):
     window.close()
 
 
+def test_loop_button_toggles_label_between_loop_and_stop(qapp, conn, tmp_path):
+    """M12 Round 1 Playback Contract S7.1 (m02-05, P3): the same control must
+    show the state transition -- previously the button always read "Loop Cue"
+    even while a loop was active, with no visible way to discover a cancel."""
+    wav_path = tmp_path / "lesson.wav"
+    _make_wav(wav_path)
+    window = PlayerWindow(_two_cue_result(wav_path), conn)
+    assert window._loop_cue_button.text() == "Loop Cue"
+
+    window._cue_list.setCurrentRow(0)
+    window._on_loop_cue_clicked()
+    assert window._loop_cue_button.text() == "Stop Loop"
+
+    window._session.cancel_loop()
+    window._sync_loop_button_text()
+    assert window._loop_cue_button.text() == "Loop Cue"
+    window.close()
+
+
+def test_loop_button_resets_when_cancelled_via_escape_key(qapp, conn, tmp_path):
+    wav_path = tmp_path / "lesson.wav"
+    _make_wav(wav_path)
+    window = PlayerWindow(_two_cue_result(wav_path), conn)
+    window._cue_list.setCurrentRow(0)
+    window._on_loop_cue_clicked()
+    assert window._loop_cue_button.text() == "Stop Loop"
+
+    window.keyPressEvent(QKeyEvent(QKeyEvent.Type.KeyPress, Qt.Key.Key_Escape, Qt.KeyboardModifier.NoModifier))
+    assert window._session.loop_mode is LoopMode.NONE
+    assert window._loop_cue_button.text() == "Loop Cue"
+    window.close()
+
+
+def test_clicking_loop_button_again_while_active_stops_the_loop(qapp, conn, tmp_path):
+    """DIAG-8f31: the button's actual click handler must be a toggle. Every
+    prior loop-cancel test drove `_session.cancel_loop()` directly, bypassing
+    the real click path -- so the button never had coverage for what the
+    human-reported bug actually does: click `Loop Cue`, then click the same
+    button again (now reading `Stop Loop`)."""
+    wav_path = tmp_path / "lesson.wav"
+    _make_wav(wav_path)
+    window = PlayerWindow(_two_cue_result(wav_path), conn)
+    window._cue_list.setCurrentRow(0)
+
+    window._on_loop_cue_clicked()
+    assert window._session.loop_mode is LoopMode.CUE
+    assert window._loop_cue_button.text() == "Stop Loop"
+
+    window._on_loop_cue_clicked()  # simulates clicking "Stop Loop"
+    assert window._session.loop_mode is LoopMode.NONE
+    assert window._loop_cue_button.text() == "Loop Cue"
+
+    window.close()
+
+
+def test_loop_boundary_pauses_immediately_then_restarts_only_after_the_settle_delay(
+    qapp, conn, tmp_path, monkeypatch
+):
+    """M12 Loop Audible Cutoff Round 3: two prior rounds (removing the early
+    -50ms trigger, then an immediate pause-before-reposition) both left the
+    human-reported clipped tail in place -- because neither gave the just-
+    paused audio output any real elapsed time to finish draining before
+    repositioning. This proves the *sequence and timing* of backend calls at
+    the loop boundary (pause happens immediately; seek/play are deferred
+    behind PlaybackController.restart_span's settle delay), not the audio
+    itself -- an automated test cannot prove "sounds unclipped" (Journey
+    B2)."""
+    wav_path = tmp_path / "lesson.wav"
+    _make_wav(wav_path)
+    window = PlayerWindow(_two_cue_result(wav_path), conn)
+    window._cue_list.setCurrentRow(0)
+    window._on_loop_cue_clicked()  # cue 0: 0-500ms
+
+    calls: list[object] = []
+    monkeypatch.setattr(window._playback._player, "pause", lambda: calls.append("pause"))
+    monkeypatch.setattr(window._playback._player, "setPosition", lambda ms: calls.append(("seek", ms)))
+    monkeypatch.setattr(window._playback._player, "play", lambda: calls.append("play"))
+
+    window._on_position_changed(500 + LOOP_END_GRACE_DEFAULT_MS)  # cue 0's effective completion end
+
+    assert calls == ["pause"], (
+        "the loop restart must pause immediately and not reposition/resume "
+        "in the same tick -- an immediate reposition is exactly what Round "
+        "2 already tried and human retest still found clipped"
+    )
+
+    _run_event_loop(qapp, LOOP_RESTART_SETTLE_MS + 150)
+
+    assert calls == ["pause", ("seek", 0), "play"], (
+        "once the settle delay has genuinely elapsed, the same span must "
+        "restart -- reposition and resume, in that order"
+    )
+
+    window.close()
+
+
+def test_cancelling_loop_during_the_settle_delay_prevents_the_scheduled_restart(
+    qapp, conn, tmp_path, monkeypatch
+):
+    """The settle-delayed restart is the M12 Round 3 mechanism precisely
+    because it introduces a real, if brief, asynchronous gap -- so it must be
+    provably cancellable: Stop Loop clicked during that gap must mean the
+    player never silently resumes on its own afterward."""
+    wav_path = tmp_path / "lesson.wav"
+    _make_wav(wav_path)
+    window = PlayerWindow(_two_cue_result(wav_path), conn)
+    window._cue_list.setCurrentRow(0)
+    window._on_loop_cue_clicked()  # cue 0: 0-500ms
+
+    calls: list[object] = []
+    monkeypatch.setattr(window._playback._player, "pause", lambda: calls.append("pause"))
+    monkeypatch.setattr(window._playback._player, "setPosition", lambda ms: calls.append(("seek", ms)))
+    monkeypatch.setattr(window._playback._player, "play", lambda: calls.append("play"))
+
+    window._on_position_changed(500 + LOOP_END_GRACE_DEFAULT_MS)  # schedules the restart
+    assert calls == ["pause"]
+
+    window._on_loop_cue_clicked()  # clicks "Stop Loop" during the settle gap
+    assert window._session.loop_mode is LoopMode.NONE
+
+    _run_event_loop(qapp, LOOP_RESTART_SETTLE_MS + 150)
+
+    assert calls == ["pause"], "a cancelled loop must never have its scheduled restart fire"
+
+    window.close()
+
+
+def test_loop_button_resets_when_replay_cue_cancels_the_active_loop(qapp, conn, tmp_path):
+    wav_path = tmp_path / "lesson.wav"
+    _make_wav(wav_path)
+    window = PlayerWindow(_two_cue_result(wav_path), conn)
+    window._cue_list.setCurrentRow(0)
+    window._on_loop_cue_clicked()
+    assert window._loop_cue_button.text() == "Stop Loop"
+
+    window._on_replay_cue()
+    assert window._session.loop_mode is LoopMode.NONE
+    assert window._loop_cue_button.text() == "Loop Cue"
+    window.close()
+
+
+def test_manual_scroll_suspends_follow_and_shows_return_button(qapp, conn, tmp_path):
+    """M12 Round 1 Playback Contract S8 (m02-01/m12-05, P4): a manual scroll
+    away from the playing cue must suspend auto-follow and expose a
+    lightweight recovery action, rather than fighting the learner's scroll on
+    the next position tick."""
+    wav_path = tmp_path / "lesson.wav"
+    _make_wav(wav_path)
+    window = PlayerWindow(_two_cue_result(wav_path), conn)
+    assert window._follow_playback is True
+    assert window._return_to_playing_button.isHidden() is True
+
+    window._on_transcript_scrollbar_changed(5)  # simulates a real user scroll
+    assert window._follow_playback is False
+    assert window._return_to_playing_button.isHidden() is False
+
+    window.close()
+
+
+def test_return_to_playing_cue_resumes_follow(qapp, conn, tmp_path):
+    wav_path = tmp_path / "lesson.wav"
+    _make_wav(wav_path)
+    window = PlayerWindow(_two_cue_result(wav_path), conn)
+    window._on_transcript_scrollbar_changed(5)
+    assert window._follow_playback is False
+
+    window._on_return_to_playing_clicked()
+    assert window._follow_playback is True
+    assert window._return_to_playing_button.isHidden() is True
+    window.close()
+
+
+def test_programmatic_navigation_does_not_suspend_follow(qapp, conn, tmp_path):
+    """Round 1 S8: Previous/Next Cue moves the list selection (and its
+    built-in scroll-into-view) on purpose -- this must not be mistaken for a
+    manual free-scroll that suspends Follow Playback."""
+    wav_path = tmp_path / "lesson.wav"
+    _make_wav(wav_path)
+    window = PlayerWindow(_two_cue_result(wav_path), conn)
+    window._cue_list.setCurrentRow(0)
+    window._on_next_cue()
+    assert window._follow_playback is True
+    window.close()
+
+
+def test_central_widget_is_scrollable_and_workspace_fields_have_a_minimum_height(qapp, conn, tmp_path):
+    """M12 Round 2 Layout Contract (m03-01/m03-04/m03-05, L1): reproduces the
+    screenshotted human-QA finding that the workspace panel's QLineEdits and
+    Save/Update/Delete buttons compressed to unreadable slivers when the
+    window was shorter than the stacked content's combined height. Fixed by
+    wrapping the content in a resizable QScrollArea (the window scrolls
+    instead of squeezing every zero-minimum-height widget) plus an explicit
+    minimum height on the fields/buttons that were reported as unreadable."""
+    from PySide6.QtWidgets import QScrollArea
+
+    wav_path = tmp_path / "lesson.wav"
+    _make_wav(wav_path)
+    window = PlayerWindow(_two_cue_result(wav_path), conn)
+
+    central = window.centralWidget()
+    assert isinstance(central, QScrollArea)
+    assert central.widgetResizable() is True
+
+    for field in (
+        window._heard_as_edit,
+        window._annotation_note_edit,
+        window._item_meaning_edit,
+        window._item_note_edit,
+    ):
+        assert field.minimumHeight() >= 28
+
+    for button in (
+        window._save_annotation_button,
+        window._update_annotation_button,
+        window._delete_annotation_button,
+        window._save_note_button,
+        window._delete_note_button,
+        window._save_item_button,
+        window._update_item_button,
+        window._delete_item_button,
+    ):
+        assert button.minimumHeight() >= 28
+
+    window.close()
+
+
 def test_player_window_toggle_transcript_keeps_active_cue_tracking(qapp, conn, tmp_path):
     wav_path = tmp_path / "lesson.wav"
     _make_wav(wav_path)
@@ -291,4 +592,86 @@ def test_player_window_mute_toggle(qapp, conn, tmp_path):
     window._on_toggle_mute()
     assert window._playback.is_muted is False
 
+    window.close()
+
+
+# ---- Loop Settings (M12 Loop End Grace / Batch C) ----
+
+
+def test_loop_settings_button_opens_a_material_loop_settings_dialog(qapp, conn, tmp_path):
+    wav_path = tmp_path / "lesson.wav"
+    _make_wav(wav_path)
+    window = PlayerWindow(_two_cue_result_with_real_material(conn, wav_path), conn)
+
+    window._on_open_loop_settings()
+
+    assert isinstance(window._loop_settings_dialog, MaterialLoopSettingsDialog)
+    assert window._loop_settings_dialog.isVisible()
+    window.close()
+
+
+def test_loop_settings_button_reuses_the_same_dialog_instance(qapp, conn, tmp_path):
+    wav_path = tmp_path / "lesson.wav"
+    _make_wav(wav_path)
+    window = PlayerWindow(_two_cue_result_with_real_material(conn, wav_path), conn)
+
+    window._on_open_loop_settings()
+    first = window._loop_settings_dialog
+    window._on_open_loop_settings()
+
+    assert window._loop_settings_dialog is first
+    window.close()
+
+
+def test_switching_material_to_custom_updates_this_windows_live_session_grace(qapp, conn, tmp_path):
+    wav_path = tmp_path / "lesson.wav"
+    _make_wav(wav_path)
+    load_result = _two_cue_result_with_real_material(conn, wav_path)
+    window = PlayerWindow(load_result, conn)
+    assert window._session._loop_end_grace_ms == LOOP_END_GRACE_DEFAULT_MS
+
+    loop_grace_service.set_material_loop_end_grace_override_ms(conn, load_result.material.id, 90)
+    loop_grace_change_bus.material_override_changed.emit(load_result.material.id)
+
+    assert window._session._loop_end_grace_ms == 90
+    window.close()
+
+
+def test_material_override_changed_for_a_different_material_is_ignored(qapp, conn, tmp_path):
+    wav_path = tmp_path / "lesson.wav"
+    _make_wav(wav_path)
+    load_result = _two_cue_result_with_real_material(conn, wav_path)
+    window = PlayerWindow(load_result, conn)
+
+    loop_grace_change_bus.material_override_changed.emit(load_result.material.id + 999)
+
+    assert window._session._loop_end_grace_ms == LOOP_END_GRACE_DEFAULT_MS
+    window.close()
+
+
+def test_global_default_changed_updates_an_inheriting_windows_live_session_grace(qapp, conn, tmp_path):
+    wav_path = tmp_path / "lesson.wav"
+    _make_wav(wav_path)
+    load_result = _two_cue_result_with_real_material(conn, wav_path)
+    window = PlayerWindow(load_result, conn)
+
+    loop_grace_service.set_global_loop_end_grace_ms(conn, 250)
+    loop_grace_change_bus.global_default_changed.emit()
+
+    assert window._session._loop_end_grace_ms == 250
+    window.close()
+
+
+def test_global_default_changed_does_not_move_a_windows_custom_override(qapp, conn, tmp_path):
+    wav_path = tmp_path / "lesson.wav"
+    _make_wav(wav_path)
+    load_result = _two_cue_result_with_real_material(conn, wav_path)
+    loop_grace_service.set_material_loop_end_grace_override_ms(conn, load_result.material.id, 90)
+    window = PlayerWindow(load_result, conn)
+    assert window._session._loop_end_grace_ms == 90
+
+    loop_grace_service.set_global_loop_end_grace_ms(conn, 250)
+    loop_grace_change_bus.global_default_changed.emit()
+
+    assert window._session._loop_end_grace_ms == 90, "a custom override must never be touched by a global change"
     window.close()

@@ -3,7 +3,7 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QTimer, Signal
+from PySide6.QtCore import QObject, Qt, QTimer, Signal
 from PySide6.QtWidgets import (
     QComboBox,
     QHBoxLayout,
@@ -16,7 +16,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from listentrace.application.errors import RecordingValidationError
+from listentrace.application.errors import RecordingNotFoundError, RecordingValidationError
 from listentrace.application.services import recording_service
 from listentrace.domain.enums.recording_status import RecordingStatus
 from listentrace.domain.models.recording import Recording
@@ -24,6 +24,23 @@ from listentrace.domain.services.comparison_sequence import COMPARISON_PAUSE_MS,
 from listentrace.infrastructure.media.playback import PlaybackController
 from listentrace.infrastructure.media.recording import AudioInputDevice, RecordingController
 from listentrace.ui import theme
+
+
+class _RecordingChangeBus(QObject):
+    """M12 Round 3/4: process-wide notification so every open `RecordingPanel`
+    invalidates its take list after a destructive action happens in a
+    *different* window on the same cue/material -- e.g. Shadowing Practice
+    deletes a take while a Guided Session Stage 4 panel for the same material
+    is also open. Without this, the second panel keeps showing a row whose
+    file and DB row are already gone (the human-QA "ghost take" report).
+    Deliberately just two signals, not a general event bus: this is the
+    smallest thing that removes the actual observed staleness."""
+
+    cue_changed = Signal(int)  # subtitle_cue_id
+    material_changed = Signal(int)  # material_id -- e.g. "delete all takes for this material"
+
+
+recording_change_bus = _RecordingChangeBus()
 
 
 class RecordingPanel(QWidget):
@@ -74,6 +91,9 @@ class RecordingPanel(QWidget):
         self._take_playback.playback_error.connect(self._on_take_playback_error)
 
         self._sequencer = ComparisonSequencer()
+
+        recording_change_bus.cue_changed.connect(self._on_external_cue_changed)
+        recording_change_bus.material_changed.connect(self._on_external_material_changed)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -415,11 +435,20 @@ class RecordingPanel(QWidget):
         # release it first so deleting a take right after playing/comparing it
         # doesn't spuriously fail.
         self.release_take_playback()
+        cue_id = take.subtitle_cue_id
         try:
             recording_service.delete_take(self._connection, self._recordings_dir, take.id)
+        except RecordingNotFoundError:
+            # M12 Round 3/4 ghost-take fix: the row was already deleted elsewhere
+            # (e.g. another open window, or a material removal) before this
+            # panel's stale list was refreshed. Nothing left to delete -- treat
+            # it the same as a successful delete rather than leaving the row
+            # stuck and un-removable.
+            pass
         except RecordingValidationError as exc:
             QMessageBox.warning(self, "Cannot Delete Recording", str(exc))
         self._refresh_takes()
+        recording_change_bus.cue_changed.emit(cue_id)
 
     def _on_delete_all_takes_for_cue_clicked(self) -> None:
         if self._subtitle_cue_id is None or not self._takes:
@@ -431,7 +460,8 @@ class RecordingPanel(QWidget):
         if answer != QMessageBox.StandardButton.Yes:
             return
         self.release_take_playback()
-        summary = recording_service.delete_takes_for_cue(self._connection, self._recordings_dir, self._subtitle_cue_id)
+        cue_id = self._subtitle_cue_id
+        summary = recording_service.delete_takes_for_cue(self._connection, self._recordings_dir, cue_id)
         if not summary.all_succeeded:
             QMessageBox.warning(
                 self, "Some Recordings Could Not Be Deleted",
@@ -439,6 +469,18 @@ class RecordingPanel(QWidget):
                 "could not be deleted and remain in the list.",
             )
         self._refresh_takes()
+        recording_change_bus.cue_changed.emit(cue_id)
+
+    # ---- cross-window invalidation (M12 Round 3/4 ghost-take fix) ----
+
+    def _on_external_cue_changed(self, subtitle_cue_id: int) -> None:
+        if self._subtitle_cue_id == subtitle_cue_id:
+            self._refresh_takes()
+
+    def _on_external_material_changed(self, material_id: int) -> None:
+        if self._material_id == material_id:
+            self._refresh_takes()
+            self._update_recording_buttons()
 
     # ---- comparison sequencing ----
 

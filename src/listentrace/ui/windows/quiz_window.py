@@ -18,8 +18,10 @@ from PySide6.QtWidgets import (
 )
 
 from listentrace.application.dto.player_load import PlayerLoadResult
+from listentrace.application.dto.player_state import PlayerTick
 from listentrace.application.dto.quiz_state import QuizState
 from listentrace.application.errors import QuizQuestionNotFoundError, QuizValidationError
+from listentrace.application.services import loop_grace_service
 from listentrace.application.services import quiz_service as svc
 from listentrace.application.services.player_session import PlayerSession
 from listentrace.domain.enums.answered_state import AnsweredState
@@ -27,6 +29,8 @@ from listentrace.domain.enums.question_type import QuestionType
 from listentrace.domain.enums.quiz_status import QuizStatus
 from listentrace.infrastructure.media.playback import PlaybackController
 from listentrace.ui import theme
+from listentrace.ui.widgets.loop_grace_change_bus import loop_grace_change_bus
+from listentrace.ui.windows.material_loop_settings_dialog import MaterialLoopSettingsDialog
 from listentrace.ui.windows.player_window import _format_time
 from listentrace.ui.windows.quiz_review_dialog import QuizReviewDialog
 
@@ -65,8 +69,12 @@ class QuizWindow(QMainWindow):
         self.resize(820, 620)
 
         self._playback = PlaybackController(self)
-        self._player_session = PlayerSession(self._cues)
+        grace_ms = loop_grace_service.effective_loop_end_grace_ms(connection, self._material.id)
+        self._player_session = PlayerSession(self._cues, loop_end_grace_ms=grace_ms)
         self._playback_usable = True
+        self._loop_settings_dialog: MaterialLoopSettingsDialog | None = None
+        loop_grace_change_bus.global_default_changed.connect(self._on_loop_grace_global_default_changed)
+        loop_grace_change_bus.material_override_changed.connect(self._on_loop_grace_material_override_changed)
         self._state: QuizState | None = None
         self._current_index = 0
         self._current_cue_index: int | None = None
@@ -99,8 +107,11 @@ class QuizWindow(QMainWindow):
         self._loop_button = QPushButton("Loop Cue")
         self._loop_button.clicked.connect(self._on_loop_clicked)
         theme.apply_role(self._loop_button, "secondary")
+        self._loop_settings_button = QPushButton("Loop Settings...")
+        self._loop_settings_button.clicked.connect(self._on_open_loop_settings)
+        theme.apply_role(self._loop_settings_button, "secondary")
         self._time_label = QLabel("00:00 / 00:00")
-        for widget in (self._play_button, self._replay_button, self._loop_button):
+        for widget in (self._play_button, self._replay_button, self._loop_button, self._loop_settings_button):
             transport_row.addWidget(widget)
         transport_row.addWidget(self._time_label)
         layout.addLayout(transport_row)
@@ -184,11 +195,29 @@ class QuizWindow(QMainWindow):
         self._choice_button_group = QButtonGroup(panel)
         self._choice_button_group.setExclusive(True)
         self._choice_radio_buttons: list[QRadioButton] = []
+        self._choice_labels: list[QLabel] = []
+        self._choice_rows: list[QHBoxLayout] = []
         for index in range(_MAX_CHOICES):
-            radio = QRadioButton("")
+            radio = QRadioButton()
             self._choice_button_group.addButton(radio, index)
             self._choice_radio_buttons.append(radio)
-            layout.addWidget(radio)
+
+            # M12 Round 2 L2 (Quiz Text Is Primary Reading Content):
+            # QRadioButton has no word-wrap support in Qt Widgets at all --
+            # long answer text was hard-truncated with an ellipsis no matter
+            # how tall the window was. The radio now carries no text; a
+            # paired, word-wrapping QLabel is the actual reading target, and
+            # clicking anywhere on it selects the radio too.
+            label = QLabel("")
+            label.setWordWrap(True)
+            label.mousePressEvent = lambda _event, r=radio: r.setChecked(True) if r.isEnabled() else None
+            self._choice_labels.append(label)
+
+            option_row = QHBoxLayout()
+            option_row.addWidget(radio, 0)
+            option_row.addWidget(label, 1)
+            self._choice_rows.append(option_row)
+            layout.addLayout(option_row)
         layout.addStretch(1)
         return panel
 
@@ -363,15 +392,18 @@ class QuizWindow(QMainWindow):
             self._masked_text_label.setText("")
             selected_index = answer.selected_choice_index if answer is not None else None
             for index, radio in enumerate(self._choice_radio_buttons):
+                label = self._choice_labels[index]
                 if index < len(choices):
-                    radio.setText(choices[index])
+                    label.setText(choices[index])
                     radio.setVisible(True)
+                    label.setVisible(True)
                     radio.blockSignals(True)
                     radio.setChecked(index == selected_index)
                     radio.blockSignals(False)
                     radio.setEnabled(not read_only)
                 else:
                     radio.setVisible(False)
+                    label.setVisible(False)
                     radio.blockSignals(True)
                     radio.setChecked(False)
                     radio.blockSignals(False)
@@ -406,20 +438,51 @@ class QuizWindow(QMainWindow):
 
     # ---- shared playback plumbing ----
 
+    def _on_open_loop_settings(self) -> None:
+        if self._loop_settings_dialog is None:
+            self._loop_settings_dialog = MaterialLoopSettingsDialog(
+                self._connection, self._material.id, self._material.title, self
+            )
+        self._loop_settings_dialog.show()
+        self._loop_settings_dialog.raise_()
+        self._loop_settings_dialog.activateWindow()
+
+    def _on_loop_grace_global_default_changed(self) -> None:
+        self._refresh_loop_end_grace()
+
+    def _on_loop_grace_material_override_changed(self, material_id: int) -> None:
+        if material_id == self._material.id:
+            self._refresh_loop_end_grace()
+
+    def _refresh_loop_end_grace(self) -> None:
+        grace_ms = loop_grace_service.effective_loop_end_grace_ms(self._connection, self._material.id)
+        self._player_session.set_loop_end_grace_ms(grace_ms)
+
     def _sync_play_button_text(self) -> None:
         self._play_button.setText("Pause" if self._playback.is_playing else "Play")
 
-    def _on_position_changed(self, position_ms: int) -> None:
-        tick = self._player_session.on_position_changed(position_ms)
-        if tick.pause:
+    def _apply_player_tick(self, tick: PlayerTick) -> None:
+        # See player_window.py's _apply_player_tick for why restart_at_ms
+        # (a Loop iteration restarting on its own) must not run the ordinary
+        # "playback genuinely stopped" side effects below. Shared by both
+        # tick sources: a position update, and the media's own natural end
+        # (see _on_end_of_media).
+        if tick.restart_at_ms is not None:
+            self._playback.restart_span(tick.restart_at_ms)
+        elif tick.pause:
             self._playback.pause()
             self._sync_play_button_text()
-        if tick.seek_to_ms is not None:
-            self._playback.seek(tick.seek_to_ms)
+
+    def _on_position_changed(self, position_ms: int) -> None:
+        tick = self._player_session.on_position_changed(position_ms)
+        self._apply_player_tick(tick)
         self._time_label.setText(f"{_format_time(position_ms)} / {_format_time(self._playback.duration_ms)}")
 
     def _on_end_of_media(self) -> None:
-        self._sync_play_button_text()
+        tick = self._player_session.on_media_ended()
+        self._apply_player_tick(tick)
+        if tick.restart_at_ms is None:
+            self._sync_play_button_text()
 
     def _on_playback_error(self, message: str) -> None:
         self._show_status(f"Playback error: {message}")
@@ -431,10 +494,21 @@ class QuizWindow(QMainWindow):
             widget.setEnabled(enabled)
 
     def _on_play_clicked(self) -> None:
+        # M12 Round 1 Playback Contract: Quiz is a cue-oriented context, so
+        # Play must default to cue-scoped playback (this cue only), never
+        # whole-media playback -- previously this just resumed/started the
+        # underlying continuous transport, which could play straight through
+        # every remaining cue in the material.
         if self._playback.is_playing:
             self._playback.pause()
-        else:
-            self._playback.play()
+            self._sync_play_button_text()
+            return
+        if self._current_cue_index is None:
+            return
+        seek_to = self._player_session.play_cue(self._current_cue_index)
+        if seek_to is not None:
+            self._playback.seek(seek_to)
+        self._playback.play()
         self._sync_play_button_text()
 
     def _on_replay_clicked(self) -> None:

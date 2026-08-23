@@ -6,6 +6,7 @@ import wave
 import pytest
 from PySide6.QtWidgets import QMessageBox
 
+from listentrace.application.services import loop_grace_service
 from listentrace.application.services import quick_practice_service as svc
 from listentrace.application.services import recording_service
 from listentrace.application.services.material_import_service import import_material
@@ -13,6 +14,8 @@ from listentrace.application.services.player_loading_service import load_materia
 from listentrace.infrastructure.db import recording_repository
 from listentrace.infrastructure.db.connection import open_connection
 from listentrace.infrastructure.db.migrations import migrate
+from listentrace.ui.widgets.loop_grace_change_bus import loop_grace_change_bus
+from listentrace.ui.windows.material_loop_settings_dialog import MaterialLoopSettingsDialog
 from listentrace.ui.windows.quick_practice_window import (
     _STEP_DIAGNOSE,
     _STEP_LISTEN_RECALL,
@@ -60,6 +63,29 @@ def _open_window(conn, tmp_path, cue_ids, recordings_dir=None):
     return window, load_result, session.id
 
 
+def test_loop_settings_button_opens_the_shared_dialog_from_either_step(qapp, conn, tmp_path):
+    window, load_result, _ = _open_window(conn, tmp_path, None)
+
+    window._on_open_loop_settings()
+    assert isinstance(window._loop_settings_dialog, MaterialLoopSettingsDialog)
+    first = window._loop_settings_dialog
+    window._listen_loop_settings_button.click()
+    window._replay_loop_settings_button.click()
+    assert window._loop_settings_dialog is first
+    window.close()
+
+
+def test_material_override_changed_updates_this_windows_live_session_grace(qapp, conn, tmp_path):
+    window, load_result, _ = _open_window(conn, tmp_path, None)
+    material_id = load_result.material.id
+
+    loop_grace_service.set_material_loop_end_grace_override_ms(conn, material_id, 90)
+    loop_grace_change_bus.material_override_changed.emit(material_id)
+
+    assert window._player_session._loop_end_grace_ms == 90
+    window.close()
+
+
 def test_window_opens_with_transcript_hidden_at_listen_recall_step(qapp, conn, tmp_path):
     load_result = _import_material(conn, tmp_path)
     session = svc.start_selected_session(conn, load_result.material.id, [load_result.cues[0].id])
@@ -68,6 +94,42 @@ def test_window_opens_with_transcript_hidden_at_listen_recall_step(qapp, conn, t
     assert window._step == _STEP_LISTEN_RECALL
     assert "Cue 1 of 1" in window._progress_label.text()
     assert window._diagnosis_transcript_view.toPlainText() == ""
+    window.close()
+
+
+def test_play_button_is_cue_scoped_not_whole_media(qapp, conn, tmp_path):
+    """M12 Round 1 Playback Contract (P1): Play in the Listen step must stop
+    at the current cue's end, not drift into the next cue's audio."""
+    from PySide6.QtCore import QEventLoop, QTimer
+
+    def _pump(ms: int) -> None:
+        loop = QEventLoop()
+        QTimer.singleShot(ms, loop.quit)
+        loop.exec()
+
+    media_path = tmp_path / "lesson.wav"
+    _make_wav(media_path, seconds=4)
+    srt = tmp_path / "lesson.srt"
+    srt.write_text(
+        "1\n00:00:00,000 --> 00:00:01,000\nBonjour\n\n"
+        "2\n00:00:01,000 --> 00:00:02,000\nComment ca va\n\n"
+        "3\n00:00:02,000 --> 00:00:03,000\nAu revoir\n",
+        encoding="utf-8",
+    )
+    result = import_material(conn, media_path, srt, "QP Lesson")
+    load_result = load_material_for_player(conn, result.material_id)
+    cue = load_result.cues[1]  # 1000-2000ms, so a "just play from 0" bug would overshoot it
+    session = svc.start_selected_session(conn, load_result.material.id, [cue.id])
+    window = QuickPracticeWindow(conn, load_result, session.id, tmp_path / "recordings")
+    _pump(500)  # let the async media load finish before seeking away from position 0
+
+    window._on_play_clicked()
+    _pump((cue.end_ms - cue.start_ms) + 500)
+
+    assert window._playback.is_playing is False, (
+        "Play must stop at this cue's end, not continue playing into the next cue"
+    )
+    assert window._playback.position_ms < cue.end_ms + 200
     window.close()
 
 
@@ -134,6 +196,35 @@ def test_full_two_cue_run_reaches_summary(qapp, conn, tmp_path):
     session_after = svc.get_session(conn, session.id)
     assert session_after.status == "completed"
     assert "Cues completed: 2" in window._summary_label.text()
+    window.close()
+
+
+def test_delete_diagnosis_prompts_for_confirmation(qapp, conn, tmp_path, monkeypatch):
+    """M12.3 regression: deleting a Quick Practice diagnosis must be confirmed like
+    every other destructive action in the app (GuidedSessionWindow's equivalent
+    already does; this window previously deleted with no prompt at all)."""
+    load_result = _import_material(conn, tmp_path)
+    session = svc.start_selected_session(conn, load_result.material.id, [load_result.cues[0].id])
+    window = QuickPracticeWindow(conn, load_result, session.id, tmp_path / "recordings")
+
+    window._recall_radio_buttons["missed"].setChecked(True)
+    window._on_step_action_clicked()  # -> reveal & diagnose
+    window._diagnosis_label_checkboxes["misheard"].setChecked(True)
+    window._diagnosis_heard_as_edit.setText("bonjoor")
+    window._on_save_diagnosis_clicked()
+    assert window._diagnosis_list.count() == 1
+    window._diagnosis_list.setCurrentRow(0)
+    assert window._editing_diagnosis_id is not None
+
+    asked = []
+    monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: (asked.append(True), QMessageBox.StandardButton.No)[1])
+    window._on_delete_diagnosis_clicked()
+    assert asked  # a confirmation prompt was actually shown
+    assert len(svc.list_item_diagnosis(conn, window._current_item_state().item.id)) == 1  # cancel kept it
+
+    monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.StandardButton.Yes)
+    window._on_delete_diagnosis_clicked()
+    assert svc.list_item_diagnosis(conn, window._current_item_state().item.id) == []
     window.close()
 
 

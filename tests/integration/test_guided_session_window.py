@@ -8,12 +8,15 @@ from PySide6.QtCore import QEventLoop, QTimer
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import QMessageBox
 
+from listentrace.application.services import loop_grace_service
 from listentrace.application.services import practice_session_service as svc
 from listentrace.application.services.material_import_service import import_material
 from listentrace.application.services.player_loading_service import load_material_for_player
 from listentrace.infrastructure.db.connection import open_connection
 from listentrace.infrastructure.db.migrations import migrate
+from listentrace.ui.widgets.loop_grace_change_bus import loop_grace_change_bus
 from listentrace.ui.windows.guided_session_window import GuidedSessionWindow
+from listentrace.ui.windows.material_loop_settings_dialog import MaterialLoopSettingsDialog
 
 
 @pytest.fixture()
@@ -76,6 +79,9 @@ def test_transcript_reveal_requires_confirmation_and_locks_stage1_2(qapp, conn, 
     monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.StandardButton.Yes)
 
     window, _, session_id = _open_guided_window(conn, tmp_path)
+    assert window._stage1_lock_hint.isHidden() is True
+    assert window._stage2_lock_hint.isHidden() is True
+
     window._stage1_edits["where"].setPlainText("A cafe")
     window._on_save_and_continue_clicked()  # -> stage 2
     window._on_skip_stage_clicked()  # -> stage 3, triggers reveal confirmation (auto-Yes)
@@ -85,8 +91,11 @@ def test_transcript_reveal_requires_confirmation_and_locks_stage1_2(qapp, conn, 
     assert session.transcript_revealed_at is not None
     assert window._diagnosis_cue_list.count() == 2
 
-    # Stage 1 is now read-only.
+    # Stage 1 is now read-only, and the UI now explains why (M12.3 regression:
+    # previously the controls just went grey with no on-screen explanation).
     assert window._stage1_edits["where"].isReadOnly() is True
+    assert window._stage1_lock_hint.isHidden() is False
+    assert window._stage2_lock_hint.isHidden() is False
     window.close()
 
 
@@ -181,6 +190,66 @@ def test_completed_session_reopens_read_only(qapp, conn, tmp_path, monkeypatch):
     reopened.close()
 
 
+def test_stage5_summary_save_and_continue_enables_complete_button(qapp, conn, tmp_path, monkeypatch):
+    """M12 Round 4 Batch A: reproduces the human-QA report that `Complete Session`
+    stays disabled after Stage 5's summary is filled in. Walks the real UI path
+    (not `svc.*` shortcuts) end to end to determine whether this is a UI-wiring
+    defect or a discoverability gap: typing the summary alone must not enable
+    Complete (that would be a *different* bug -- silent auto-completion), but
+    clicking the documented "Save and Continue" action on Stage 5 must."""
+    monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.StandardButton.Yes)
+    window, _, session_id = _open_guided_window(conn, tmp_path)
+
+    window._stage1_edits["where"].setPlainText("A cafe")
+    window._on_save_and_continue_clicked()  # -> stage2
+    window._on_skip_stage_clicked()  # -> stage3 (triggers reveal confirmation, auto-Yes)
+    window._on_skip_stage_clicked()  # -> stage4
+    window._on_skip_stage_clicked()  # -> stage5
+    assert window._current_stage == "final_summary"
+    assert window._complete_button.isEnabled() is False
+
+    window._final_summary_edit.setPlainText("Short summary of what I understood.")
+    assert window._complete_button.isEnabled() is False, (
+        "Typing the summary alone must not silently satisfy completion -- "
+        "only an explicit save action should."
+    )
+
+    window._on_save_and_continue_clicked()  # the only documented action that resolves stage 5
+    state = svc.load_session_state(conn, session_id)
+    assert state.stage_progress["final_summary"].status == "completed"
+    assert window._complete_button.isEnabled() is True, (
+        "Complete Session must become enabled once every stage is resolved via "
+        "the documented UI action."
+    )
+    window.close()
+
+
+def test_complete_button_disabled_reason_is_visible_and_accurate(qapp, conn, tmp_path, monkeypatch):
+    """M12 Round 3 Completion/Explainability Contract: a disabled `Complete
+    Session` must show an inspectable reason, not just render grey."""
+    monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.StandardButton.Yes)
+    window, _, _ = _open_guided_window(conn, tmp_path)
+
+    assert "Global Comprehension" in window._completion_status_label.text()
+    assert "Final Recall" in window._completion_status_label.text()
+
+    window._stage1_edits["where"].setPlainText("A cafe")
+    window._on_save_and_continue_clicked()  # -> stage2
+    window._on_skip_stage_clicked()  # -> stage3
+    window._on_skip_stage_clicked()  # -> stage4
+    window._on_skip_stage_clicked()  # -> stage5
+
+    assert "Final Recall" in window._completion_status_label.text()
+    assert "Global Comprehension" not in window._completion_status_label.text().split("(")[0]
+
+    window._final_summary_edit.setPlainText("Short summary.")
+    window._on_save_and_continue_clicked()
+    assert window._completion_status_label.text() == "Ready to complete.  (✓ Global Comprehension | " \
+        "✓ Keyword & Fragment Capture | ✓ Transcript Comparison & Error Diagnosis | " \
+        "✓ Sentence-Level Shadowing | ✓ Final Recall)"
+    window.close()
+
+
 def test_unsaved_capture_draft_survives_unrelated_stage3_refresh(qapp, conn, tmp_path, monkeypatch):
     monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.StandardButton.Yes)
     window, _, session_id = _open_guided_window(conn, tmp_path)
@@ -192,4 +261,26 @@ def test_unsaved_capture_draft_survives_unrelated_stage3_refresh(qapp, conn, tmp
     # save) must not wipe an unsaved draft still sitting in the input field.
     window._refresh_state()
     assert window._capture_text_edit.text() == "draft fragment"
+    window.close()
+
+
+def test_loop_settings_button_opens_the_shared_dialog_from_either_stage(qapp, conn, tmp_path):
+    window, material_id, _ = _open_guided_window(conn, tmp_path)
+
+    window._on_open_loop_settings()
+    assert isinstance(window._loop_settings_dialog, MaterialLoopSettingsDialog)
+    first = window._loop_settings_dialog
+    window._diagnosis_loop_settings_button.click()
+    window._shadowing_loop_settings_button.click()
+    assert window._loop_settings_dialog is first, "one shared dialog regardless of which stage opened it"
+    window.close()
+
+
+def test_material_override_changed_updates_this_windows_live_session_grace(qapp, conn, tmp_path):
+    window, material_id, _ = _open_guided_window(conn, tmp_path)
+
+    loop_grace_service.set_material_loop_end_grace_override_ms(conn, material_id, 90)
+    loop_grace_change_bus.material_override_changed.emit(material_id)
+
+    assert window._player_session._loop_end_grace_ms == 90
     window.close()

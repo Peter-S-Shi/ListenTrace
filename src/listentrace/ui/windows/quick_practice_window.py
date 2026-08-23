@@ -30,7 +30,9 @@ from listentrace.application.errors import (
     QuickPracticeDiagnosisNotFoundError,
     QuickPracticeValidationError,
 )
+from listentrace.application.dto.player_state import PlayerTick
 from listentrace.application.services import label_preference_service
+from listentrace.application.services import loop_grace_service
 from listentrace.application.services import quick_practice_service as svc
 from listentrace.application.services.player_session import PlayerSession
 from listentrace.domain.enums.annotation_label import AnnotationLabel
@@ -45,7 +47,9 @@ from listentrace.ui.text_offset_conversion import (
     codepoint_index_to_qt_offset,
     qt_offset_to_codepoint_index,
 )
+from listentrace.ui.widgets.loop_grace_change_bus import loop_grace_change_bus
 from listentrace.ui.widgets.recording_panel import RecordingPanel
+from listentrace.ui.windows.material_loop_settings_dialog import MaterialLoopSettingsDialog
 from listentrace.ui.windows.player_window import _OVERLAP_HIGHLIGHT, _color_badge_icon, _format_time
 
 _STEP_LISTEN_RECALL = 0
@@ -97,7 +101,11 @@ class QuickPracticeWindow(QMainWindow):
         self.resize(880, 680)
 
         self._playback = PlaybackController(self)
-        self._player_session = PlayerSession(load_result.cues)
+        grace_ms = loop_grace_service.effective_loop_end_grace_ms(connection, self._material.id)
+        self._player_session = PlayerSession(load_result.cues, loop_end_grace_ms=grace_ms)
+        self._loop_settings_dialog: MaterialLoopSettingsDialog | None = None
+        loop_grace_change_bus.global_default_changed.connect(self._on_loop_grace_global_default_changed)
+        loop_grace_change_bus.material_override_changed.connect(self._on_loop_grace_material_override_changed)
         self._playback_usable = True
         self._state: QuickPracticeSessionState | None = None
         self._index = 0
@@ -165,9 +173,11 @@ class QuickPracticeWindow(QMainWindow):
             "_listen_play_button",
             "_listen_replay_button",
             "_listen_loop_button",
+            "_listen_loop_settings_button",
             "_replay_play_button",
             "_replay_replay_button",
             "_replay_loop_button",
+            "_replay_loop_settings_button",
         ):
             theme.apply_role(getattr(self, attr), "secondary")
         theme.apply_role(self._save_diagnosis_button, "secondary")
@@ -225,22 +235,51 @@ class QuickPracticeWindow(QMainWindow):
 
     # ---- shared playback plumbing ----
 
+    def _on_open_loop_settings(self) -> None:
+        if self._loop_settings_dialog is None:
+            self._loop_settings_dialog = MaterialLoopSettingsDialog(
+                self._connection, self._material.id, self._material.title, self
+            )
+        self._loop_settings_dialog.show()
+        self._loop_settings_dialog.raise_()
+        self._loop_settings_dialog.activateWindow()
+
+    def _on_loop_grace_global_default_changed(self) -> None:
+        self._refresh_loop_end_grace()
+
+    def _on_loop_grace_material_override_changed(self, material_id: int) -> None:
+        if material_id == self._material.id:
+            self._refresh_loop_end_grace()
+
+    def _refresh_loop_end_grace(self) -> None:
+        grace_ms = loop_grace_service.effective_loop_end_grace_ms(self._connection, self._material.id)
+        self._player_session.set_loop_end_grace_ms(grace_ms)
+
     def _sync_playback_button_texts(self) -> None:
         text = "Pause" if self._playback.is_playing else "Play"
         for attr in ("_listen_play_button", "_replay_play_button"):
             if hasattr(self, attr):
                 getattr(self, attr).setText(text)
 
-    def _on_position_changed(self, position_ms: int) -> None:
-        tick = self._player_session.on_position_changed(position_ms)
-        if tick.pause:
+    def _apply_player_tick(self, tick: PlayerTick) -> None:
+        # See player_window.py's _apply_player_tick for why restart_at_ms
+        # (a Loop iteration restarting on its own) must not run the ordinary
+        # "playback genuinely stopped" side effect below. Shared by both tick
+        # sources: a position update, and the media's own natural end (see
+        # _on_end_of_media). Comparison-replay bookkeeping deliberately stays
+        # out of this shared method -- see _on_position_changed/_on_end_of_media.
+        if tick.restart_at_ms is not None:
+            self._playback.restart_span(tick.restart_at_ms)
+        elif tick.pause:
             self._playback.pause()
             self._sync_playback_button_texts()
-            if self._comparison_replay_pending:
-                self._comparison_replay_pending = False
-                self._recording_panel.notify_source_finished()
-        if tick.seek_to_ms is not None:
-            self._playback.seek(tick.seek_to_ms)
+
+    def _on_position_changed(self, position_ms: int) -> None:
+        tick = self._player_session.on_position_changed(position_ms)
+        self._apply_player_tick(tick)
+        if tick.pause and tick.restart_at_ms is None and self._comparison_replay_pending:
+            self._comparison_replay_pending = False
+            self._recording_panel.notify_source_finished()
 
         text = f"{_format_time(position_ms)} / {_format_time(self._playback.duration_ms)}"
         for attr in ("_listen_time_label", "_replay_time_label"):
@@ -248,7 +287,10 @@ class QuickPracticeWindow(QMainWindow):
                 getattr(self, attr).setText(text)
 
     def _on_end_of_media(self) -> None:
-        self._sync_playback_button_texts()
+        tick = self._player_session.on_media_ended()
+        self._apply_player_tick(tick)
+        if tick.restart_at_ms is None:
+            self._sync_playback_button_texts()
         if self._comparison_replay_pending:
             self._comparison_replay_pending = False
             self._recording_panel.notify_source_failed()
@@ -265,18 +307,31 @@ class QuickPracticeWindow(QMainWindow):
             "_listen_play_button",
             "_listen_replay_button",
             "_listen_loop_button",
+            "_listen_loop_settings_button",
             "_replay_play_button",
             "_replay_replay_button",
             "_replay_loop_button",
+            "_replay_loop_settings_button",
         ):
             if hasattr(self, attr):
                 getattr(self, attr).setEnabled(enabled)
 
     def _on_play_clicked(self) -> None:
+        # M12 Round 1 Playback Contract: Listen/Replay are cue-oriented steps,
+        # so Play must default to cue-scoped playback (this cue only) --
+        # previously this just resumed/started whole-media continuous
+        # playback, which could run straight past this cue into the next.
         if self._playback.is_playing:
             self._playback.pause()
-        else:
-            self._playback.play()
+            self._sync_playback_button_texts()
+            return
+        index = self._current_full_cue_index()
+        if index is None:
+            return
+        seek_to = self._player_session.play_cue(index)
+        if seek_to is not None:
+            self._playback.seek(seek_to)
+        self._playback.play()
         self._sync_playback_button_texts()
 
     def _on_replay_clicked(self) -> None:
@@ -317,7 +372,7 @@ class QuickPracticeWindow(QMainWindow):
             if completed_count > 0:
                 answer = QMessageBox.question(
                     self,
-                    "Close Quick Practice",
+                    "Abandon Quick Practice Run",
                     "Close this Quick Practice run? Completed cues are kept as read-only history; "
                     "the run will be marked abandoned.",
                     QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
@@ -357,8 +412,15 @@ class QuickPracticeWindow(QMainWindow):
         self._listen_replay_button.clicked.connect(self._on_replay_clicked)
         self._listen_loop_button = QPushButton("Loop Cue")
         self._listen_loop_button.clicked.connect(self._on_loop_clicked)
+        self._listen_loop_settings_button = QPushButton("Loop Settings...")
+        self._listen_loop_settings_button.clicked.connect(self._on_open_loop_settings)
         self._listen_time_label = QLabel("00:00 / 00:00")
-        for button in (self._listen_play_button, self._listen_replay_button, self._listen_loop_button):
+        for button in (
+            self._listen_play_button,
+            self._listen_replay_button,
+            self._listen_loop_button,
+            self._listen_loop_settings_button,
+        ):
             transport_row.addWidget(button)
         transport_row.addWidget(self._listen_time_label)
         layout.addLayout(transport_row)
@@ -578,6 +640,14 @@ class QuickPracticeWindow(QMainWindow):
         item_state = self._current_item_state()
         if item_state is None or item_state.item.id is None or self._editing_diagnosis_id is None:
             return
+        answer = QMessageBox.question(
+            self,
+            "Delete Diagnosis",
+            "Delete this diagnosis? The shared material annotation, if any, is not affected.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return
         try:
             svc.delete_item_diagnosis(self._connection, item_state.item.id, self._editing_diagnosis_id)
         except (QuickPracticeDiagnosisNotFoundError, QuickPracticeValidationError) as exc:
@@ -597,8 +667,15 @@ class QuickPracticeWindow(QMainWindow):
         self._replay_replay_button.clicked.connect(self._on_replay_clicked)
         self._replay_loop_button = QPushButton("Loop Cue")
         self._replay_loop_button.clicked.connect(self._on_loop_clicked)
+        self._replay_loop_settings_button = QPushButton("Loop Settings...")
+        self._replay_loop_settings_button.clicked.connect(self._on_open_loop_settings)
         self._replay_time_label = QLabel("00:00 / 00:00")
-        for button in (self._replay_play_button, self._replay_replay_button, self._replay_loop_button):
+        for button in (
+            self._replay_play_button,
+            self._replay_replay_button,
+            self._replay_loop_button,
+            self._replay_loop_settings_button,
+        ):
             transport_row.addWidget(button)
         transport_row.addWidget(self._replay_time_label)
         layout.addLayout(transport_row)

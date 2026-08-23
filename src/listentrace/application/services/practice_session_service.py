@@ -165,6 +165,21 @@ def abandon_session(conn: sqlite3.Connection, session_id: int) -> None:
     repo.set_session_status(conn, session_id, SessionStatus.ABANDONED.value)
 
 
+def delete_session(conn: sqlite3.Connection, session_id: int) -> None:
+    """M12 Round 3/4 History Ownership Contract: the user owns ordinary
+    learning history. Only a completed or abandoned session -- a genuine
+    historical record, not a live workflow -- may be deleted this way; an
+    active session must be abandoned first (Round 3 S26: "Active Sessions Are
+    Not Deleted as History"). Cascade/retention behavior is documented on
+    `session_repository.delete_practice_session`."""
+    session = _require_session(conn, session_id)
+    if session.status == SessionStatus.ACTIVE.value:
+        raise SessionValidationError(
+            "session_active", "An active session cannot be deleted. Abandon it first."
+        )
+    repo.delete_practice_session(conn, session_id)
+
+
 def complete_session(conn: sqlite3.Connection, session_id: int) -> None:
     session = _require_active_session(conn, session_id)
     if not rules.is_valid_session_transition(session.status, SessionStatus.COMPLETED.value):
@@ -240,7 +255,7 @@ def _reveal_transcript_and_lock_prior_stages(
             can_complete = rules.stage2_can_complete(len(repo.list_keyword_captures(conn, session_id)))
 
         if can_complete:
-            repo.set_stage_status(conn, session_id, stage_key, StageStatus.COMPLETED.value)
+            repo.set_stage_status(conn, session_id, stage_key, StageStatus.COMPLETED.value, commit=False)
         else:
             repo.set_stage_status(
                 conn,
@@ -248,9 +263,10 @@ def _reveal_transcript_and_lock_prior_stages(
                 stage_key,
                 StageStatus.SKIPPED.value,
                 skip_note="Auto-skipped: no evidence entered before transcript reveal.",
+                commit=False,
             )
 
-    repo.set_transcript_revealed(conn, session_id)
+    repo.set_transcript_revealed(conn, session_id, commit=False)
 
 
 def enter_stage(conn: sqlite3.Connection, session_id: int, stage_key: str) -> None:
@@ -261,16 +277,25 @@ def enter_stage(conn: sqlite3.Connection, session_id: int, stage_key: str) -> No
     session = _require_active_session(conn, session_id)
     _require_stage_key(stage_key)
 
-    repo.set_current_stage(conn, session_id, stage_key)
+    # current_stage, the not_started->in_progress transition, and (for Stage 3) the
+    # transcript-reveal/prior-stage-lock sequence must land together: a crash between
+    # them could otherwise advance current_stage without the stage-progress rows (or
+    # transcript_revealed_at) actually reflecting it.
+    try:
+        repo.set_current_stage(conn, session_id, stage_key, commit=False)
 
-    progress = repo.get_stage_progress(conn, session_id, stage_key)
-    if progress is not None and progress.status == StageStatus.NOT_STARTED.value:
-        repo.set_stage_status(conn, session_id, stage_key, StageStatus.IN_PROGRESS.value)
+        progress = repo.get_stage_progress(conn, session_id, stage_key)
+        if progress is not None and progress.status == StageStatus.NOT_STARTED.value:
+            repo.set_stage_status(conn, session_id, stage_key, StageStatus.IN_PROGRESS.value, commit=False)
 
-    if stage_key == StageKey.TRANSCRIPT_DIAGNOSIS.value:
-        _reveal_transcript_and_lock_prior_stages(conn, session, session_id)
-    elif stage_key == StageKey.SHADOWING.value:
-        _ensure_shadowing_initialized(conn, session_id, session.material_id)
+        if stage_key == StageKey.TRANSCRIPT_DIAGNOSIS.value:
+            _reveal_transcript_and_lock_prior_stages(conn, session, session_id)
+        elif stage_key == StageKey.SHADOWING.value:
+            _ensure_shadowing_initialized(conn, session_id, session.material_id)
+    except Exception:
+        conn.rollback()
+        raise
+    conn.commit()
 
 
 def skip_stage(conn: sqlite3.Connection, session_id: int, stage_key: str, skip_note: str | None = None) -> None:
@@ -441,32 +466,49 @@ def record_session_diagnosis(
     note_value = note.strip() if note and note.strip() else None
 
     existing_annotation = find_annotation(conn, subtitle_cue_id, label_key, selection_start, selection_end)
-    if existing_annotation is not None and existing_annotation.id is not None:
-        annotation_id: int | None = existing_annotation.id
-    else:
-        ids = insert_annotations(
-            conn, subtitle_cue_id, [(label_key, heard_as_value)], selected_text, selection_start, selection_end, note_value
+
+    # The annotation (if newly created), its session-scoped evidence snapshot, and the
+    # optional stage-outcome clear must land together: a crash between them would
+    # otherwise leave an orphaned Annotation with no linked evidence row, contradicting
+    # this function's own "always creates an independent snapshot" guarantee.
+    try:
+        if existing_annotation is not None and existing_annotation.id is not None:
+            annotation_id: int | None = existing_annotation.id
+        else:
+            ids = insert_annotations(
+                conn,
+                subtitle_cue_id,
+                [(label_key, heard_as_value)],
+                selected_text,
+                selection_start,
+                selection_end,
+                note_value,
+                commit=False,
+            )
+            annotation_id = ids[0]
+
+        evidence = SessionDiagnosisEvidence(
+            practice_session_id=session_id,
+            subtitle_cue_id=subtitle_cue_id,
+            annotation_id=annotation_id,
+            label_key=label_key,
+            selected_text=selected_text,
+            selection_start=selection_start,
+            selection_end=selection_end,
+            heard_as=heard_as_value,
+            note=note_value,
         )
-        annotation_id = ids[0]
+        evidence_id = repo.insert_session_diagnosis(conn, evidence, commit=False)
 
-    evidence = SessionDiagnosisEvidence(
-        practice_session_id=session_id,
-        subtitle_cue_id=subtitle_cue_id,
-        annotation_id=annotation_id,
-        label_key=label_key,
-        selected_text=selected_text,
-        selection_start=selection_start,
-        selection_end=selection_end,
-        heard_as=heard_as_value,
-        note=note_value,
-    )
-    evidence_id = repo.insert_session_diagnosis(conn, evidence)
-
-    # Mutually exclusive with "no notable difficulty": recording real evidence
-    # means that claim is no longer true for this session.
-    progress = repo.get_stage_progress(conn, session_id, StageKey.TRANSCRIPT_DIAGNOSIS.value)
-    if progress is not None and progress.outcome_key == StageOutcome.NO_NOTABLE_DIFFICULTY.value:
-        repo.set_stage_outcome(conn, session_id, StageKey.TRANSCRIPT_DIAGNOSIS.value, None)
+        # Mutually exclusive with "no notable difficulty": recording real evidence
+        # means that claim is no longer true for this session.
+        progress = repo.get_stage_progress(conn, session_id, StageKey.TRANSCRIPT_DIAGNOSIS.value)
+        if progress is not None and progress.outcome_key == StageOutcome.NO_NOTABLE_DIFFICULTY.value:
+            repo.set_stage_outcome(conn, session_id, StageKey.TRANSCRIPT_DIAGNOSIS.value, None, commit=False)
+    except Exception:
+        conn.rollback()
+        raise
+    conn.commit()
 
     return evidence_id
 

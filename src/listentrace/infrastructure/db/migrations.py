@@ -397,6 +397,61 @@ MIGRATIONS: list[tuple[int, str]] = [
         CREATE INDEX idx_saved_language_item_subtitle_cue_id ON saved_language_item(subtitle_cue_id);
         """,
     ),
+    (
+        11,
+        """
+        -- M12 Loop End Grace (see CONTEXT.md, docs/adr/0001-...): Loop endpoint
+        -- clipping was found to be material-dependent, so the grace applied past
+        -- a Loop span's logical end is calibratable per Material with a global
+        -- default, rather than a single fixed constant. Two tables, deliberately
+        -- not a generic key-value preferences store (nothing like that exists
+        -- elsewhere in this schema, not worth introducing for one setting):
+        --
+        -- Global default: a singleton row, mirroring microphone_preference's
+        -- established id=1 pattern (migration 7).
+        --
+        -- Per-material override: row present = override in effect, row absent =
+        -- inherits the global default. "Reset to Global" deletes the row rather
+        -- than writing NULL or copying the current global value in, so a
+        -- material with no override keeps following future global changes
+        -- automatically. Bounds (60-300ms) and the seeded default (180ms) are
+        -- application-layer concerns (see domain/services/loop_grace_policy.py)
+        -- enforced at write time by loop_grace_service, not re-declared as a
+        -- CHECK constraint here -- consistent with how the rest of this schema
+        -- leaves range validation to the application layer.
+        CREATE TABLE loop_grace_preference (
+            id INTEGER PRIMARY KEY CHECK (id = 1),
+            grace_ms INTEGER NOT NULL DEFAULT 180,
+            updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        INSERT INTO loop_grace_preference (id, grace_ms) VALUES (1, 180);
+
+        CREATE TABLE material_loop_grace_override (
+            material_id INTEGER PRIMARY KEY REFERENCES material(id) ON DELETE CASCADE,
+            grace_ms INTEGER NOT NULL,
+            updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        """,
+    ),
+    (
+        12,
+        """
+        -- M12 Loop End Grace -- Calibration Closure (2026-08-23): human retest
+        -- across three materially different samples found the 180ms default
+        -- (migration 11's seed) insufficient on all three, and 200ms sufficient
+        -- on all three (complete tail, no next-cue leakage, continuous multi-cue
+        -- playback). Migration 11 already shipped and applied, so this is a new
+        -- migration rather than an edit to it, per this schema's additive-only
+        -- discipline.
+        --
+        -- Only bumps rows still exactly at the old seeded default (180) -- a
+        -- global default a user (or QA tester) already customized away from
+        -- 180 is a deliberate choice and must not be silently overwritten.
+        UPDATE loop_grace_preference
+        SET grace_ms = 200, updated_at = datetime('now')
+        WHERE id = 1 AND grace_ms = 180;
+        """,
+    ),
 ]
 
 

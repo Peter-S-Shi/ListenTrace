@@ -282,25 +282,43 @@ def record_item_diagnosis(
     note_value = note.strip() if note and note.strip() else None
 
     existing_annotation = find_annotation(conn, item.subtitle_cue_id, label_key, selection_start, selection_end)
-    if existing_annotation is not None and existing_annotation.id is not None:
-        annotation_id: int | None = existing_annotation.id
-    else:
-        ids = insert_annotations(
-            conn, item.subtitle_cue_id, [(label_key, heard_as_value)], selected_text, selection_start, selection_end, note_value
-        )
-        annotation_id = ids[0]
 
-    evidence = QuickPracticeDiagnosisEvidence(
-        quick_practice_item_id=item_id,
-        annotation_id=annotation_id,
-        label_key=label_key,
-        selected_text=selected_text,
-        selection_start=selection_start,
-        selection_end=selection_end,
-        heard_as=heard_as_value,
-        note=note_value,
-    )
-    return repo.insert_item_diagnosis(conn, evidence)
+    # The annotation (if newly created) and its Quick-Practice-scoped evidence snapshot
+    # must land together: a crash between them would otherwise leave an orphaned
+    # Annotation with no linked evidence row (see practice_session_service's identical
+    # guarantee for the Intensive Practice equivalent).
+    try:
+        if existing_annotation is not None and existing_annotation.id is not None:
+            annotation_id: int | None = existing_annotation.id
+        else:
+            ids = insert_annotations(
+                conn,
+                item.subtitle_cue_id,
+                [(label_key, heard_as_value)],
+                selected_text,
+                selection_start,
+                selection_end,
+                note_value,
+                commit=False,
+            )
+            annotation_id = ids[0]
+
+        evidence = QuickPracticeDiagnosisEvidence(
+            quick_practice_item_id=item_id,
+            annotation_id=annotation_id,
+            label_key=label_key,
+            selected_text=selected_text,
+            selection_start=selection_start,
+            selection_end=selection_end,
+            heard_as=heard_as_value,
+            note=note_value,
+        )
+        evidence_id = repo.insert_item_diagnosis(conn, evidence, commit=False)
+    except Exception:
+        conn.rollback()
+        raise
+    conn.commit()
+    return evidence_id
 
 
 def delete_item_diagnosis(conn: sqlite3.Connection, item_id: int, evidence_id: int) -> None:
@@ -373,6 +391,25 @@ def close_session(conn: sqlite3.Connection, session_id: int) -> str:
         return "discarded"
     repo.set_quick_practice_session_status(conn, session_id, QuickPracticeStatus.ABANDONED.value)
     return "abandoned"
+
+
+def delete_history(conn: sqlite3.Connection, session_id: int) -> None:
+    """M12 Round 3/4 History Ownership Contract: only a completed or
+    abandoned run -- a genuine historical record -- may be deleted this way;
+    an active run must be closed first. Distinct from `close_session`'s
+    zero-evidence auto-discard: this is the user explicitly deleting a
+    *resolved* run they no longer want in their history. Cascades (see
+    migrations.py) to quick_practice_item and quick_practice_diagnosis_
+    evidence -- both run-owned; independent `annotation` links are
+    `ON DELETE SET NULL`. No `recording` table reference exists for Quick
+    Practice at all, so retained recordings are entirely unaffected."""
+    session = _require_session(conn, session_id)
+    if session.status == QuickPracticeStatus.ACTIVE.value:
+        raise QuickPracticeValidationError(
+            "session_active", "An active Quick Practice run cannot be deleted. Close it first."
+        )
+    assert session.id is not None
+    repo.delete_quick_practice_session(conn, session.id)
 
 
 def recover_interrupted_sessions(conn: sqlite3.Connection) -> int:

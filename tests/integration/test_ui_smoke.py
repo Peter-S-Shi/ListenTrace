@@ -3,7 +3,7 @@ from __future__ import annotations
 import struct
 import wave
 
-from PySide6.QtCore import QEventLoop, QTimer
+from PySide6.QtCore import QEventLoop, Qt, QTimer
 from PySide6.QtWidgets import QInputDialog, QMessageBox
 
 from listentrace.application.services import material_library_service as library
@@ -45,8 +45,25 @@ def test_main_window_starts_with_initialized_database(qapp, tmp_path):
     window = MainWindow(connection, db_path, tmp_path / "recordings")
 
     assert window.windowTitle() == "ListenTrace"
-    assert "Schema version: 10" in window._status_label.text()
+    assert "Schema version: 12" in window._status_label.text()
 
+    window.close()
+
+
+def test_main_window_playback_settings_button_opens_the_global_dialog(qapp, tmp_path):
+    from listentrace.ui.windows.playback_settings_dialog import PlaybackSettingsDialog
+
+    db_path = tmp_path / "smoke.db"
+    connection = open_connection(db_path)
+    migrate(connection)
+    window = MainWindow(connection, db_path, tmp_path / "recordings")
+
+    window._on_open_playback_settings()
+
+    assert isinstance(window._playback_settings_dialog, PlaybackSettingsDialog)
+    first = window._playback_settings_dialog
+    window._on_open_playback_settings()
+    assert window._playback_settings_dialog is first, "reuses the same dialog instance"
     window.close()
 
 
@@ -283,6 +300,43 @@ def test_session_history_dialog_opens_selected_session(qapp, tmp_path):
     window.close()
 
 
+def test_session_history_dialog_delete_requires_confirmation_and_removes_the_row(qapp, tmp_path, monkeypatch):
+    """M12 History Ownership Contract (m05-02): the user can delete a
+    completed/abandoned Guided Session from history, but not an active one."""
+    connection = open_connection(tmp_path / "smoke.db")
+    migrate(connection)
+
+    media = tmp_path / "lesson.wav"
+    _make_wav(media)
+    subtitle = tmp_path / "lesson.srt"
+    subtitle.write_text("1\n00:00:00,000 --> 00:00:02,000\nBonjour\n", encoding="utf-8")
+    result = import_material(connection, media, subtitle, "Lesson One")
+    abandoned = session_service.start_session(connection, result.material_id)
+    session_service.abandon_session(connection, abandoned.id)
+    active = session_service.start_session(connection, result.material_id)
+
+    from listentrace.ui.windows.session_history_dialog import SessionHistoryDialog
+
+    dialog = SessionHistoryDialog(connection, result.material_id, "Lesson One")
+    assert dialog._list.count() == 2
+
+    active_row = next(i for i in range(2) if dialog._list.item(i).data(Qt.ItemDataRole.UserRole) == active.id)
+    dialog._list.setCurrentRow(active_row)
+    assert dialog._delete_button.isEnabled() is False, "an active session must not be deletable"
+
+    abandoned_row = 1 - active_row
+    dialog._list.setCurrentRow(abandoned_row)
+    assert dialog._delete_button.isEnabled() is True
+
+    monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.StandardButton.Yes)
+    dialog._on_delete_clicked()
+
+    assert dialog._list.count() == 1
+    assert session_service.get_session(connection, abandoned.id) is None
+    assert session_service.get_session(connection, active.id) is not None
+    dialog.close()
+
+
 def test_start_material_quiz_opens_quiz_window_and_enables_resume(qapp, tmp_path, monkeypatch):
     connection = open_connection(tmp_path / "smoke.db")
     migrate(connection)
@@ -411,6 +465,43 @@ def test_quiz_history_dialog_opens_selected_quiz(qapp, tmp_path):
     window.close()
 
 
+def test_quiz_history_dialog_delete_requires_confirmation_and_removes_the_row(qapp, tmp_path, monkeypatch):
+    """M12 History Ownership Contract (m05-02): the user can delete a
+    completed/abandoned quiz attempt from history, but not an active one."""
+    connection = open_connection(tmp_path / "smoke.db")
+    migrate(connection)
+
+    media = tmp_path / "lesson.wav"
+    _make_wav(media)
+    subtitle = tmp_path / "lesson.srt"
+    subtitle.write_text(_MULTI_CUE_SRT, encoding="utf-8")
+    result = import_material(connection, media, subtitle, "Lesson One")
+    active = quiz_service.create_material_quiz(connection, result.material_id, requested_count=2, seed=1)
+    abandoned = quiz_service.create_material_quiz(connection, result.material_id, requested_count=2, seed=2)
+    quiz_service.abandon_quiz(connection, abandoned.id)
+
+    from listentrace.ui.windows.quiz_history_dialog import QuizHistoryDialog
+
+    dialog = QuizHistoryDialog(connection, result.material_id, "Lesson One")
+    assert dialog._list.count() == 2
+
+    active_row = next(i for i in range(2) if dialog._list.item(i).data(Qt.ItemDataRole.UserRole) == active.id)
+    dialog._list.setCurrentRow(active_row)
+    assert dialog._delete_button.isEnabled() is False, "an active attempt must not be deletable"
+
+    abandoned_row = 1 - active_row
+    dialog._list.setCurrentRow(abandoned_row)
+    assert dialog._delete_button.isEnabled() is True
+
+    monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.StandardButton.Yes)
+    dialog._on_delete_clicked()
+
+    assert dialog._list.count() == 1
+    assert quiz_service.get_quiz_attempt(connection, abandoned.id) is None
+    assert quiz_service.get_quiz_attempt(connection, active.id) is not None
+    dialog.close()
+
+
 def test_quiz_window_full_take_submit_and_review_flow(qapp, tmp_path):
     connection = open_connection(tmp_path / "smoke.db")
     migrate(connection)
@@ -457,6 +548,132 @@ def test_quiz_window_full_take_submit_and_review_flow(qapp, tmp_path):
     assert review_dialog._list.count() == len(state.questions)
 
     review_dialog.close()
+    quiz_window.close()
+
+
+def test_quiz_window_loop_settings_button_opens_a_material_loop_settings_dialog(qapp, tmp_path):
+    from listentrace.application.services.player_loading_service import load_material_for_player
+    from listentrace.ui.windows.material_loop_settings_dialog import MaterialLoopSettingsDialog
+    from listentrace.ui.windows.quiz_window import QuizWindow
+
+    connection = open_connection(tmp_path / "smoke.db")
+    migrate(connection)
+    media = tmp_path / "lesson.wav"
+    _make_wav(media)
+    subtitle = tmp_path / "lesson.srt"
+    subtitle.write_text(_MULTI_CUE_SRT, encoding="utf-8")
+    result = import_material(connection, media, subtitle, "Lesson One")
+    attempt = quiz_service.create_material_quiz(connection, result.material_id, requested_count=5, seed=1)
+    load_result = load_material_for_player(connection, result.material_id)
+    quiz_window = QuizWindow(connection, load_result, attempt.id, None)
+
+    quiz_window._on_open_loop_settings()
+
+    assert isinstance(quiz_window._loop_settings_dialog, MaterialLoopSettingsDialog)
+    quiz_window.close()
+
+
+def test_quiz_window_material_override_changed_updates_its_live_session_grace(qapp, tmp_path):
+    from listentrace.application.services import loop_grace_service
+    from listentrace.application.services.player_loading_service import load_material_for_player
+    from listentrace.ui.widgets.loop_grace_change_bus import loop_grace_change_bus
+    from listentrace.ui.windows.quiz_window import QuizWindow
+
+    connection = open_connection(tmp_path / "smoke.db")
+    migrate(connection)
+    media = tmp_path / "lesson.wav"
+    _make_wav(media)
+    subtitle = tmp_path / "lesson.srt"
+    subtitle.write_text(_MULTI_CUE_SRT, encoding="utf-8")
+    result = import_material(connection, media, subtitle, "Lesson One")
+    attempt = quiz_service.create_material_quiz(connection, result.material_id, requested_count=5, seed=1)
+    load_result = load_material_for_player(connection, result.material_id)
+    quiz_window = QuizWindow(connection, load_result, attempt.id, None)
+
+    loop_grace_service.set_material_loop_end_grace_override_ms(connection, result.material_id, 90)
+    loop_grace_change_bus.material_override_changed.emit(result.material_id)
+
+    assert quiz_window._player_session._loop_end_grace_ms == 90
+    quiz_window.close()
+
+
+def test_quiz_window_play_button_is_cue_scoped_not_whole_media(qapp, tmp_path):
+    """M12 Round 1 Playback Contract (m05-01/m10-05/m12-05, P1): Play in a
+    cue-oriented context must stop at the current cue's end, never drift into
+    the next cue's audio, the way whole-media continuous playback would."""
+    connection = open_connection(tmp_path / "smoke.db")
+    migrate(connection)
+
+    media = tmp_path / "lesson.wav"
+    _make_wav(media, seconds=11)  # covers all of _MULTI_CUE_SRT's 0-10000ms range
+    subtitle = tmp_path / "lesson.srt"
+    subtitle.write_text(_MULTI_CUE_SRT, encoding="utf-8")
+    result = import_material(connection, media, subtitle, "Lesson One")
+    attempt = quiz_service.create_material_quiz(connection, result.material_id, requested_count=5, seed=1)
+
+    from listentrace.application.services.player_loading_service import load_material_for_player
+    from listentrace.ui.windows.quiz_window import QuizWindow
+
+    load_result = load_material_for_player(connection, result.material_id)
+    quiz_window = QuizWindow(connection, load_result, attempt.id, None)
+    _pump(500)  # let the async media load finish before seeking away from position 0
+
+    state = quiz_service.load_quiz_state(connection, attempt.id)
+    cue_index = quiz_window._cue_index_by_id[state.questions[0].subtitle_cue_id]
+    cue = quiz_window._player_session.cues[cue_index]
+
+    quiz_window._show_question(0)
+    quiz_window._on_play_clicked()
+    _pump((cue.end_ms - cue.start_ms) + 500)  # long enough to cross the cue boundary if unbounded
+
+    assert quiz_window._playback.is_playing is False, (
+        "Play must stop at this cue's end, not continue playing into the next cue"
+    )
+    assert quiz_window._playback.position_ms < cue.end_ms + 200
+
+    quiz_window.close()
+
+
+def test_quiz_choice_options_wrap_long_text_instead_of_truncating(qapp, tmp_path):
+    """M12 Round 2 Layout Contract (m05-01, L2): a long answer option was
+    hard-truncated with an ellipsis on a bare QRadioButton, which has no
+    word-wrap support in Qt Widgets at all -- confirmed during Phase 0 by
+    screenshot. The option text must now live on a paired, wrapping QLabel."""
+    connection = open_connection(tmp_path / "smoke.db")
+    migrate(connection)
+
+    media = tmp_path / "lesson.wav"
+    _make_wav(media)
+    subtitle = tmp_path / "lesson.srt"
+    subtitle.write_text(_MULTI_CUE_SRT, encoding="utf-8")
+    result = import_material(connection, media, subtitle, "Lesson One")
+    attempt = quiz_service.create_material_quiz(connection, result.material_id, requested_count=5, seed=1)
+
+    from listentrace.application.services.player_loading_service import load_material_for_player
+    from listentrace.ui.windows.quiz_window import QuizWindow
+
+    load_result = load_material_for_player(connection, result.material_id)
+    quiz_window = QuizWindow(connection, load_result, attempt.id, None)
+
+    import json
+
+    state = quiz_service.load_quiz_state(connection, attempt.id)
+    choice_question = next(
+        q for q in state.questions if q.question_type not in ("dictation", "review_missed")
+    )
+    index = state.questions.index(choice_question)
+    quiz_window._show_question(index)
+
+    choices = json.loads(choice_question.prompt_payload)["choices"]
+    for i, choice_text in enumerate(choices):
+        label = quiz_window._choice_labels[i]
+        assert label.wordWrap() is True
+        assert label.text() == choice_text, "the full option text must reach the label untruncated"
+        # The radio itself must never carry the option text -- QRadioButton
+        # has no word-wrap support at all, which is exactly what produced
+        # the truncated ellipsis in the human-QA screenshot.
+        assert quiz_window._choice_radio_buttons[i].text() == ""
+
     quiz_window.close()
 
 
@@ -992,6 +1209,67 @@ def test_guided_session_comparison_cancelled_on_source_playback_error(qapp, tmp_
     panel._takes_list.setCurrentRow(0)
     assert panel._play_take_button.isEnabled() is True
     assert panel._delete_take_button.isEnabled() is True
+
+    window.close()
+
+
+def test_loop_restart_tick_does_not_falsely_finish_a_stale_pending_comparison(qapp, tmp_path):
+    """Regression: starting Loop Cue while a comparison replay is still
+    pending (e.g. the learner clicks Loop before the comparison finishes)
+    overwrites PlayerSession's `_active_span` without the window ever
+    clearing `_comparison_replay_pending` -- that flag is window-level
+    bookkeeping PlayerSession knows nothing about. A tick from that Loop
+    completing is still `pause=True` (every bounded-span completion is), so
+    the comparison-finished check must also require `restart_at_ms is None`
+    to stay mutually exclusive with a Loop restart, exactly as the original
+    single `elif tick.pause:` branch guaranteed before `_apply_player_tick`
+    was extracted -- otherwise a Loop's own automatic restart would
+    incorrectly report the abandoned comparison as successfully finished."""
+    connection = open_connection(tmp_path / "smoke.db")
+    migrate(connection)
+    result = _import_shadowing_lesson(connection, tmp_path)
+    recordings_dir = tmp_path / "recordings"
+
+    from listentrace.application.services import recording_service
+    from listentrace.application.services.player_loading_service import load_material_for_player
+    from listentrace.infrastructure.db.repository import get_cues_for_track, get_subtitle_track_for_material
+    from listentrace.ui.windows.shadowing_practice_window import ShadowingPracticeWindow
+
+    track = get_subtitle_track_for_material(connection, result.material_id)
+    first_cue = get_cues_for_track(connection, track.id)[0]
+
+    recording, path = recording_service.begin_recording(
+        connection, recordings_dir, result.material_id, first_cue.id, "dev-1", "Test Mic"
+    )
+    _write_valid_wav(path, seconds=1)
+    recording_service.finish_recording(connection, recordings_dir, recording.id)
+
+    load_result = load_material_for_player(connection, result.material_id)
+    window = ShadowingPracticeWindow(connection, load_result, recordings_dir)
+
+    panel = window._recording_panel
+    panel._takes_list.setCurrentRow(0)
+    panel._on_compare_clicked()
+    assert window._comparison_replay_pending is True
+
+    # The learner clicks Loop before the comparison ever reaches its own
+    # pause boundary -- this overwrites PlayerSession's _active_span with a
+    # new Loop span; `_comparison_replay_pending` is untouched by design
+    # (PlayerSession has no notion of it).
+    window._on_loop_clicked()
+    assert window._comparison_replay_pending is True, "still stale, not yet reconciled by any tick"
+
+    finished_calls = []
+    panel.notify_source_finished = lambda: finished_calls.append(True)
+
+    from listentrace.domain.services.loop_grace_policy import LOOP_END_GRACE_DEFAULT_MS
+
+    # crosses the loop span's *effective* completion end (logical end + grace,
+    # since loop_mode is now active) -- not the bare cue end.
+    window._on_position_changed(first_cue.end_ms + LOOP_END_GRACE_DEFAULT_MS)
+
+    assert finished_calls == [], "a Loop restart must never be reported as a finished comparison"
+    assert window._comparison_replay_pending is True
 
     window.close()
 

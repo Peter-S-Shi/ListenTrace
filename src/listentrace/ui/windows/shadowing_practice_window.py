@@ -14,11 +14,15 @@ from PySide6.QtWidgets import (
 )
 
 from listentrace.application.dto.player_load import PlayerLoadResult
+from listentrace.application.dto.player_state import PlayerTick
+from listentrace.application.services import loop_grace_service
 from listentrace.application.services import recording_service
 from listentrace.application.services.player_session import PlayerSession
 from listentrace.infrastructure.media.playback import PlaybackController
 from listentrace.ui import theme
-from listentrace.ui.widgets.recording_panel import RecordingPanel
+from listentrace.ui.widgets.loop_grace_change_bus import loop_grace_change_bus
+from listentrace.ui.widgets.recording_panel import RecordingPanel, recording_change_bus
+from listentrace.ui.windows.material_loop_settings_dialog import MaterialLoopSettingsDialog
 from listentrace.ui.windows.player_window import _format_time
 
 
@@ -48,7 +52,11 @@ class ShadowingPracticeWindow(QMainWindow):
         self.resize(820, 680)
 
         self._playback = PlaybackController(self)
-        self._player_session = PlayerSession(self._cues)
+        grace_ms = loop_grace_service.effective_loop_end_grace_ms(connection, self._material.id)
+        self._player_session = PlayerSession(self._cues, loop_end_grace_ms=grace_ms)
+        self._loop_settings_dialog: MaterialLoopSettingsDialog | None = None
+        loop_grace_change_bus.global_default_changed.connect(self._on_loop_grace_global_default_changed)
+        loop_grace_change_bus.material_override_changed.connect(self._on_loop_grace_material_override_changed)
         self._playback_usable = True
         self._cue_index: int | None = 0 if self._cues else None
         if initial_cue_id is not None:
@@ -96,6 +104,9 @@ class ShadowingPracticeWindow(QMainWindow):
         self._loop_button = QPushButton("Loop Cue")
         self._loop_button.clicked.connect(self._on_loop_clicked)
         theme.apply_role(self._loop_button, "secondary")
+        self._loop_settings_button = QPushButton("Loop Settings...")
+        self._loop_settings_button.clicked.connect(self._on_open_loop_settings)
+        theme.apply_role(self._loop_settings_button, "secondary")
         self._time_label = QLabel("00:00 / 00:00")
         for widget in (
             self._previous_button,
@@ -103,6 +114,7 @@ class ShadowingPracticeWindow(QMainWindow):
             self._play_button,
             self._replay_button,
             self._loop_button,
+            self._loop_settings_button,
         ):
             transport_row.addWidget(widget)
         transport_row.addWidget(self._time_label)
@@ -199,6 +211,27 @@ class ShadowingPracticeWindow(QMainWindow):
                 f"{len(summary.failed)} recording(s) could not be deleted and remain in the list.",
             )
         self._refresh()
+        recording_change_bus.material_changed.emit(self._material.id)
+
+    def _on_open_loop_settings(self) -> None:
+        if self._loop_settings_dialog is None:
+            self._loop_settings_dialog = MaterialLoopSettingsDialog(
+                self._connection, self._material.id, self._material.title, self
+            )
+        self._loop_settings_dialog.show()
+        self._loop_settings_dialog.raise_()
+        self._loop_settings_dialog.activateWindow()
+
+    def _on_loop_grace_global_default_changed(self) -> None:
+        self._refresh_loop_end_grace()
+
+    def _on_loop_grace_material_override_changed(self, material_id: int) -> None:
+        if material_id == self._material.id:
+            self._refresh_loop_end_grace()
+
+    def _refresh_loop_end_grace(self) -> None:
+        grace_ms = loop_grace_service.effective_loop_end_grace_ms(self._connection, self._material.id)
+        self._player_session.set_loop_end_grace_ms(grace_ms)
 
     # ---- shared playback plumbing ----
 
@@ -210,10 +243,19 @@ class ShadowingPracticeWindow(QMainWindow):
             widget.setEnabled(enabled)
 
     def _on_play_clicked(self) -> None:
+        # M12 Round 1 Playback Contract: Shadowing is cue-oriented, so Play
+        # must default to cue-scoped playback (this cue only) -- previously
+        # this just resumed/started whole-media continuous playback.
         if self._playback.is_playing:
             self._playback.pause()
-        else:
-            self._playback.play()
+            self._sync_play_button_text()
+            return
+        if self._cue_index is None:
+            return
+        seek_to = self._player_session.play_cue(self._cue_index)
+        if seek_to is not None:
+            self._playback.seek(seek_to)
+        self._playback.play()
         self._sync_play_button_text()
 
     def _on_replay_clicked(self) -> None:
@@ -241,20 +283,32 @@ class ShadowingPracticeWindow(QMainWindow):
         self._playback.play()
         self._sync_play_button_text()
 
-    def _on_position_changed(self, position_ms: int) -> None:
-        tick = self._player_session.on_position_changed(position_ms)
-        if tick.pause:
+    def _apply_player_tick(self, tick: PlayerTick) -> None:
+        # See player_window.py's _apply_player_tick for why restart_at_ms
+        # (a Loop iteration restarting on its own) must not run the ordinary
+        # "playback genuinely stopped" side effect below. Shared by both tick
+        # sources: a position update, and the media's own natural end (see
+        # _on_end_of_media). Comparison-replay bookkeeping deliberately stays
+        # out of this shared method -- see _on_position_changed/_on_end_of_media.
+        if tick.restart_at_ms is not None:
+            self._playback.restart_span(tick.restart_at_ms)
+        elif tick.pause:
             self._playback.pause()
             self._sync_play_button_text()
-            if self._comparison_replay_pending:
-                self._comparison_replay_pending = False
-                self._recording_panel.notify_source_finished()
-        if tick.seek_to_ms is not None:
-            self._playback.seek(tick.seek_to_ms)
+
+    def _on_position_changed(self, position_ms: int) -> None:
+        tick = self._player_session.on_position_changed(position_ms)
+        self._apply_player_tick(tick)
+        if tick.pause and tick.restart_at_ms is None and self._comparison_replay_pending:
+            self._comparison_replay_pending = False
+            self._recording_panel.notify_source_finished()
         self._time_label.setText(f"{_format_time(position_ms)} / {_format_time(self._playback.duration_ms)}")
 
     def _on_end_of_media(self) -> None:
-        self._sync_play_button_text()
+        tick = self._player_session.on_media_ended()
+        self._apply_player_tick(tick)
+        if tick.restart_at_ms is None:
+            self._sync_play_button_text()
         if self._comparison_replay_pending:
             self._comparison_replay_pending = False
             self._recording_panel.notify_source_failed()

@@ -14,4 +14,11 @@ class LoopMode(str, Enum):
 class PlayerTick:
     active_cue_index: int | None
     pause: bool = False
-    seek_to_ms: int | None = None
+    # M12 Loop Audible Cutoff Round 3: a one-shot playback span (Replay Cue,
+    # Play-cue, or a single Loop iteration) reaching its natural end is
+    # always `pause=True` -- there is no separate "seek back" outcome for
+    # Loop. `restart_at_ms` is a distinct, additional instruction: begin a
+    # new span at this position, orchestrated by
+    # PlaybackController.restart_span (a settle-delayed, cancellable
+    # transition, not an immediate reposition). See player_session.py.
+    restart_at_ms: int | None = None

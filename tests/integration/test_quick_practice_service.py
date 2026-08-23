@@ -281,6 +281,31 @@ def test_diagnosis_rejects_an_unknown_cue_range(conn):
     assert excinfo.value.category == "invalid_range"
 
 
+def test_record_item_diagnosis_is_atomic_across_annotation_and_evidence(conn, monkeypatch):
+    """M12.2 regression: a failure between creating the material-level Annotation and
+    inserting its Quick-Practice-scoped evidence snapshot must not leave an orphaned
+    Annotation with no linked evidence row."""
+    material_id, cues = _make_material_with_cues(conn)
+    session = svc.start_selected_session(conn, material_id, [cues[0].id])
+    item_id = svc.load_session_state(conn, session.id).items[0].item.id
+    svc.record_recall(conn, item_id, "missed")
+
+    def _boom(*args, **kwargs):
+        raise RuntimeError("simulated crash between annotation insert and evidence insert")
+
+    monkeypatch.setattr(repo, "insert_item_diagnosis", _boom)
+    with pytest.raises(RuntimeError):
+        svc.record_item_diagnosis(conn, item_id, 0, 7, "keyword")
+
+    assert list_annotations_for_cue(conn, cues[0].id) == []
+    assert svc.list_item_diagnosis(conn, item_id) == []
+
+    monkeypatch.undo()
+    evidence_id = svc.record_item_diagnosis(conn, item_id, 0, 7, "keyword")
+    assert svc.list_item_diagnosis(conn, item_id)[0].id == evidence_id
+    assert len(list_annotations_for_cue(conn, cues[0].id)) == 1
+
+
 # ---- Step 4: shadowing ----
 
 
@@ -404,6 +429,43 @@ def test_close_session_on_an_already_resolved_session_is_a_no_op(conn):
     svc.complete_item(conn, item_id)
     svc.complete_session(conn, session.id)
     assert svc.close_session(conn, session.id) == "completed"
+
+
+def test_delete_history_requires_completed_or_abandoned(conn):
+    material_id, cues = _make_material_with_cues(conn)
+    session = svc.start_selected_session(conn, material_id, [cues[0].id, cues[1].id])
+    with pytest.raises(QuickPracticeValidationError) as excinfo:
+        svc.delete_history(conn, session.id)
+    assert excinfo.value.category == "session_active"
+
+    svc.close_session(conn, session.id)  # zero progress -> discarded, not a useful case here
+    session2 = svc.start_selected_session(conn, material_id, [cues[0].id, cues[1].id])
+    item_id = svc.load_session_state(conn, session2.id).items[0].item.id
+    svc.record_recall(conn, item_id, "understood")
+    svc.complete_item(conn, item_id)
+    svc.close_session(conn, session2.id)  # -> abandoned (has evidence)
+
+    svc.delete_history(conn, session2.id)  # must not raise once abandoned
+    assert svc.get_session(conn, session2.id) is None
+
+
+def test_delete_history_removes_items_but_preserves_independent_annotations(conn):
+    material_id, cues = _make_material_with_cues(conn)
+    session = svc.start_selected_session(conn, material_id, [cues[0].id])
+    item_id = svc.load_session_state(conn, session.id).items[0].item.id
+    svc.record_recall(conn, item_id, "missed")
+    svc.record_item_diagnosis(conn, item_id, 0, 7, "keyword")
+    svc.complete_item(conn, item_id)
+    svc.complete_session(conn, session.id)
+
+    svc.delete_history(conn, session.id)
+
+    assert svc.get_session(conn, session.id) is None
+    remaining_items = conn.execute(
+        "SELECT COUNT(*) AS n FROM quick_practice_item WHERE id = ?", (item_id,)
+    ).fetchone()["n"]
+    assert remaining_items == 0
+    assert list_annotations_for_cue(conn, cues[0].id), "independent annotation must survive session deletion"
 
 
 def test_recover_interrupted_sessions_applies_close_rules_to_every_active_run(conn):

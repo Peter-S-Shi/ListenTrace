@@ -31,7 +31,9 @@ from listentrace.application.errors import (
     KeywordCaptureNotFoundError,
     SessionValidationError,
 )
+from listentrace.application.dto.player_state import PlayerTick
 from listentrace.application.services import label_preference_service
+from listentrace.application.services import loop_grace_service
 from listentrace.application.services import practice_session_service as svc
 from listentrace.application.services.player_session import PlayerSession
 from listentrace.domain.enums.annotation_label import AnnotationLabel
@@ -39,6 +41,7 @@ from listentrace.domain.enums.keyword_capture_type import KeywordCaptureType
 from listentrace.domain.enums.session_status import SessionStatus
 from listentrace.domain.enums.shadowing_status import ShadowingStatus
 from listentrace.domain.enums.stage_key import STAGE_ORDER, StageKey
+from listentrace.domain.enums.stage_status import StageStatus
 from listentrace.domain.services import session_rules as rules
 from listentrace.domain.services.text_range import whole_cue_range
 from listentrace.infrastructure.db.learning_repository import list_annotations_for_cue
@@ -50,7 +53,9 @@ from listentrace.ui.text_offset_conversion import (
     codepoint_index_to_qt_offset,
     qt_offset_to_codepoint_index,
 )
+from listentrace.ui.widgets.loop_grace_change_bus import loop_grace_change_bus
 from listentrace.ui.widgets.recording_panel import RecordingPanel
+from listentrace.ui.windows.material_loop_settings_dialog import MaterialLoopSettingsDialog
 from listentrace.ui.windows.player_window import _OVERLAP_HIGHLIGHT, _color_badge_icon, _format_time
 
 _STAGE_TITLES: dict[str, str] = {
@@ -97,8 +102,12 @@ class GuidedSessionWindow(QMainWindow):
         self.resize(960, 760)
 
         self._playback = PlaybackController(self)
-        self._player_session = PlayerSession(self._cues)
+        grace_ms = loop_grace_service.effective_loop_end_grace_ms(connection, self._material.id)
+        self._player_session = PlayerSession(self._cues, loop_end_grace_ms=grace_ms)
         self._playback_usable = True
+        self._loop_settings_dialog: MaterialLoopSettingsDialog | None = None
+        loop_grace_change_bus.global_default_changed.connect(self._on_loop_grace_global_default_changed)
+        loop_grace_change_bus.material_override_changed.connect(self._on_loop_grace_material_override_changed)
         self._current_stage = StageKey.GLOBAL_COMPREHENSION.value
         self._state: PracticeSessionState | None = None
         self._diagnosis_cue_index: int | None = None
@@ -137,6 +146,15 @@ class GuidedSessionWindow(QMainWindow):
         self._stack.addWidget(self._build_stage4_panel())
         self._stack.addWidget(self._build_stage5_panel())
         layout.addWidget(self._stack, 1)
+
+        # M12 Round 3/4 Completion Explainability Contract: a disabled `Complete
+        # Session` must never be an unexplained grey button -- this mirrors
+        # `rules.session_can_complete`'s per-stage predicate so the explanation
+        # can never drift from the actual enable/disable decision below.
+        self._completion_status_label = QLabel("")
+        self._completion_status_label.setWordWrap(True)
+        theme.apply_role(self._completion_status_label, "caption")
+        layout.addWidget(self._completion_status_label)
 
         nav_row = QHBoxLayout()
         self._back_button = QPushButton("Back")
@@ -265,12 +283,39 @@ class GuidedSessionWindow(QMainWindow):
     def _update_nav_buttons(self, state: PracticeSessionState) -> None:
         read_only = state.session.status != SessionStatus.ACTIVE.value
         index = STAGE_ORDER.index(self._current_stage)
+        is_last_stage = index == len(STAGE_ORDER) - 1
+        # M12 Round 3 Completion/Explainability Contract: on Stage 5 there is no
+        # next stage to "Continue" to, and the shared label previously left
+        # learners unsure whether this action was still required at all.
+        self._continue_button.setText("Save Summary" if is_last_stage else "Save and Continue")
         self._back_button.setEnabled(index > 0)
         self._skip_button.setEnabled(not read_only)
         self._continue_button.setEnabled(not read_only)
         self._abandon_button.setEnabled(not read_only)
         statuses = {key: progress.status for key, progress in state.stage_progress.items()}
         self._complete_button.setEnabled(not read_only and rules.session_can_complete(statuses))
+        self._update_completion_status_label(state, read_only)
+
+    def _update_completion_status_label(self, state: PracticeSessionState, read_only: bool) -> None:
+        if read_only:
+            self._completion_status_label.setText("")
+            return
+        resolved_statuses = (StageStatus.COMPLETED.value, StageStatus.SKIPPED.value)
+        unresolved_titles = []
+        checklist_lines = []
+        for stage_key in STAGE_ORDER:
+            progress = state.stage_progress.get(stage_key)
+            status = progress.status if progress is not None else StageStatus.NOT_STARTED.value
+            resolved = status in resolved_statuses
+            mark = "✓" if resolved else "✗"
+            checklist_lines.append(f"{mark} {_STAGE_TITLES[stage_key]}")
+            if not resolved:
+                unresolved_titles.append(_STAGE_TITLES[stage_key])
+        if unresolved_titles:
+            summary = "Complete Session needs: " + "; ".join(unresolved_titles) + "."
+        else:
+            summary = "Ready to complete."
+        self._completion_status_label.setText(summary + "  (" + " | ".join(checklist_lines) + ")")
 
     def _save_current_stage_inputs(self) -> None:
         # Checked live rather than via `self._state`, which may be stale if the
@@ -387,6 +432,29 @@ class GuidedSessionWindow(QMainWindow):
 
     # ---- shared playback plumbing (Stages 3 and 4) ----
 
+    def _on_open_loop_settings(self) -> None:
+        # Modeless: one shared dialog regardless of which stage's Loop
+        # Settings button opened it, since there is only one Material/
+        # PlayerSession for the whole window.
+        if self._loop_settings_dialog is None:
+            self._loop_settings_dialog = MaterialLoopSettingsDialog(
+                self._connection, self._material.id, self._material.title, self
+            )
+        self._loop_settings_dialog.show()
+        self._loop_settings_dialog.raise_()
+        self._loop_settings_dialog.activateWindow()
+
+    def _on_loop_grace_global_default_changed(self) -> None:
+        self._refresh_loop_end_grace()
+
+    def _on_loop_grace_material_override_changed(self, material_id: int) -> None:
+        if material_id == self._material.id:
+            self._refresh_loop_end_grace()
+
+    def _refresh_loop_end_grace(self) -> None:
+        grace_ms = loop_grace_service.effective_loop_end_grace_ms(self._connection, self._material.id)
+        self._player_session.set_loop_end_grace_ms(grace_ms)
+
     def _sync_playback_button_texts(self) -> None:
         text = "Pause" if self._playback.is_playing else "Play"
         if hasattr(self, "_diagnosis_play_button"):
@@ -394,16 +462,35 @@ class GuidedSessionWindow(QMainWindow):
         if hasattr(self, "_shadowing_play_button"):
             self._shadowing_play_button.setText(text)
 
-    def _on_position_changed(self, position_ms: int) -> None:
-        tick = self._player_session.on_position_changed(position_ms)
-        if tick.pause:
+    def _apply_player_tick(self, tick: PlayerTick) -> None:
+        # A Loop iteration completing is also `pause=True` (the same one-shot
+        # span primitive as Replay/Play-cue -- see player_session.py), but
+        # `restart_at_ms` means it is about to resume on its own:
+        # restart_span() owns its own pause-then-settle-then-resume sequence,
+        # and the "playback genuinely stopped" side effect (button labels)
+        # below does not apply to it. Shared by both tick sources: a position
+        # update, and the media's own natural end (see `_on_end_of_media`) --
+        # a Loop span whose effective completion end (logical end + grace)
+        # exceeds the Material's actual duration would otherwise never
+        # receive a position tick that reaches it. Comparison-replay
+        # bookkeeping deliberately stays out of this shared method: a tick-
+        # driven pause (the cue's own real end was reached) is a genuine
+        # finish; an EOF-driven one (the media ran out before that) is not --
+        # see `_on_position_changed`/`_on_end_of_media` below, which is also
+        # why `PlayerSession.on_media_ended()` still exists even though its
+        # `pause=True` outcome is treated differently here.
+        if tick.restart_at_ms is not None:
+            self._playback.restart_span(tick.restart_at_ms)
+        elif tick.pause:
             self._playback.pause()
             self._sync_playback_button_texts()
-            if self._comparison_replay_pending:
-                self._comparison_replay_pending = False
-                self._recording_panel.notify_source_finished()
-        if tick.seek_to_ms is not None:
-            self._playback.seek(tick.seek_to_ms)
+
+    def _on_position_changed(self, position_ms: int) -> None:
+        tick = self._player_session.on_position_changed(position_ms)
+        self._apply_player_tick(tick)
+        if tick.pause and tick.restart_at_ms is None and self._comparison_replay_pending:
+            self._comparison_replay_pending = False
+            self._recording_panel.notify_source_finished()
 
         text = f"{_format_time(position_ms)} / {_format_time(self._playback.duration_ms)}"
         if hasattr(self, "_diagnosis_time_label"):
@@ -412,12 +499,19 @@ class GuidedSessionWindow(QMainWindow):
             self._shadowing_time_label.setText(text)
 
     def _on_end_of_media(self) -> None:
-        self._sync_playback_button_texts()
+        tick = self._player_session.on_media_ended()
+        self._apply_player_tick(tick)
+        if tick.restart_at_ms is None:
+            self._sync_playback_button_texts()
         if self._comparison_replay_pending:
             # The media ended before the one-shot replay's tick-based pause
             # boundary was ever reached (e.g. the cue's end exceeds the
             # media's actual duration) — the comparison can never finish
             # normally; release it rather than leaving it stuck.
+            # PlayerSession's own state (_active_span etc.) is still cleaned
+            # up deterministically above, via on_media_ended -- this is only
+            # about what the source recording's playback outcome means to
+            # the learner.
             self._comparison_replay_pending = False
             self._recording_panel.notify_source_failed()
 
@@ -447,6 +541,9 @@ class GuidedSessionWindow(QMainWindow):
                 "but you'll need to explicitly skip this stage if you leave everything blank."
             )
         )
+        self._stage1_lock_hint = QLabel("Read-only: the transcript has been revealed for this session.")
+        self._stage1_lock_hint.setVisible(False)
+        layout.addWidget(self._stage1_lock_hint)
         self._stage1_edits: dict[str, QTextEdit] = {}
         for prompt_key, label_text in _STAGE1_PROMPTS:
             layout.addWidget(QLabel(label_text))
@@ -467,6 +564,7 @@ class GuidedSessionWindow(QMainWindow):
         enabled = state.session.status == SessionStatus.ACTIVE.value and not locked
         for edit in self._stage1_edits.values():
             edit.setReadOnly(not enabled)
+        self._stage1_lock_hint.setVisible(locked)
 
     def _save_stage1_inputs(self) -> None:
         for prompt_key, edit in self._stage1_edits.items():
@@ -487,6 +585,9 @@ class GuidedSessionWindow(QMainWindow):
                 "need to be exact. At least one capture is required to complete this stage."
             )
         )
+        self._stage2_lock_hint = QLabel("Read-only: the transcript has been revealed for this session.")
+        self._stage2_lock_hint.setVisible(False)
+        layout.addWidget(self._stage2_lock_hint)
 
         add_row = QHBoxLayout()
         self._capture_type_combo = QComboBox()
@@ -545,6 +646,7 @@ class GuidedSessionWindow(QMainWindow):
         locked = state.session.transcript_revealed_at is not None
         enabled = state.session.status == SessionStatus.ACTIVE.value and not locked
         self._stage2_locked = not enabled
+        self._stage2_lock_hint.setVisible(locked)
         self._capture_type_combo.setEnabled(enabled)
         self._capture_text_edit.setEnabled(enabled)
         self._capture_add_button.setEnabled(enabled)
@@ -669,8 +771,16 @@ class GuidedSessionWindow(QMainWindow):
         self._diagnosis_loop_button = QPushButton("Loop Cue")
         self._diagnosis_loop_button.clicked.connect(self._on_diagnosis_loop_clicked)
         theme.apply_role(self._diagnosis_loop_button, "secondary")
+        self._diagnosis_loop_settings_button = QPushButton("Loop Settings...")
+        self._diagnosis_loop_settings_button.clicked.connect(self._on_open_loop_settings)
+        theme.apply_role(self._diagnosis_loop_settings_button, "secondary")
         self._diagnosis_time_label = QLabel("00:00 / 00:00")
-        for button in (self._diagnosis_play_button, self._diagnosis_replay_button, self._diagnosis_loop_button):
+        for button in (
+            self._diagnosis_play_button,
+            self._diagnosis_replay_button,
+            self._diagnosis_loop_button,
+            self._diagnosis_loop_settings_button,
+        ):
             transport_row.addWidget(button)
         transport_row.addWidget(self._diagnosis_time_label)
         left_column.addLayout(transport_row)
@@ -980,6 +1090,9 @@ class GuidedSessionWindow(QMainWindow):
         self._shadowing_loop_button = QPushButton("Loop Cue")
         self._shadowing_loop_button.clicked.connect(self._on_shadowing_loop_clicked)
         theme.apply_role(self._shadowing_loop_button, "secondary")
+        self._shadowing_loop_settings_button = QPushButton("Loop Settings...")
+        self._shadowing_loop_settings_button.clicked.connect(self._on_open_loop_settings)
+        theme.apply_role(self._shadowing_loop_settings_button, "secondary")
         self._shadowing_time_label = QLabel("00:00 / 00:00")
         for button in (
             self._shadowing_previous_button,
@@ -987,6 +1100,7 @@ class GuidedSessionWindow(QMainWindow):
             self._shadowing_play_button,
             self._shadowing_replay_button,
             self._shadowing_loop_button,
+            self._shadowing_loop_settings_button,
         ):
             transport_row.addWidget(button)
         transport_row.addWidget(self._shadowing_time_label)
@@ -1040,7 +1154,8 @@ class GuidedSessionWindow(QMainWindow):
         self._shadowing_index = max(0, min(self._shadowing_index, len(self._cues) - 1))
         cue = self._cues[self._shadowing_index]
         progress = progress_by_cue.get(cue.id)
-        status_text = progress.status if progress else ShadowingStatus.NOT_STARTED.value
+        raw_status = progress.status if progress else ShadowingStatus.NOT_STARTED.value
+        status_text = raw_status.replace("_", " ").upper()
         count_text = progress.practice_count if progress else 0
         self._shadowing_cue_label.setText(
             f"[{_format_time(cue.start_ms)}-{_format_time(cue.end_ms)}] {cue.text}\n"

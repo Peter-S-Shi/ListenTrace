@@ -356,6 +356,38 @@ def test_cannot_abandon_a_completed_quiz(conn):
     assert exc_info.value.category == "invalid_transition"
 
 
+def test_delete_quiz_attempt_requires_completed_or_abandoned(conn):
+    material_id, _ = _make_material_with_cues(conn)
+    attempt = svc.create_material_quiz(conn, material_id, requested_count=3, seed=1)
+    with pytest.raises(QuizValidationError) as exc_info:
+        svc.delete_quiz_attempt(conn, attempt.id)
+    assert exc_info.value.category == "quiz_active"
+
+    svc.abandon_quiz(conn, attempt.id)
+    svc.delete_quiz_attempt(conn, attempt.id)  # must not raise once abandoned
+    assert svc.get_quiz_attempt(conn, attempt.id) is None
+
+
+def test_delete_quiz_attempt_removes_questions_and_answers(conn):
+    material_id, _ = _make_material_with_cues(conn)
+    attempt = svc.create_material_quiz(conn, material_id, requested_count=3, seed=1)
+    question = svc.load_quiz_state(conn, attempt.id).questions[0]
+    svc.save_quiz_answer(conn, attempt.id, question.id, raw_answer_text="x")
+    svc.submit_quiz(conn, attempt.id)
+    question_ids = [q.id for q in svc.load_quiz_state(conn, attempt.id).questions]
+
+    svc.delete_quiz_attempt(conn, attempt.id)
+
+    assert svc.get_quiz_attempt(conn, attempt.id) is None
+    with pytest.raises(QuizNotFoundError):
+        svc.load_quiz_state(conn, attempt.id)
+    remaining = conn.execute(
+        f"SELECT COUNT(*) AS n FROM quiz_question WHERE id IN ({','.join('?' * len(question_ids))})",
+        question_ids,
+    ).fetchone()["n"]
+    assert remaining == 0, "quiz_question rows must cascade-delete with the attempt"
+
+
 def test_save_quiz_answer_rejects_a_question_from_a_different_attempt(conn):
     material_id, _ = _make_material_with_cues(conn)
     first = svc.create_material_quiz(conn, material_id, requested_count=3, seed=1)
