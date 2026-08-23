@@ -39,7 +39,7 @@ def test_migrate_is_idempotent(conn):
     version_before = current_version(conn)
     migrate(conn)  # second call must not raise or duplicate schema
     version_after = current_version(conn)
-    assert version_before == version_after == 10
+    assert version_before == version_after == 11
 
 
 def test_foreign_keys_are_enforced(conn):
@@ -98,7 +98,7 @@ def test_migration_upgrades_a_milestone1_v1_database(tmp_path):
 
     final_version = migrate(connection)
 
-    assert final_version == 10
+    assert final_version == 11
     columns = {row["name"] for row in connection.execute("PRAGMA table_info(material)")}
     assert "normalized_path" in columns
     tables = {
@@ -144,7 +144,7 @@ def test_migration_upgrades_a_milestone2_v2_database(tmp_path):
 
     final_version = migrate(connection)
 
-    assert final_version == 10
+    assert final_version == 11
     tables = {
         row["name"]
         for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
@@ -203,7 +203,7 @@ def test_migration_upgrades_a_milestone4_v3_database_with_existing_data_intact(t
 
     final_version = migrate(connection)
 
-    assert final_version == 10
+    assert final_version == 11
     tables = {
         row["name"]
         for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
@@ -262,7 +262,7 @@ def test_migration_upgrades_a_milestone5_v4_database_with_existing_data_intact(t
 
     final_version = migrate(connection)
 
-    assert final_version == 10
+    assert final_version == 11
     tables = {
         row["name"]
         for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
@@ -323,7 +323,7 @@ def test_migration_upgrades_a_milestone6_v6_database_with_existing_data_intact(t
 
     final_version = migrate(connection)
 
-    assert final_version == 10
+    assert final_version == 11
     tables = {
         row["name"]
         for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
@@ -383,7 +383,7 @@ def test_migration_upgrades_a_milestone6_v5_database_backfills_source_cue_text(t
 
     final_version = migrate(connection)
 
-    assert final_version == 10
+    assert final_version == 11
     backfilled = connection.execute(
         "SELECT source_cue_text FROM quiz_question WHERE quiz_attempt_id = ?", (attempt_id,)
     ).fetchone()
@@ -423,7 +423,7 @@ def test_migration_upgrades_a_milestone9_v8_database_with_existing_data_intact(t
 
     final_version = migrate(connection)
 
-    assert final_version == 10
+    assert final_version == 11
     tables = {
         row["name"]
         for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
@@ -474,7 +474,7 @@ def test_migration_upgrades_a_milestone10_v9_database_with_existing_data_intact(
 
     final_version = migrate(connection)
 
-    assert final_version == 10
+    assert final_version == 11
     indexes = {
         row["name"]
         for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'index'")
@@ -503,6 +503,46 @@ def test_migration_upgrades_a_milestone10_v9_database_with_existing_data_intact(
     connection.close()
 
 
+def test_migration_upgrades_a_milestone12_v10_database_with_existing_data_intact(tmp_path):
+    """M12 Loop End Grace (schema version 11) is purely additive: an existing
+    v10 database (post-Phase-B) with real material data must upgrade cleanly,
+    gain the two new tables with the global default seeded, and keep existing
+    data intact."""
+    connection = open_connection(tmp_path / "v10.db")
+    for target_version, sql in MIGRATIONS:
+        if target_version > 10:
+            break
+        connection.executescript(sql)
+    connection.execute("PRAGMA user_version = 10")
+    connection.commit()
+    assert current_version(connection) == 10
+
+    material_id = insert_material(connection, Material(title="M12 Lesson", media_path="C:/media/m12.mp4"))
+    connection.commit()
+
+    final_version = migrate(connection)
+
+    assert final_version == 11
+    tables = {
+        row["name"]
+        for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
+    }
+    assert {"loop_grace_preference", "material_loop_grace_override"} <= tables
+
+    global_row = connection.execute("SELECT grace_ms FROM loop_grace_preference WHERE id = 1").fetchone()
+    assert global_row["grace_ms"] == 180
+
+    override_rows = connection.execute("SELECT * FROM material_loop_grace_override").fetchall()
+    assert override_rows == [], "no material has an override immediately after migration"
+
+    # Existing Milestone 1-10 data must survive the upgrade untouched.
+    stored = get_material(connection, material_id)
+    assert stored is not None
+    assert stored.title == "M12 Lesson"
+
+    connection.close()
+
+
 def test_migrate_rolls_back_completely_when_a_migration_fails(tmp_path, monkeypatch):
     """Regression test for a real bug caught during Post-M10 Phase B: `migrate`
     used to run each migration's SQL via `executescript`, which implicitly
@@ -518,11 +558,11 @@ def test_migrate_rolls_back_completely_when_a_migration_fails(tmp_path, monkeypa
     completely and a fixed-and-retried migration can still succeed."""
     connection = open_connection(tmp_path / "broken.db")
     baseline_version = migrate(connection)
-    assert baseline_version == 10
+    assert baseline_version == 11
 
     broken_migrations = list(MIGRATIONS) + [
         (
-            11,
+            12,
             """
             CREATE TABLE never_should_exist (id INTEGER PRIMARY KEY);
             CREATE TABLE THIS IS NOT VALID SQL;
@@ -537,7 +577,7 @@ def test_migrate_rolls_back_completely_when_a_migration_fails(tmp_path, monkeypa
     # The failure must be a true no-op: version unchanged, and the table from
     # the first (valid) statement in the broken script must not have leaked
     # through despite the later statement's failure.
-    assert current_version(connection) == 10
+    assert current_version(connection) == 11
     tables = {
         row["name"]
         for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
@@ -550,15 +590,15 @@ def test_migrate_rolls_back_completely_when_a_migration_fails(tmp_path, monkeypa
     with pytest.raises(sqlite3.OperationalError) as excinfo:
         migrate(connection)
     assert "already exists" not in str(excinfo.value)
-    assert current_version(connection) == 10
+    assert current_version(connection) == 11
 
     # Fixing the migration and retrying must succeed normally -- the earlier
     # failure left nothing behind to conflict with a corrected retry.
     fixed_migrations = list(MIGRATIONS) + [
-        (11, "CREATE TABLE never_should_exist (id INTEGER PRIMARY KEY);")
+        (12, "CREATE TABLE never_should_exist (id INTEGER PRIMARY KEY);")
     ]
     monkeypatch.setattr("listentrace.infrastructure.db.migrations.MIGRATIONS", fixed_migrations)
-    assert migrate(connection) == 11
+    assert migrate(connection) == 12
     tables = {
         row["name"]
         for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'")

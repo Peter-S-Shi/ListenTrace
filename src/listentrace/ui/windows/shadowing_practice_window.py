@@ -14,6 +14,8 @@ from PySide6.QtWidgets import (
 )
 
 from listentrace.application.dto.player_load import PlayerLoadResult
+from listentrace.application.dto.player_state import PlayerTick
+from listentrace.application.services import loop_grace_service
 from listentrace.application.services import recording_service
 from listentrace.application.services.player_session import PlayerSession
 from listentrace.infrastructure.media.playback import PlaybackController
@@ -48,7 +50,8 @@ class ShadowingPracticeWindow(QMainWindow):
         self.resize(820, 680)
 
         self._playback = PlaybackController(self)
-        self._player_session = PlayerSession(self._cues)
+        grace_ms = loop_grace_service.effective_loop_end_grace_ms(connection, self._material.id)
+        self._player_session = PlayerSession(self._cues, loop_end_grace_ms=grace_ms)
         self._playback_usable = True
         self._cue_index: int | None = 0 if self._cues else None
         if initial_cue_id is not None:
@@ -251,23 +254,32 @@ class ShadowingPracticeWindow(QMainWindow):
         self._playback.play()
         self._sync_play_button_text()
 
-    def _on_position_changed(self, position_ms: int) -> None:
-        tick = self._player_session.on_position_changed(position_ms)
-        # See player_window.py's _on_position_changed for why restart_at_ms
+    def _apply_player_tick(self, tick: PlayerTick) -> None:
+        # See player_window.py's _apply_player_tick for why restart_at_ms
         # (a Loop iteration restarting on its own) must not run the ordinary
-        # "playback genuinely stopped" side effects below.
+        # "playback genuinely stopped" side effect below. Shared by both tick
+        # sources: a position update, and the media's own natural end (see
+        # _on_end_of_media). Comparison-replay bookkeeping deliberately stays
+        # out of this shared method -- see _on_position_changed/_on_end_of_media.
         if tick.restart_at_ms is not None:
             self._playback.restart_span(tick.restart_at_ms)
         elif tick.pause:
             self._playback.pause()
             self._sync_play_button_text()
-            if self._comparison_replay_pending:
-                self._comparison_replay_pending = False
-                self._recording_panel.notify_source_finished()
+
+    def _on_position_changed(self, position_ms: int) -> None:
+        tick = self._player_session.on_position_changed(position_ms)
+        self._apply_player_tick(tick)
+        if tick.pause and tick.restart_at_ms is None and self._comparison_replay_pending:
+            self._comparison_replay_pending = False
+            self._recording_panel.notify_source_finished()
         self._time_label.setText(f"{_format_time(position_ms)} / {_format_time(self._playback.duration_ms)}")
 
     def _on_end_of_media(self) -> None:
-        self._sync_play_button_text()
+        tick = self._player_session.on_media_ended()
+        self._apply_player_tick(tick)
+        if tick.restart_at_ms is None:
+            self._sync_play_button_text()
         if self._comparison_replay_pending:
             self._comparison_replay_pending = False
             self._recording_panel.notify_source_failed()

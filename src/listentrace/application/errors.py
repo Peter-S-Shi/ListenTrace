@@ -25,6 +25,12 @@ class CueNotFoundError(Exception):
         super().__init__(f"Subtitle cue {subtitle_cue_id} not found")
 
 
+class LoopGraceValidationError(Exception):
+    def __init__(self, category: str, message: str):
+        self.category = category
+        super().__init__(message)
+
+
 class AnnotationValidationError(Exception):
     def __init__(self, category: str, message: str):
         self.category = category

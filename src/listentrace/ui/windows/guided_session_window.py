@@ -31,7 +31,9 @@ from listentrace.application.errors import (
     KeywordCaptureNotFoundError,
     SessionValidationError,
 )
+from listentrace.application.dto.player_state import PlayerTick
 from listentrace.application.services import label_preference_service
+from listentrace.application.services import loop_grace_service
 from listentrace.application.services import practice_session_service as svc
 from listentrace.application.services.player_session import PlayerSession
 from listentrace.domain.enums.annotation_label import AnnotationLabel
@@ -98,7 +100,8 @@ class GuidedSessionWindow(QMainWindow):
         self.resize(960, 760)
 
         self._playback = PlaybackController(self)
-        self._player_session = PlayerSession(self._cues)
+        grace_ms = loop_grace_service.effective_loop_end_grace_ms(connection, self._material.id)
+        self._player_session = PlayerSession(self._cues, loop_end_grace_ms=grace_ms)
         self._playback_usable = True
         self._current_stage = StageKey.GLOBAL_COMPREHENSION.value
         self._state: PracticeSessionState | None = None
@@ -431,22 +434,35 @@ class GuidedSessionWindow(QMainWindow):
         if hasattr(self, "_shadowing_play_button"):
             self._shadowing_play_button.setText(text)
 
-    def _on_position_changed(self, position_ms: int) -> None:
-        tick = self._player_session.on_position_changed(position_ms)
+    def _apply_player_tick(self, tick: PlayerTick) -> None:
         # A Loop iteration completing is also `pause=True` (the same one-shot
         # span primitive as Replay/Play-cue -- see player_session.py), but
         # `restart_at_ms` means it is about to resume on its own:
         # restart_span() owns its own pause-then-settle-then-resume sequence,
-        # and none of the "playback genuinely stopped" side effects below
-        # (button labels, comparison-replay bookkeeping) apply to it.
+        # and the "playback genuinely stopped" side effect (button labels)
+        # below does not apply to it. Shared by both tick sources: a position
+        # update, and the media's own natural end (see `_on_end_of_media`) --
+        # a Loop span whose effective completion end (logical end + grace)
+        # exceeds the Material's actual duration would otherwise never
+        # receive a position tick that reaches it. Comparison-replay
+        # bookkeeping deliberately stays out of this shared method: a tick-
+        # driven pause (the cue's own real end was reached) is a genuine
+        # finish; an EOF-driven one (the media ran out before that) is not --
+        # see `_on_position_changed`/`_on_end_of_media` below, which is also
+        # why `PlayerSession.on_media_ended()` still exists even though its
+        # `pause=True` outcome is treated differently here.
         if tick.restart_at_ms is not None:
             self._playback.restart_span(tick.restart_at_ms)
         elif tick.pause:
             self._playback.pause()
             self._sync_playback_button_texts()
-            if self._comparison_replay_pending:
-                self._comparison_replay_pending = False
-                self._recording_panel.notify_source_finished()
+
+    def _on_position_changed(self, position_ms: int) -> None:
+        tick = self._player_session.on_position_changed(position_ms)
+        self._apply_player_tick(tick)
+        if tick.pause and tick.restart_at_ms is None and self._comparison_replay_pending:
+            self._comparison_replay_pending = False
+            self._recording_panel.notify_source_finished()
 
         text = f"{_format_time(position_ms)} / {_format_time(self._playback.duration_ms)}"
         if hasattr(self, "_diagnosis_time_label"):
@@ -455,12 +471,19 @@ class GuidedSessionWindow(QMainWindow):
             self._shadowing_time_label.setText(text)
 
     def _on_end_of_media(self) -> None:
-        self._sync_playback_button_texts()
+        tick = self._player_session.on_media_ended()
+        self._apply_player_tick(tick)
+        if tick.restart_at_ms is None:
+            self._sync_playback_button_texts()
         if self._comparison_replay_pending:
             # The media ended before the one-shot replay's tick-based pause
             # boundary was ever reached (e.g. the cue's end exceeds the
             # media's actual duration) — the comparison can never finish
             # normally; release it rather than leaving it stuck.
+            # PlayerSession's own state (_active_span etc.) is still cleaned
+            # up deterministically above, via on_media_ended -- this is only
+            # about what the source recording's playback outcome means to
+            # the learner.
             self._comparison_replay_pending = False
             self._recording_panel.notify_source_failed()
 

@@ -12,6 +12,7 @@ from listentrace.application.dto.player_load import PlayerLoadResult
 from listentrace.application.dto.player_state import LoopMode
 from listentrace.domain.models.material import Material
 from listentrace.domain.models.subtitle import SubtitleCue
+from listentrace.domain.services.loop_grace_policy import LOOP_END_GRACE_DEFAULT_MS
 from listentrace.infrastructure.db.connection import open_connection
 from listentrace.infrastructure.db.migrations import migrate
 from listentrace.infrastructure.media.playback import LOOP_RESTART_SETTLE_MS
@@ -394,7 +395,7 @@ def test_loop_boundary_pauses_immediately_then_restarts_only_after_the_settle_de
     monkeypatch.setattr(window._playback._player, "setPosition", lambda ms: calls.append(("seek", ms)))
     monkeypatch.setattr(window._playback._player, "play", lambda: calls.append("play"))
 
-    window._on_position_changed(500)  # cue 0's real end -- the loop boundary
+    window._on_position_changed(500 + LOOP_END_GRACE_DEFAULT_MS)  # cue 0's effective completion end
 
     assert calls == ["pause"], (
         "the loop restart must pause immediately and not reposition/resume "
@@ -430,7 +431,7 @@ def test_cancelling_loop_during_the_settle_delay_prevents_the_scheduled_restart(
     monkeypatch.setattr(window._playback._player, "setPosition", lambda ms: calls.append(("seek", ms)))
     monkeypatch.setattr(window._playback._player, "play", lambda: calls.append("play"))
 
-    window._on_position_changed(500)  # schedules the restart
+    window._on_position_changed(500 + LOOP_END_GRACE_DEFAULT_MS)  # schedules the restart
     assert calls == ["pause"]
 
     window._on_loop_cue_clicked()  # clicks "Stop Loop" during the settle gap

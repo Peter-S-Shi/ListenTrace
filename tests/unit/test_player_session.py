@@ -7,6 +7,8 @@ from listentrace.application.services.player_session import (
 )
 from listentrace.domain.models.subtitle import SubtitleCue
 
+DEFAULT_LOOP_END_GRACE_MS = 180
+
 
 def _cue(index, start, end, text="x"):
     return SubtitleCue(cue_index=index, start_ms=start, end_ms=end, text=text)
@@ -16,13 +18,17 @@ def _cues():
     return [_cue(1, 0, 1000, "one"), _cue(2, 1000, 2000, "two"), _cue(3, 2000, 3000, "three")]
 
 
+def _session(cues, loop_end_grace_ms=DEFAULT_LOOP_END_GRACE_MS):
+    return PlayerSession(cues, loop_end_grace_ms=loop_end_grace_ms)
+
+
 def test_transcript_visible_defaults_true():
-    session = PlayerSession(_cues())
+    session = _session(_cues())
     assert session.transcript_visible is True
 
 
 def test_replay_cue_pauses_once_at_cue_end_and_does_not_loop():
-    session = PlayerSession(_cues())
+    session = _session(_cues())
     seek_to = session.replay_cue(0)
     assert seek_to == 0
 
@@ -39,14 +45,24 @@ def test_replay_cue_pauses_once_at_cue_end_and_does_not_loop():
     assert tick.restart_at_ms is None
 
 
+def test_replay_cue_completion_is_unaffected_by_a_large_grace():
+    """Grace only extends a Loop's effective completion end -- Replay Cue's
+    logical end is exactly `span.end_ms`, regardless of the configured grace."""
+    session = _session(_cues(), loop_end_grace_ms=300)
+    session.replay_cue(0)  # cue "one": 0-1000
+
+    tick = session.on_position_changed(1000)
+    assert tick.pause is True, "Replay must complete at the cue's own end, not end + grace"
+
+
 def test_play_cue_starts_at_cue_start_when_never_played():
-    session = PlayerSession(_cues())
+    session = _session(_cues())
     seek_to = session.play_cue(1)  # cue "two": 1000-2000
     assert seek_to == 1000
 
 
 def test_play_cue_resumes_in_place_when_paused_mid_cue():
-    session = PlayerSession(_cues())
+    session = _session(_cues())
     session.play_cue(1)  # start cue "two"
     session.on_position_changed(1400)  # learner paused here, mid-cue
 
@@ -55,7 +71,7 @@ def test_play_cue_resumes_in_place_when_paused_mid_cue():
 
 
 def test_play_cue_restarts_at_cue_start_once_it_already_reached_cue_end():
-    session = PlayerSession(_cues())
+    session = _session(_cues())
     session.play_cue(1)  # cue "two": 1000-2000
     tick = session.on_position_changed(2000)
     assert tick.pause is True  # naturally reached cue.end and stopped
@@ -65,12 +81,20 @@ def test_play_cue_restarts_at_cue_start_once_it_already_reached_cue_end():
 
 
 def test_play_cue_never_drifts_past_cue_end():
-    session = PlayerSession(_cues())
+    session = _session(_cues())
     session.play_cue(0)  # cue "one": 0-1000
     tick = session.on_position_changed(1000)
     assert tick.pause is True
     tick = session.on_position_changed(1500)
     assert tick.pause is False  # one-shot: no further pause/restart once already stopped
+
+
+def test_play_cue_completion_is_unaffected_by_a_large_grace():
+    session = _session(_cues(), loop_end_grace_ms=300)
+    session.play_cue(0)  # cue "one": 0-1000
+
+    tick = session.on_position_changed(1000)
+    assert tick.pause is True, "Play-cue must complete at the cue's own end, not end + grace"
 
 
 # ---- Loop as repeated one-shot replay of a span (M12 Round 3) ----
@@ -83,7 +107,7 @@ def test_play_cue_never_drifts_past_cue_end():
 
 
 def test_loop_cue_schedules_a_restart_of_the_same_span_at_cue_end():
-    session = PlayerSession(_cues())
+    session = _session(_cues(), loop_end_grace_ms=0)
     seek_to = session.loop_cue(1)  # cue "two": 1000-2000
     assert seek_to == 1000
     assert session.loop_mode is LoopMode.CUE
@@ -103,7 +127,7 @@ def test_loop_cue_does_not_restart_before_the_cue_actually_ends():
     fired up to 50ms early on every repetition -- a guaranteed, audible
     truncation, not merely a defensive margin (`>=` already tolerates a
     late/coarse tick landing past the target)."""
-    session = PlayerSession(_cues())
+    session = _session(_cues(), loop_end_grace_ms=0)
     session.loop_cue(1)  # cue "two": 1000-2000
 
     tick = session.on_position_changed(2000 - LOOP_END_TOLERANCE_MS)
@@ -120,7 +144,7 @@ def test_loop_cue_still_completes_when_a_coarse_tick_overshoots_the_end():
     """A tick landing past the boundary (coarse update cadence) must still
     trigger completion -- robustness does not depend on an early-margin
     subtraction, `>=` already covers overshoot."""
-    session = PlayerSession(_cues())
+    session = _session(_cues(), loop_end_grace_ms=0)
     session.loop_cue(1)  # cue "two": 1000-2000
 
     tick = session.on_position_changed(2300)
@@ -131,7 +155,7 @@ def test_repeated_ticks_after_scheduling_a_restart_do_not_reschedule_again():
     """The pending debounce must suppress repeated completion detection while
     a restart has already been scheduled and hasn't landed yet (stale ticks
     still reporting a position near the old end)."""
-    session = PlayerSession(_cues())
+    session = _session(_cues(), loop_end_grace_ms=0)
     session.loop_cue(1)  # cue "two": 1000-2000
 
     first = session.on_position_changed(2000)
@@ -153,7 +177,7 @@ def test_loop_range_treats_the_entire_selection_as_one_indivisible_span():
     inside the selection -- only at the end of the last selected cue. Cue
     "two" (1000-2000ms) sits entirely inside the range and must produce no
     tick at all resembling completion."""
-    session = PlayerSession(_cues())
+    session = _session(_cues(), loop_end_grace_ms=0)
     seek_to = session.loop_range(0, 2)  # cues 0-2: 0-3000ms as one span
     assert seek_to == 0
     assert session.loop_mode is LoopMode.RANGE
@@ -176,13 +200,13 @@ def test_loop_range_treats_the_entire_selection_as_one_indivisible_span():
 
 
 def test_loop_range_normalizes_reversed_selection():
-    session = PlayerSession(_cues())
+    session = _session(_cues())
     session.loop_range(2, 0)
     assert session.selected_range == (0, 2)
 
 
 def test_cancel_loop_stops_future_completions_of_the_old_span():
-    session = PlayerSession(_cues())
+    session = _session(_cues(), loop_end_grace_ms=0)
     session.loop_cue(0)
     session.cancel_loop()
     assert session.loop_mode is LoopMode.NONE
@@ -196,7 +220,7 @@ def test_cancel_loop_during_a_pending_restart_prevents_it_from_completing_again(
     """If Loop is cancelled in the brief window after a restart has been
     scheduled but before a position tick confirms it landed, no further
     completion may fire for the old span."""
-    session = PlayerSession(_cues())
+    session = _session(_cues(), loop_end_grace_ms=0)
     session.loop_cue(1)  # cue "two": 1000-2000
     scheduled = session.on_position_changed(2000)
     assert scheduled.restart_at_ms == 1000
@@ -209,7 +233,7 @@ def test_cancel_loop_during_a_pending_restart_prevents_it_from_completing_again(
 
 
 def test_starting_a_loop_cancels_any_pending_replay():
-    session = PlayerSession(_cues())
+    session = _session(_cues())
     session.replay_cue(0)
     session.loop_cue(1)
 
@@ -218,7 +242,7 @@ def test_starting_a_loop_cancels_any_pending_replay():
 
 
 def test_active_cue_index_tracks_position_regardless_of_transcript_visibility():
-    session = PlayerSession(_cues())
+    session = _session(_cues())
     session.transcript_visible = False
     tick = session.on_position_changed(1500)
     assert tick.active_cue_index == 1
@@ -226,6 +250,113 @@ def test_active_cue_index_tracks_position_regardless_of_transcript_visibility():
 
 
 def test_previous_and_next_cue_delegate_to_cue_index():
-    session = PlayerSession(_cues())
+    session = _session(_cues())
     assert session.next_cue_index(0) == 1
     assert session.previous_cue_index(1) == 0
+
+
+# ---- Loop End Grace (M12 Loop End Grace / Candidate 2) ----
+#
+# `loop_end_grace_ms` extends a Loop iteration's *effective completion end*
+# (span.end_ms + grace) -- it never mutates the span's own logical end, and
+# it never applies to Replay Cue or Play-cue (covered above).
+
+
+def test_loop_cue_completion_waits_for_grace_past_the_cue_end():
+    session = _session(_cues(), loop_end_grace_ms=180)
+    session.loop_cue(1)  # cue "two": logical end 2000ms
+
+    still_within_grace = session.on_position_changed(2179)
+    assert still_within_grace.pause is False
+    assert still_within_grace.restart_at_ms is None, "must not complete before end + grace"
+
+    at_effective_end = session.on_position_changed(2180)
+    assert at_effective_end.pause is True
+    assert at_effective_end.restart_at_ms == 1000, "restart still targets the span's own start"
+
+
+def test_loop_range_completion_grace_applies_only_once_at_the_final_range_end():
+    """Grace must attach only to the range's own final effective completion
+    end -- never to any internal cue boundary, which must stay structurally
+    inert exactly as it is without grace."""
+    session = _session(_cues(), loop_end_grace_ms=180)
+    session.loop_range(0, 2)  # 0-3000ms as one span
+
+    at_internal_boundary_plus_grace = session.on_position_changed(1180)
+    assert at_internal_boundary_plus_grace.pause is False
+    assert at_internal_boundary_plus_grace.restart_at_ms is None
+
+    before_effective_range_end = session.on_position_changed(3179)
+    assert before_effective_range_end.restart_at_ms is None
+
+    at_effective_range_end = session.on_position_changed(3180)
+    assert at_effective_range_end.pause is True
+    assert at_effective_range_end.restart_at_ms == 0
+
+
+def test_zero_grace_completes_exactly_at_the_logical_end_as_before():
+    session = _session(_cues(), loop_end_grace_ms=0)
+    session.loop_cue(1)  # cue "two": 1000-2000
+    tick = session.on_position_changed(2000)
+    assert tick.restart_at_ms == 1000
+
+
+# ---- on_media_ended (M12 Loop End Grace / Candidate 2) ----
+#
+# The second of the two legal ways a bounded playback span completes: the
+# underlying media's physical end arrives before any position tick ever
+# crosses the effective completion end (e.g. grace pushes the threshold past
+# the Material's actual duration, or any cue's logical end already exceeds
+# it). Shares the same completion outcome as `on_position_changed`.
+
+
+def test_on_media_ended_with_no_active_span_is_a_no_op():
+    session = _session(_cues())
+    tick = session.on_media_ended()
+    assert tick.pause is False
+    assert tick.restart_at_ms is None
+
+
+def test_on_media_ended_completes_a_pending_replay_cue_and_clears_the_span():
+    session = _session(_cues())
+    session.replay_cue(0)  # cue "one": 0-1000, media ends at e.g. 700ms
+
+    tick = session.on_media_ended()
+    assert tick.pause is True
+    assert tick.restart_at_ms is None, "Replay is one-shot: no restart even via EndOfMedia"
+
+    # span is cleared: a further tick must not pause/restart again
+    again = session.on_media_ended()
+    assert again.pause is False
+
+
+def test_on_media_ended_sets_play_cue_reached_end_so_a_second_press_restarts():
+    session = _session(_cues())
+    session.play_cue(1)  # cue "two": 1000-2000, media ends before 2000ms
+
+    session.on_media_ended()
+    seek_to = session.play_cue(1)  # pressed Play again
+    assert seek_to == 1000, "EOF-driven completion must set reached-end just like a tick would"
+
+
+def test_on_media_ended_completes_a_loop_iteration_and_produces_a_restart():
+    session = _session(_cues(), loop_end_grace_ms=180)
+    session.loop_cue(1)  # cue "two": 1000-2000, effective end 2180ms exceeds media duration
+
+    tick = session.on_media_ended()
+    assert tick.pause is True
+    assert tick.restart_at_ms == 1000, "Loop must still restart even when EOF preempts the tick path"
+
+
+def test_on_media_ended_is_a_no_op_while_a_tick_driven_restart_is_already_pending():
+    """If a position tick already completed this iteration and a restart is
+    already scheduled, a subsequent EndOfMedia for the same iteration must
+    not trigger a second, redundant completion."""
+    session = _session(_cues(), loop_end_grace_ms=0)
+    session.loop_cue(1)  # cue "two": 1000-2000
+    scheduled = session.on_position_changed(2000)
+    assert scheduled.restart_at_ms == 1000
+
+    redundant = session.on_media_ended()
+    assert redundant.pause is False
+    assert redundant.restart_at_ms is None

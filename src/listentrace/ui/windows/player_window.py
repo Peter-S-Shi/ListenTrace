@@ -28,7 +28,7 @@ from PySide6.QtWidgets import (
 )
 
 from listentrace.application.dto.player_load import PlayerLoadResult
-from listentrace.application.dto.player_state import LoopMode
+from listentrace.application.dto.player_state import LoopMode, PlayerTick
 from listentrace.application.dto.saved_item_results import SavedItemNeedsConfirmation
 from listentrace.application.errors import (
     AnnotationNotFoundError,
@@ -41,6 +41,7 @@ from listentrace.application.errors import (
 from listentrace.application.services import annotation_service, cue_note_service
 from listentrace.application.services import cue_workspace_service as workspace_service
 from listentrace.application.services import label_preference_service
+from listentrace.application.services import loop_grace_service
 from listentrace.application.services import quick_practice_service
 from listentrace.application.services import saved_language_item_service as item_service
 from listentrace.application.services.player_session import PlayerSession
@@ -100,7 +101,8 @@ class PlayerWindow(QMainWindow):
 
         self._material = material
         self._connection = connection
-        self._session = PlayerSession(load_result.cues)
+        grace_ms = loop_grace_service.effective_loop_end_grace_ms(connection, material.id)
+        self._session = PlayerSession(load_result.cues, loop_end_grace_ms=grace_ms)
         self._playback = PlaybackController(self)
         self._seeking_via_slider = False
         self._playback_usable = True
@@ -469,19 +471,26 @@ class PlayerWindow(QMainWindow):
             self._playback.play()
             self._play_pause_button.setText("Pause")
 
-    def _on_position_changed(self, position_ms: int) -> None:
-        tick = self._session.on_position_changed(position_ms)
+    def _apply_player_tick(self, tick: PlayerTick) -> None:
         # A Loop iteration completing is also `pause=True` (it is the same
         # one-shot span primitive as Replay/Play-cue -- see player_session.py),
         # but `restart_at_ms` means it is about to resume on its own:
         # restart_span() owns its own pause-then-settle-then-resume sequence,
         # and the Play/Pause button must not flash to "Play" for an internal
-        # transition the learner never asked to pause.
+        # transition the learner never asked to pause. Shared by both tick
+        # sources: a position update, and the media's own natural end (see
+        # `_on_end_of_media`) -- a Loop span whose effective completion end
+        # (logical end + grace) exceeds the Material's actual duration would
+        # otherwise never receive a position tick that reaches it.
         if tick.restart_at_ms is not None:
             self._playback.restart_span(tick.restart_at_ms)
         elif tick.pause:
             self._playback.pause()
             self._play_pause_button.setText("Play")
+
+    def _on_position_changed(self, position_ms: int) -> None:
+        tick = self._session.on_position_changed(position_ms)
+        self._apply_player_tick(tick)
 
         if not self._seeking_via_slider:
             self._seek_slider.blockSignals(True)
@@ -720,7 +729,10 @@ class PlayerWindow(QMainWindow):
         self._playback.set_volume(value / 100)
 
     def _on_end_of_media(self) -> None:
-        self._play_pause_button.setText("Play")
+        tick = self._session.on_media_ended()
+        self._apply_player_tick(tick)
+        if tick.restart_at_ms is None and not tick.pause:
+            self._play_pause_button.setText("Play")
 
     def _on_playback_error(self, message: str) -> None:
         self._show_status(f"Playback error: {message}")

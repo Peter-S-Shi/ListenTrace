@@ -18,8 +18,10 @@ from PySide6.QtWidgets import (
 )
 
 from listentrace.application.dto.player_load import PlayerLoadResult
+from listentrace.application.dto.player_state import PlayerTick
 from listentrace.application.dto.quiz_state import QuizState
 from listentrace.application.errors import QuizQuestionNotFoundError, QuizValidationError
+from listentrace.application.services import loop_grace_service
 from listentrace.application.services import quiz_service as svc
 from listentrace.application.services.player_session import PlayerSession
 from listentrace.domain.enums.answered_state import AnsweredState
@@ -65,7 +67,8 @@ class QuizWindow(QMainWindow):
         self.resize(820, 620)
 
         self._playback = PlaybackController(self)
-        self._player_session = PlayerSession(self._cues)
+        grace_ms = loop_grace_service.effective_loop_end_grace_ms(connection, self._material.id)
+        self._player_session = PlayerSession(self._cues, loop_end_grace_ms=grace_ms)
         self._playback_usable = True
         self._state: QuizState | None = None
         self._current_index = 0
@@ -430,20 +433,28 @@ class QuizWindow(QMainWindow):
     def _sync_play_button_text(self) -> None:
         self._play_button.setText("Pause" if self._playback.is_playing else "Play")
 
-    def _on_position_changed(self, position_ms: int) -> None:
-        tick = self._player_session.on_position_changed(position_ms)
-        # See player_window.py's _on_position_changed for why restart_at_ms
+    def _apply_player_tick(self, tick: PlayerTick) -> None:
+        # See player_window.py's _apply_player_tick for why restart_at_ms
         # (a Loop iteration restarting on its own) must not run the ordinary
-        # "playback genuinely stopped" side effects below.
+        # "playback genuinely stopped" side effects below. Shared by both
+        # tick sources: a position update, and the media's own natural end
+        # (see _on_end_of_media).
         if tick.restart_at_ms is not None:
             self._playback.restart_span(tick.restart_at_ms)
         elif tick.pause:
             self._playback.pause()
             self._sync_play_button_text()
+
+    def _on_position_changed(self, position_ms: int) -> None:
+        tick = self._player_session.on_position_changed(position_ms)
+        self._apply_player_tick(tick)
         self._time_label.setText(f"{_format_time(position_ms)} / {_format_time(self._playback.duration_ms)}")
 
     def _on_end_of_media(self) -> None:
-        self._sync_play_button_text()
+        tick = self._player_session.on_media_ended()
+        self._apply_player_tick(tick)
+        if tick.restart_at_ms is None:
+            self._sync_play_button_text()
 
     def _on_playback_error(self, message: str) -> None:
         self._show_status(f"Playback error: {message}")

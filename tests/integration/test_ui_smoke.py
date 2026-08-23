@@ -45,7 +45,7 @@ def test_main_window_starts_with_initialized_database(qapp, tmp_path):
     window = MainWindow(connection, db_path, tmp_path / "recordings")
 
     assert window.windowTitle() == "ListenTrace"
-    assert "Schema version: 10" in window._status_label.text()
+    assert "Schema version: 11" in window._status_label.text()
 
     window.close()
 
@@ -1146,6 +1146,67 @@ def test_guided_session_comparison_cancelled_on_source_playback_error(qapp, tmp_
     panel._takes_list.setCurrentRow(0)
     assert panel._play_take_button.isEnabled() is True
     assert panel._delete_take_button.isEnabled() is True
+
+    window.close()
+
+
+def test_loop_restart_tick_does_not_falsely_finish_a_stale_pending_comparison(qapp, tmp_path):
+    """Regression: starting Loop Cue while a comparison replay is still
+    pending (e.g. the learner clicks Loop before the comparison finishes)
+    overwrites PlayerSession's `_active_span` without the window ever
+    clearing `_comparison_replay_pending` -- that flag is window-level
+    bookkeeping PlayerSession knows nothing about. A tick from that Loop
+    completing is still `pause=True` (every bounded-span completion is), so
+    the comparison-finished check must also require `restart_at_ms is None`
+    to stay mutually exclusive with a Loop restart, exactly as the original
+    single `elif tick.pause:` branch guaranteed before `_apply_player_tick`
+    was extracted -- otherwise a Loop's own automatic restart would
+    incorrectly report the abandoned comparison as successfully finished."""
+    connection = open_connection(tmp_path / "smoke.db")
+    migrate(connection)
+    result = _import_shadowing_lesson(connection, tmp_path)
+    recordings_dir = tmp_path / "recordings"
+
+    from listentrace.application.services import recording_service
+    from listentrace.application.services.player_loading_service import load_material_for_player
+    from listentrace.infrastructure.db.repository import get_cues_for_track, get_subtitle_track_for_material
+    from listentrace.ui.windows.shadowing_practice_window import ShadowingPracticeWindow
+
+    track = get_subtitle_track_for_material(connection, result.material_id)
+    first_cue = get_cues_for_track(connection, track.id)[0]
+
+    recording, path = recording_service.begin_recording(
+        connection, recordings_dir, result.material_id, first_cue.id, "dev-1", "Test Mic"
+    )
+    _write_valid_wav(path, seconds=1)
+    recording_service.finish_recording(connection, recordings_dir, recording.id)
+
+    load_result = load_material_for_player(connection, result.material_id)
+    window = ShadowingPracticeWindow(connection, load_result, recordings_dir)
+
+    panel = window._recording_panel
+    panel._takes_list.setCurrentRow(0)
+    panel._on_compare_clicked()
+    assert window._comparison_replay_pending is True
+
+    # The learner clicks Loop before the comparison ever reaches its own
+    # pause boundary -- this overwrites PlayerSession's _active_span with a
+    # new Loop span; `_comparison_replay_pending` is untouched by design
+    # (PlayerSession has no notion of it).
+    window._on_loop_clicked()
+    assert window._comparison_replay_pending is True, "still stale, not yet reconciled by any tick"
+
+    finished_calls = []
+    panel.notify_source_finished = lambda: finished_calls.append(True)
+
+    from listentrace.domain.services.loop_grace_policy import LOOP_END_GRACE_DEFAULT_MS
+
+    # crosses the loop span's *effective* completion end (logical end + grace,
+    # since loop_mode is now active) -- not the bare cue end.
+    window._on_position_changed(first_cue.end_ms + LOOP_END_GRACE_DEFAULT_MS)
+
+    assert finished_calls == [], "a Loop restart must never be reported as a finished comparison"
+    assert window._comparison_replay_pending is True
 
     window.close()
 

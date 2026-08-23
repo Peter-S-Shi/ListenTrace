@@ -56,7 +56,7 @@ class PlayerSession:
     nothing about their internal timing is ever touched.
     """
 
-    def __init__(self, cues: list[SubtitleCue]):
+    def __init__(self, cues: list[SubtitleCue], loop_end_grace_ms: int):
         self._cue_index = CueIndex(cues)
         self.transcript_visible = True
         self.loop_mode = LoopMode.NONE
@@ -68,33 +68,39 @@ class PlayerSession:
         self._last_position_ms: int | None = None
         self._play_cue_target_index: int | None = None
         self._play_cue_reached_end = False
+        # Required, no default: 60-300ms is the frozen product-legal range for
+        # an effective value, and a silent fallback (e.g. 0) would let a caller
+        # that forgets to resolve one degrade quietly into the exact "no grace"
+        # behavior already proven insufficient by human listening, instead of
+        # failing loudly. Callers resolve this once, externally (global default
+        # or per-Material override) -- this class never learns where it came
+        # from, and never learns the Material's actual duration either; see
+        # `_completion_end_ms` and `on_media_ended`.
+        self._loop_end_grace_ms = loop_end_grace_ms
 
     @property
     def cues(self) -> list[SubtitleCue]:
         return self._cue_index.cues
 
-    def on_position_changed(self, position_ms: int) -> PlayerTick:
-        self._last_position_ms = position_ms
-        self.active_cue_index = self._cue_index.active_cue_index(position_ms)
+    def _completion_end_ms(self, span: _ActiveSpan) -> int:
+        """The *effective* completion end for `span`: its own logical end for
+        Replay Cue/Play-cue, or logical end + grace while looping. `span.end_ms`
+        itself always stays the subtitle-defined logical end -- never mutated
+        to bake grace in -- so the two concepts (Logical end, Effective
+        completion end; see CONTEXT.md) can never be confused by a future
+        reader of `span.end_ms` alone."""
+        if self.loop_mode is not LoopMode.NONE:
+            return span.end_ms + self._loop_end_grace_ms
+        return span.end_ms
 
-        if self._active_span is None:
-            return PlayerTick(self.active_cue_index)
-
-        if self._span_restart_pending:
-            # Ignore further boundary checks until a real position update confirms
-            # the pending restart has actually landed, so repeated ticks still
-            # reporting the old (near-end) position cannot re-trigger completion
-            # a second time before the first restart has taken effect.
-            if position_ms < self._active_span.end_ms - LOOP_END_TOLERANCE_MS:
-                self._span_restart_pending = False
-            return PlayerTick(self.active_cue_index)
-
-        if position_ms < self._active_span.end_ms:
-            return PlayerTick(self.active_cue_index)
-
-        # The span has reached its natural end -- exactly one outcome, always: pause.
-        # (`>=` already tolerates a late/coarse tick landing past the boundary; no
-        # early-trigger margin is needed or applied here.)
+    def _complete_active_span(self) -> PlayerTick:
+        """Complete `_active_span` deterministically. Shared by both legal
+        completion paths for a bounded playback span: `on_position_changed`
+        (a tick crosses the effective completion end) and `on_media_ended`
+        (the underlying media's physical end arrives first -- e.g. because
+        grace, or any cue's own logical end, exceeds the Material's actual
+        duration). Always the same one outcome: pause; Loop additionally
+        schedules a restart of the same span."""
         span = self._active_span
         if self._play_cue_target_index is not None:
             self._play_cue_reached_end = True
@@ -111,6 +117,46 @@ class PlayerSession:
         # (Round 2's actual fix, still insufficient per human retest).
         self._span_restart_pending = True
         return PlayerTick(self.active_cue_index, pause=True, restart_at_ms=span.start_ms)
+
+    def on_position_changed(self, position_ms: int) -> PlayerTick:
+        self._last_position_ms = position_ms
+        self.active_cue_index = self._cue_index.active_cue_index(position_ms)
+
+        if self._active_span is None:
+            return PlayerTick(self.active_cue_index)
+
+        completion_end_ms = self._completion_end_ms(self._active_span)
+
+        if self._span_restart_pending:
+            # Ignore further boundary checks until a real position update confirms
+            # the pending restart has actually landed, so repeated ticks still
+            # reporting the old (near-end) position cannot re-trigger completion
+            # a second time before the first restart has taken effect.
+            if position_ms < completion_end_ms - LOOP_END_TOLERANCE_MS:
+                self._span_restart_pending = False
+            return PlayerTick(self.active_cue_index)
+
+        if position_ms < completion_end_ms:
+            return PlayerTick(self.active_cue_index)
+
+        # The span has reached its effective completion end -- exactly one
+        # outcome, always: pause. (`>=` already tolerates a late/coarse tick
+        # landing past the boundary; no early-trigger margin is needed or
+        # applied here.)
+        return self._complete_active_span()
+
+    def on_media_ended(self) -> PlayerTick:
+        """The underlying media reached its physical end (EndOfMedia) -- the
+        second of the two legal ways a bounded playback span completes (see
+        `_completion_end_ms`). Without this, a span whose effective
+        completion end sits past the Material's actual duration would never
+        receive a position tick that reaches it, leaving `_active_span`
+        dangling forever. No-op if no span is active, or if a tick-driven
+        completion for the current iteration is already pending (avoids a
+        redundant second completion for the same iteration)."""
+        if self._active_span is None or self._span_restart_pending:
+            return PlayerTick(self.active_cue_index)
+        return self._complete_active_span()
 
     def play_cue(self, cue_index: int) -> int | None:
         """Cue-scoped Play (M12 Round 1 Playback Contract S3.2/S11): the default
