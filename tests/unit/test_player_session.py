@@ -81,17 +81,47 @@ def test_loop_cue_seeks_back_to_start_at_cue_end():
     tick = session.on_position_changed(1500)
     assert tick.seek_to_ms is None
 
-    tick = session.on_position_changed(2000 - LOOP_END_TOLERANCE_MS)
+    tick = session.on_position_changed(2000)
     assert tick.seek_to_ms == 1000
 
     # while the seek is "pending", further ticks near the boundary must not re-trigger
-    tick = session.on_position_changed(2000 - LOOP_END_TOLERANCE_MS)
+    tick = session.on_position_changed(2000)
     assert tick.seek_to_ms is None
 
     # once position reflects the completed seek, the loop can trigger again next time
     tick = session.on_position_changed(1000)
     assert tick.seek_to_ms is None
+    tick = session.on_position_changed(2000)
+    assert tick.seek_to_ms == 1000
+
+
+def test_loop_cue_does_not_seek_back_before_the_cue_actually_ends():
+    """DIAG-8f31: the prior boundary check subtracted LOOP_END_TOLERANCE_MS from
+    the target *before* comparing, so the seek fired up to 50ms early on every
+    single loop repetition -- a guaranteed, audible truncation of the cue's
+    tail, not merely a defensive margin against missing the boundary (`>=`
+    already tolerates a late/coarse tick landing past the target)."""
+    session = PlayerSession(_cues())
+    session.loop_cue(1)  # cue "two": 1000-2000
+
     tick = session.on_position_changed(2000 - LOOP_END_TOLERANCE_MS)
+    assert tick.seek_to_ms is None, "must not truncate the cue's own tail before its real end"
+
+    tick = session.on_position_changed(1999)
+    assert tick.seek_to_ms is None
+
+    tick = session.on_position_changed(2000)
+    assert tick.seek_to_ms == 1000
+
+
+def test_loop_cue_still_seeks_back_when_a_coarse_tick_overshoots_the_end():
+    """A tick landing past the boundary (coarse update cadence) must still
+    trigger the seek -- robustness does not depend on the early-margin
+    subtraction, `>=` already covers overshoot."""
+    session = PlayerSession(_cues())
+    session.loop_cue(1)  # cue "two": 1000-2000
+
+    tick = session.on_position_changed(2300)
     assert tick.seek_to_ms == 1000
 
 
@@ -102,7 +132,7 @@ def test_loop_range_spans_first_to_last_selected_cue():
     assert session.loop_mode is LoopMode.RANGE
     assert session.selected_range == (0, 2)
 
-    tick = session.on_position_changed(3000 - LOOP_END_TOLERANCE_MS)
+    tick = session.on_position_changed(3000)
     assert tick.seek_to_ms == 0
 
 

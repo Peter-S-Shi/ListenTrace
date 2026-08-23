@@ -60,7 +60,13 @@ class PlayerSession:
                     self._loop_seek_pending = False
                 return PlayerTick(self.active_cue_index)
 
-            if position_ms >= self._loop_end_ms - LOOP_END_TOLERANCE_MS:
+            # DIAG-8f31: the boundary is checked with `>=`, which already tolerates a
+            # late/coarse tick landing past `_loop_end_ms` (no update is required to
+            # land on the exact millisecond). Subtracting LOOP_END_TOLERANCE_MS here
+            # instead added nothing but a guaranteed early trigger -- the seek fired
+            # up to 50ms before the cue's real end on every single repetition,
+            # audibly truncating its tail. The seek must wait for the real end.
+            if position_ms >= self._loop_end_ms:
                 self._loop_seek_pending = True
                 return PlayerTick(self.active_cue_index, seek_to_ms=self._loop_start_ms)
 

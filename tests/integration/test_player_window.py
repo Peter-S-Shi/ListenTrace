@@ -348,6 +348,28 @@ def test_loop_button_resets_when_cancelled_via_escape_key(qapp, conn, tmp_path):
     window.close()
 
 
+def test_clicking_loop_button_again_while_active_stops_the_loop(qapp, conn, tmp_path):
+    """DIAG-8f31: the button's actual click handler must be a toggle. Every
+    prior loop-cancel test drove `_session.cancel_loop()` directly, bypassing
+    the real click path -- so the button never had coverage for what the
+    human-reported bug actually does: click `Loop Cue`, then click the same
+    button again (now reading `Stop Loop`)."""
+    wav_path = tmp_path / "lesson.wav"
+    _make_wav(wav_path)
+    window = PlayerWindow(_two_cue_result(wav_path), conn)
+    window._cue_list.setCurrentRow(0)
+
+    window._on_loop_cue_clicked()
+    assert window._session.loop_mode is LoopMode.CUE
+    assert window._loop_cue_button.text() == "Stop Loop"
+
+    window._on_loop_cue_clicked()  # simulates clicking "Stop Loop"
+    assert window._session.loop_mode is LoopMode.NONE
+    assert window._loop_cue_button.text() == "Loop Cue"
+
+    window.close()
+
+
 def test_loop_button_resets_when_replay_cue_cancels_the_active_loop(qapp, conn, tmp_path):
     wav_path = tmp_path / "lesson.wav"
     _make_wav(wav_path)

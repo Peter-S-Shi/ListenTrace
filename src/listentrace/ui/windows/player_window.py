@@ -600,6 +600,15 @@ class PlayerWindow(QMainWindow):
         self._show_status("")
 
     def _on_loop_cue_clicked(self) -> None:
+        # DIAG-8f31: this is the button's only click handler -- while a loop is
+        # active the button reads "Stop Loop" (_sync_loop_button_text), so a
+        # click here must cancel rather than unconditionally starting another
+        # loop, or the button becomes visually a toggle but behaviorally inert.
+        if self._session.loop_mode is not LoopMode.NONE:
+            self._session.cancel_loop()
+            self._sync_loop_button_text()
+            self._show_status("")
+            return
         indices = self._selected_cue_indices()
         cue_index = indices[0] if indices else self._session.active_cue_index
         if cue_index is None:
