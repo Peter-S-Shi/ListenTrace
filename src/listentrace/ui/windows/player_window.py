@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import sqlite3
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QEvent, Qt
 from PySide6.QtGui import QColor, QIcon, QKeyEvent, QPixmap, QTextCursor
 from PySide6.QtMultimediaWidgets import QVideoWidget
 from PySide6.QtWidgets import (
@@ -126,10 +126,9 @@ class PlayerWindow(QMainWindow):
         # cards genuinely need more horizontal room than the old single stacked
         # control card did. 880px caused real clipping/overflow under the new
         # architecture (measured), so the practical floor moves up with it.
-        # Vertical overflow is owned locally by the Annotation Notebook's own
-        # QScrollArea (see _build_workspace_panel's caller) -- the media study
-        # page itself has no scroll wrapper and must simply fit this floor.
-        self.setMinimumSize(1040, 620)
+        # The height floor is set later, once the layout below is fully
+        # built -- see the `setMinimumSize` call near the end of this method.
+        self.setMinimumWidth(1040)
 
         self._material = material
         self._connection = connection
@@ -442,6 +441,18 @@ class PlayerWindow(QMainWindow):
 
         self._apply_presentation()
         self._set_workspace_form_enabled(False)
+
+        # Lock in the real minimum height Qt's own layout just computed for
+        # everything built above (video/audio viewport, status strip,
+        # timeline, mini-notebooks, transcript, annotation notebook) as a
+        # hard floor, alongside the fixed 1040px width reservation. A guessed
+        # height constant here previously under-stated the media study
+        # page's real requirement for a video-kind Player specifically (an
+        # audio-kind Player's shorter placeholder made the shortfall easy to
+        # miss) -- letting Qt supply the number keeps this self-healing
+        # instead of a magic constant that can silently drift out of sync
+        # with the content again.
+        self.setMinimumSize(1040, self.minimumSizeHint().height())
 
         if initial_cue_index is not None and 0 <= initial_cue_index < self._cue_list.count():
             self._cue_list.setCurrentRow(initial_cue_index)
@@ -1044,6 +1055,42 @@ class PlayerWindow(QMainWindow):
         self._session.cancel_loop()
         self._playback.stop()
         super().closeEvent(event)
+
+    def resizeEvent(self, event) -> None:  # type: ignore[override]
+        super().resizeEvent(event)
+        self._resync_video_widget_geometry()
+
+    def changeEvent(self, event) -> None:  # type: ignore[override]
+        super().changeEvent(event)
+        if event.type() == QEvent.Type.WindowStateChange:
+            self._resync_video_widget_geometry()
+
+    def _resync_video_widget_geometry(self) -> None:
+        """Force the media frame's layout to push a fresh, synchronous
+        geometry to the video widget right away.
+
+        `QVideoWidget` renders through a native window-container surface on
+        Windows; Qt documents that such surfaces "stack on top of the widget
+        hierarchy as an opaque box" and are not clipped by normal Qt sibling
+        z-order/layout the way ordinary widgets are. Qt's own layout
+        recalculation is normally *deferred* to the next event-loop
+        iteration, which leaves a window during a maximize/restore
+        transition (a compound, fast sequence of geometry changes) where the
+        native surface can retain a stale, larger rect than the freshly
+        computed layout cell -- observed as the video visually bleeding over
+        the study-status strip immediately below it. `QLayout.activate()`
+        forces that recalculation (and the resulting `setGeometry()` calls)
+        to happen immediately instead of waiting for the deferred pass,
+        closing that race. This is a Qt-layout-level containment fix, not a
+        spacer/margin hack; real native-window compositing on Windows still
+        needs human verification (see the M13 Player Notebook Primitive
+        Hardening corrective's P1 report)."""
+        if self._video_widget is None:
+            return
+        layout = self._cinema_stage_widget.layout()
+        if layout is not None:
+            layout.activate()
+        self._video_widget.updateGeometry()
 
     # ---- editing cue / transcript workspace ----
 

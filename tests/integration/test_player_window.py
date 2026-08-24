@@ -4,7 +4,7 @@ import struct
 import wave
 
 import pytest
-from PySide6.QtCore import QEventLoop, Qt, QTimer
+from PySide6.QtCore import QEvent, QEventLoop, Qt, QTimer
 from PySide6.QtGui import QKeyEvent
 from PySide6.QtWidgets import QAbstractItemView, QLineEdit, QPushButton
 
@@ -136,6 +136,76 @@ def test_player_window_video_mode_creates_video_surface(qapp, conn, tmp_path):
 
     assert window._video_widget is not None
     assert window._audio_placeholder is None
+
+    window.close()
+
+
+def test_video_widget_geometry_never_overlaps_status_strip_at_normal_and_large_sizes(qapp, conn, tmp_path):
+    """P1 corrective (Human Windows review of 60333aa): the QVideoWidget was
+    observed visually overlapping the study-status strip below it when
+    PlayerWindow was maximized on real Windows.
+
+    This test caught a real, reproducible root cause: `setMinimumSize(1040,
+    620)` (from the prior pass) understated the media study page's actual
+    minimum height for a *video*-kind Player specifically -- the video
+    widget's own `setMinimumHeight(240)` plus the status strip/timeline/
+    notebooks below it need ~647px, not 620. Below its true minimum, Qt
+    shrinks `stage_card` (the video's containing frame) below what its own
+    child demands, so the video widget spills out of its frame into the
+    status strip's territory -- independent of any native-window/Windows-
+    specific behavior, and reproducible offscreen (this test failed red
+    before the fix locked the real Qt-computed minimum in). The fix now
+    derives the window's minimum height from `self.minimumSizeHint()` after
+    construction instead of a guessed constant, so it can't drift out of
+    sync with the content again. A *separate*, genuinely Windows-native-
+    compositing risk (QVideoWidget's window-container surface not respecting
+    Qt's normal widget clipping/z-order) may still exist and cannot be
+    proven or disproven offscreen -- see
+    `test_resize_and_window_state_change_resync_video_widget_geometry` for
+    the defensive fix addressing that, and human Windows retest is still
+    required to confirm no visual overlap remains in practice."""
+    wav_path = tmp_path / "lesson.wav"
+    _make_wav(wav_path)
+    window = PlayerWindow(_two_cue_result(wav_path, media_kind="video"), conn)
+    window.show()
+
+    for width, height in [(1040, 620), (2200, 1400)]:
+        window.resize(width, height)
+        qapp.processEvents()
+
+        video_top_left = window._video_widget.mapTo(window, window._video_widget.rect().topLeft())
+        video_bottom = video_top_left.y() + window._video_widget.height()
+        hud_top_left = window._active_subtitle_hud.mapTo(window, window._active_subtitle_hud.rect().topLeft())
+
+        assert video_bottom <= hud_top_left.y(), (
+            f"video widget bottom ({video_bottom}) reaches into the status strip "
+            f"(top {hud_top_left.y()}) at window size {width}x{height}"
+        )
+
+    window.close()
+
+
+def test_resize_and_window_state_change_resync_video_widget_geometry(qapp, conn, tmp_path, monkeypatch):
+    """P1 corrective: `resizeEvent` and a `WindowStateChange` (maximize/
+    restore) must both force an immediate layout re-sync of the video
+    widget's geometry -- the fix for the native window-container surface
+    lagging behind the parent layout's freshly computed rect."""
+    wav_path = tmp_path / "lesson.wav"
+    _make_wav(wav_path)
+    window = PlayerWindow(_two_cue_result(wav_path, media_kind="video"), conn)
+    window.show()
+
+    calls = []
+    monkeypatch.setattr(window, "_resync_video_widget_geometry", lambda: calls.append(1))
+
+    window.resize(1300, 900)
+    qapp.processEvents()
+    assert calls, "resizeEvent must trigger a video widget geometry resync"
+
+    calls.clear()
+    state_change_event = QEvent(QEvent.Type.WindowStateChange)
+    window.changeEvent(state_change_event)
+    assert calls, "a WindowStateChange (maximize/restore) must trigger a video widget geometry resync"
 
     window.close()
 
