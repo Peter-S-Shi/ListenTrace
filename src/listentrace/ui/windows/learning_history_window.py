@@ -40,6 +40,7 @@ from listentrace.application.services.player_loading_service import load_materia
 from listentrace.domain.enums.quick_practice_status import QuickPracticeStatus
 from listentrace.domain.services import date_range as date_range_rules
 from listentrace.ui import theme
+from listentrace.ui.theme import SPACE_COMPACT, SPACE_NORMAL, apply_role, apply_surface
 from listentrace.ui.time_display import format_local_timestamp
 from listentrace.ui.widgets.simple_bar_chart import SimpleBarChart
 from listentrace.ui.windows.export_dialog import ExportDialog
@@ -98,10 +99,14 @@ class LearningHistoryWindow(QMainWindow):
         self._child_window: QWidget | None = None
 
         central = QWidget(self)
+        apply_surface(central, "paper")
         outer_layout = QVBoxLayout(central)
+        outer_layout.setContentsMargins(SPACE_NORMAL, SPACE_NORMAL, SPACE_NORMAL, SPACE_NORMAL)
+        outer_layout.setSpacing(SPACE_NORMAL)
+        apply_surface(self, "paper")
 
-        title_label = QLabel("Learning History & Insights")
-        theme.apply_role(title_label, "title")
+        title_label = QLabel("Study Dossier — Learning History & Insights")
+        apply_role(title_label, "title")
         outer_layout.addWidget(title_label)
 
         filter_row = QHBoxLayout()
@@ -244,6 +249,7 @@ class LearningHistoryWindow(QMainWindow):
             "Continue Learning — active sessions (always shown, regardless of filters)"
         )
         self._continue_learning_list = QListWidget()
+        theme.apply_role(self._continue_learning_list, "ruled_list")
         theme.configure_long_text_list(self._continue_learning_list)
         self._continue_learning_list.currentItemChanged.connect(self._on_continue_learning_selection_changed)
         continue_column.addWidget(self._continue_learning_list, 1)
@@ -271,6 +277,7 @@ class LearningHistoryWindow(QMainWindow):
             "Needs Attention — transparent reasons, not a ranking (always shown, all materials)"
         )
         self._needs_attention_list = QListWidget()
+        theme.apply_role(self._needs_attention_list, "ruled_list")
         theme.configure_long_text_list(self._needs_attention_list)
         self._needs_attention_list.itemDoubleClicked.connect(self._on_needs_attention_double_clicked)
         attention_column.addWidget(self._needs_attention_list, 1)
@@ -391,6 +398,7 @@ class LearningHistoryWindow(QMainWindow):
 
         activity_card, activity_column = theme.make_card()
         self._activity_list = QListWidget()
+        theme.apply_role(self._activity_list, "ruled_list")
         theme.configure_long_text_list(self._activity_list)
         self._activity_list.itemDoubleClicked.connect(self._on_activity_item_double_clicked)
         activity_column.addWidget(self._activity_list, 1)

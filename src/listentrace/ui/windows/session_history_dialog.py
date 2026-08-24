@@ -42,15 +42,20 @@ class SessionHistoryDialog(QDialog):
     def __init__(self, connection: sqlite3.Connection, material_id: int, material_title: str, parent=None) -> None:
         super().__init__(parent)
         self.setWindowTitle(f"Session History — {material_title}")
-        self.resize(520, 400)
+        self.resize(560, 420)
         self._connection = connection
         self._material_id = material_id
         self.selected_session_id: int | None = None
+        theme.apply_surface(self, "paper")
 
         layout = QVBoxLayout(self)
-        layout.addWidget(QLabel("Prior intensive practice sessions for this material:"))
+        title_hdr = QLabel("Prior intensive practice sessions for this material:")
+        theme.apply_role(title_hdr, "subtitle")
+        layout.addWidget(title_hdr)
 
         self._list = QListWidget()
+        theme.apply_role(self._list, "ruled_list")
+        theme.configure_long_text_list(self._list)
         self._list.itemDoubleClicked.connect(self._on_double_clicked)
         self._list.currentItemChanged.connect(self._on_selection_changed)
         layout.addWidget(self._list, 1)

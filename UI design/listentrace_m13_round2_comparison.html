@@ -1,0 +1,1461 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light" data-color-scheme="b-blue">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ListenTrace M13 — Round 2 Prototype Comparison Pack</title>
+  <style>
+    /* ==========================================================================
+       1. GLOBAL DESIGN TOKENS & COLOR SCHEMES (B / C / D / E)
+       ========================================================================== */
+    :root {
+      --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI Variable", "Segoe UI", "PingFang SC", "Microsoft YaHei UI", sans-serif;
+      --font-mono: ui-monospace, "Cascadia Code", "Segoe UI Mono", Consolas, monospace;
+      --font-serif: "Charter", "Georgia", "Source Han Serif SC", "Noto Serif CJK SC", serif;
+
+      /* Spacing Scale (Spacious Learning Density) */
+      --space-1: 4px;
+      --space-2: 8px;
+      --space-3: 12px;
+      --space-4: 16px;
+      --space-5: 20px;
+      --space-6: 24px;
+      --space-8: 32px;
+
+      /* Radii & Depth (Prototype A Level) */
+      --radius-xs: 4px;
+      --radius-sm: 6px;
+      --radius-md: 10px;
+      --radius-lg: 14px;
+      --radius-xl: 20px;
+      --radius-pill: 9999px;
+
+      --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04);
+      --shadow-md: 0 4px 14px rgba(0, 0, 0, 0.06), 0 1px 3px rgba(0, 0, 0, 0.03);
+      --shadow-lg: 0 12px 30px rgba(0, 0, 0, 0.08);
+
+      /* Transition */
+      --transition-fast: 150ms cubic-bezier(0.16, 1, 0.3, 1);
+      --transition-normal: 250ms cubic-bezier(0.16, 1, 0.3, 1);
+
+      /* Neutral Palette (Light - Warm Professional Learning Desk) */
+      --bg-app: #F6F4EE;
+      --bg-sidebar: #ECE8DE;
+      --bg-surface: #FFFFFF;
+      --bg-surface-elevated: #FFFFFF;
+      --bg-surface-soft: #FAF7F0;
+      --bg-paper: #FAF8F4;
+      --bg-paper-input: #FCFBF9;
+      --bg-hover: rgba(0, 0, 0, 0.04);
+      --bg-active: rgba(0, 0, 0, 0.08);
+
+      --text-main: #1F1D1A;
+      --text-secondary: #5A544A;
+      --text-muted: #8C8477;
+      --text-inverse: #FFFFFF;
+
+      --border-subtle: rgba(60, 50, 40, 0.07);
+      --border-default: rgba(60, 50, 40, 0.14);
+      --border-strong: rgba(60, 50, 40, 0.25);
+
+      /* Semantic Defaults */
+      --color-danger: #D9383A;
+      --color-danger-hover: #BF2628;
+      --color-danger-subtle: #FDF2F2;
+      --color-warning: #D97706;
+      --color-warning-subtle: #FEF3C7;
+      --color-success: #16A34A;
+      --color-success-subtle: #DCFCE7;
+
+      /* Full-Workspace Dark Focus Mode (Listening Stage) */
+      --bg-cinema-workspace: #0F1115;
+      --bg-cinema-surface: #181B22;
+      --bg-cinema-surface-soft: #212631;
+      --border-cinema: rgba(255, 255, 255, 0.1);
+      --text-cinema-main: #F3F4F6;
+      --text-cinema-muted: #9CA3AF;
+    }
+
+    /* -------------------------------------------------------------
+       COLOR SCHEME B: Professional Blue (沉稳专业蓝)
+       ------------------------------------------------------------- */
+    html[data-color-scheme="b-blue"] {
+      --accent-primary: #2563EB;
+      --accent-primary-hover: #1D4ED8;
+      --accent-primary-active: #1E40AF;
+      --accent-primary-subtle: #EFF6FF;
+      --accent-primary-text: #1E40AF;
+      --accent-focus-ring: rgba(37, 99, 235, 0.35);
+
+      --cue-playing-bg: #EFF6FF;
+      --cue-playing-border: #3B82F6;
+      --cue-selected-bg: #F0F9FF;
+      --cue-selected-border: #60A5FA;
+      --cue-diff-highlight: #DBEAFE;
+      --cue-diff-highlight-text: #1E40AF;
+    }
+
+    /* -------------------------------------------------------------
+       COLOR SCHEME C: Teal (平衡海青/蓝绿)
+       ------------------------------------------------------------- */
+    html[data-color-scheme="c-teal"] {
+      --accent-primary: #0D9488;
+      --accent-primary-hover: #0F766E;
+      --accent-primary-active: #115E59;
+      --accent-primary-subtle: #F0FDFA;
+      --accent-primary-text: #115E59;
+      --accent-focus-ring: rgba(13, 148, 136, 0.35);
+
+      --cue-playing-bg: #F0FDFA;
+      --cue-playing-border: #14B8A6;
+      --cue-selected-bg: #E6FFFA;
+      --cue-selected-border: #5EEAD4;
+      --cue-diff-highlight: #CCFBF1;
+      --cue-diff-highlight-text: #115E59;
+    }
+
+    /* -------------------------------------------------------------
+       COLOR SCHEME D: Neutral Monochrome + Single Accent (极简中性灰阶 + 单点交互微亮)
+       ------------------------------------------------------------- */
+    html[data-color-scheme="d-mono"] {
+      --accent-primary: #27272A;
+      --accent-primary-hover: #18181B;
+      --accent-primary-active: #09090B;
+      --accent-primary-subtle: #F4F4F5;
+      --accent-primary-text: #18181B;
+      --accent-focus-ring: rgba(39, 39, 42, 0.35);
+
+      --cue-playing-bg: #F4F4F5;
+      --cue-playing-border: #52525B;
+      --cue-selected-bg: #FAFAFA;
+      --cue-selected-border: #A1A1AA;
+      --cue-diff-highlight: #E4E4E7;
+      --cue-diff-highlight-text: #18181B;
+    }
+
+    /* -------------------------------------------------------------
+       COLOR SCHEME E: Scene-Color System (场景双色温体系: 冷静全局工作台 + 暖色学习高光)
+       ------------------------------------------------------------- */
+    html[data-color-scheme="e-scene"] {
+      --accent-primary: #3B82F6; /* 外层全局为冷静 Slate/Blue */
+      --accent-primary-hover: #2563EB;
+      --accent-primary-active: #1D4ED8;
+      --accent-primary-subtle: #EFF6FF;
+      --accent-primary-text: #1E40AF;
+      --accent-focus-ring: rgba(59, 130, 246, 0.35);
+
+      /* 学习场景专属暖色高光 (Study Warmth Accent) */
+      --study-accent: #D97706;
+      --study-accent-subtle: #FFFBEB;
+      --study-accent-border: #F59E0B;
+
+      --cue-playing-bg: #FFFBEB;
+      --cue-playing-border: #F59E0B;
+      --cue-selected-bg: #EFF6FF;
+      --cue-selected-border: #93C5FD;
+      --cue-diff-highlight: #FEF3C7;
+      --cue-diff-highlight-text: #92400E;
+    }
+
+    /* -------------------------------------------------------------
+       DARK THEME OVERRIDES
+       ------------------------------------------------------------- */
+    [data-theme="dark"] {
+      --bg-app: #121418;
+      --bg-sidebar: #171A20;
+      --bg-surface: #1E222A;
+      --bg-surface-elevated: #262B35;
+      --bg-surface-soft: #191D24;
+      --bg-paper: #1B1E25;
+      --bg-paper-input: #15181E;
+      --bg-hover: rgba(255, 255, 255, 0.05);
+      --bg-active: rgba(255, 255, 255, 0.09);
+
+      --text-main: #EDEDEC;
+      --text-secondary: #ADA99F;
+      --text-muted: #736E65;
+      --text-inverse: #121418;
+
+      --border-subtle: rgba(255, 255, 255, 0.07);
+      --border-default: rgba(255, 255, 255, 0.13);
+      --border-strong: rgba(255, 255, 255, 0.22);
+    }
+
+    [data-theme="dark"][data-color-scheme="b-blue"] {
+      --accent-primary: #3B82F6;
+      --accent-primary-hover: #60A5FA;
+      --accent-primary-active: #2563EB;
+      --accent-primary-subtle: rgba(59, 130, 246, 0.18);
+      --accent-primary-text: #93C5FD;
+      --cue-playing-bg: rgba(59, 130, 246, 0.16);
+      --cue-playing-border: #3B82F6;
+    }
+
+    [data-theme="dark"][data-color-scheme="c-teal"] {
+      --accent-primary: #14B8A6;
+      --accent-primary-hover: #2DD4BF;
+      --accent-primary-active: #0D9488;
+      --accent-primary-subtle: rgba(20, 184, 166, 0.18);
+      --accent-primary-text: #5EEAD4;
+      --cue-playing-bg: rgba(20, 184, 166, 0.16);
+      --cue-playing-border: #14B8A6;
+    }
+
+    [data-theme="dark"][data-color-scheme="d-mono"] {
+      --accent-primary: #E4E4E7;
+      --accent-primary-hover: #F4F4F5;
+      --accent-primary-active: #D4D4D8;
+      --accent-primary-subtle: rgba(255, 255, 255, 0.12);
+      --accent-primary-text: #FFFFFF;
+      --cue-playing-bg: rgba(255, 255, 255, 0.1);
+      --cue-playing-border: #A1A1AA;
+    }
+
+    [data-theme="dark"][data-color-scheme="e-scene"] {
+      --accent-primary: #60A5FA;
+      --accent-primary-hover: #93C5FD;
+      --accent-primary-active: #3B82F6;
+      --accent-primary-subtle: rgba(96, 165, 250, 0.18);
+      --accent-primary-text: #BFDBFE;
+      --study-accent: #FBBF24;
+      --study-accent-subtle: rgba(251, 191, 36, 0.16);
+      --cue-playing-bg: rgba(251, 191, 36, 0.16);
+      --cue-playing-border: #F59E0B;
+    }
+
+    /* ==========================================================================
+       2. BASE LAYOUT & NAVIGATION
+       ========================================================================== */
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html, body {
+      height: 100%;
+      font-family: var(--font-sans);
+      background-color: var(--bg-app);
+      color: var(--text-main);
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+      overflow-x: hidden;
+    }
+
+    /* Outer Wrapper for Round 2 Comparison */
+    .r2-container {
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+    }
+
+    /* Top Comparison Control Bar */
+    .r2-control-bar {
+      position: sticky;
+      top: 0;
+      z-index: 1000;
+      background: var(--bg-surface);
+      border-bottom: 1px solid var(--border-default);
+      box-shadow: var(--shadow-sm);
+      padding: var(--space-3) var(--space-6);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-4);
+    }
+
+    .r2-title-badge {
+      display: flex;
+      align-items: center;
+      gap: var(--space-3);
+    }
+
+    .r2-brand {
+      font-weight: 700;
+      font-size: 15px;
+      letter-spacing: -0.2px;
+      color: var(--text-main);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .r2-tag {
+      font-size: 11px;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: var(--radius-pill);
+      background: var(--accent-primary-subtle);
+      color: var(--accent-primary-text);
+      border: 1px solid var(--accent-primary);
+    }
+
+    /* Section Tabs */
+    .r2-nav-tabs {
+      display: flex;
+      background: var(--bg-surface-soft);
+      padding: 3px;
+      border-radius: var(--radius-md);
+      border: 1px solid var(--border-subtle);
+      gap: 2px;
+    }
+
+    .r2-nav-tab {
+      padding: 6px 14px;
+      border-radius: var(--radius-sm);
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      border: none;
+      background: transparent;
+      cursor: pointer;
+      transition: all var(--transition-fast);
+    }
+
+    .r2-nav-tab.active {
+      background: var(--bg-surface);
+      color: var(--text-main);
+      box-shadow: var(--shadow-sm);
+    }
+
+    .r2-actions {
+      display: flex;
+      align-items: center;
+      gap: var(--space-2);
+    }
+
+    /* Color Variant Selector Pills */
+    .color-variant-pills {
+      display: flex;
+      gap: 6px;
+      background: var(--bg-surface-soft);
+      padding: 3px;
+      border-radius: var(--radius-pill);
+      border: 1px solid var(--border-subtle);
+    }
+
+    .color-pill {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      padding: 4px 12px;
+      border-radius: var(--radius-pill);
+      border: 1px solid transparent;
+      background: transparent;
+      color: var(--text-secondary);
+      cursor: pointer;
+      transition: all var(--transition-fast);
+    }
+
+    .color-pill:hover {
+      background: var(--bg-hover);
+      color: var(--text-main);
+    }
+
+    .color-pill.active {
+      background: var(--bg-surface);
+      color: var(--text-main);
+      border-color: var(--border-default);
+      box-shadow: var(--shadow-sm);
+    }
+
+    .color-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      display: inline-block;
+    }
+
+    .color-dot.b { background: #2563EB; }
+    .color-dot.c { background: #0D9488; }
+    .color-dot.d { background: #27272A; }
+    .color-dot.e { background: linear-gradient(135deg, #3B82F6, #F59E0B); }
+
+    /* Button Styles */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      font-family: inherit;
+      font-size: 13px;
+      font-weight: 600;
+      padding: 6px 14px;
+      border-radius: var(--radius-sm);
+      border: 1px solid transparent;
+      cursor: pointer;
+      transition: all var(--transition-fast);
+      white-space: nowrap;
+      text-decoration: none;
+    }
+
+    .btn-primary {
+      background: var(--accent-primary);
+      color: white;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+    }
+    .btn-primary:hover {
+      background: var(--accent-primary-hover);
+    }
+    .btn-primary:active {
+      background: var(--accent-primary-active);
+    }
+
+    .btn-secondary {
+      background: var(--bg-surface);
+      border-color: var(--border-default);
+      color: var(--text-main);
+      box-shadow: var(--shadow-sm);
+    }
+    .btn-secondary:hover {
+      background: var(--bg-hover);
+      border-color: var(--border-strong);
+    }
+
+    .btn-quiet {
+      background: transparent;
+      color: var(--text-secondary);
+    }
+    .btn-quiet:hover {
+      background: var(--bg-hover);
+      color: var(--text-main);
+    }
+
+    .btn-danger {
+      background: var(--color-danger-subtle);
+      border-color: rgba(217, 56, 58, 0.2);
+      color: var(--color-danger);
+    }
+    .btn-danger:hover {
+      background: var(--color-danger);
+      color: white;
+    }
+
+    .btn-sm {
+      font-size: 12px;
+      padding: 4px 10px;
+    }
+
+    .btn-lg {
+      font-size: 14px;
+      padding: 10px 20px;
+      border-radius: var(--radius-md);
+    }
+
+    /* Chips */
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: var(--radius-pill);
+      background: var(--bg-surface-soft);
+      border: 1px solid var(--border-subtle);
+      color: var(--text-secondary);
+    }
+
+    .chip-primary {
+      background: var(--accent-primary-subtle);
+      border-color: var(--accent-primary);
+      color: var(--accent-primary-text);
+    }
+
+    .chip-warning {
+      background: var(--color-warning-subtle);
+      border-color: var(--color-warning);
+      color: var(--color-warning);
+    }
+
+    .chip-success {
+      background: var(--color-success-subtle);
+      border-color: var(--color-success);
+      color: var(--color-success);
+    }
+
+    /* ==========================================================================
+       3. SECTION VIEWS (Section 1 / Section 2 / Section 3)
+       ========================================================================== */
+    .r2-section {
+      display: none;
+      padding: var(--space-6);
+      flex: 1;
+    }
+
+    .r2-section.active {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-6);
+    }
+
+    /* Section Intro Banner */
+    .section-intro-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-default);
+      border-radius: var(--radius-lg);
+      padding: var(--space-5);
+      box-shadow: var(--shadow-sm);
+    }
+
+    .section-intro-card h2 {
+      font-size: 17px;
+      font-weight: 700;
+      color: var(--text-main);
+      display: flex;
+      align-items: center;
+      gap: var(--space-2);
+    }
+
+    .section-intro-card p {
+      font-size: 13px;
+      color: var(--text-secondary);
+      margin-top: 4px;
+      line-height: 1.6;
+    }
+
+    /* ==========================================================================
+       SECTION 1: ACCENT COLOR COMPARISON (CONTROLLED COMPOSITE WORKSPACE)
+       ========================================================================== */
+    .controlled-workspace-mock {
+      background: var(--bg-app);
+      border: 1px solid var(--border-default);
+      border-radius: var(--radius-xl);
+      box-shadow: var(--shadow-lg);
+      overflow: hidden;
+      display: grid;
+      grid-template-columns: 240px 1fr;
+      min-height: 640px;
+      transition: all var(--transition-normal);
+    }
+
+    .mock-sidebar {
+      background: var(--bg-sidebar);
+      border-right: 1px solid var(--border-subtle);
+      padding: var(--space-4) 0;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+
+    .mock-nav-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 14px;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-secondary);
+      margin: 0 var(--space-2);
+      border-radius: var(--radius-sm);
+    }
+
+    .mock-nav-item.active {
+      background: var(--bg-surface);
+      color: var(--accent-primary-text);
+      font-weight: 600;
+      box-shadow: var(--shadow-sm);
+      border: 1px solid var(--border-subtle);
+    }
+
+    .mock-main-area {
+      display: flex;
+      flex-direction: column;
+      background: var(--bg-app);
+      overflow-y: auto;
+    }
+
+    .mock-header {
+      background: var(--bg-surface);
+      border-bottom: 1px solid var(--border-subtle);
+      padding: var(--space-4) var(--space-6);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .mock-content-grid {
+      padding: var(--space-6);
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: var(--space-5);
+    }
+
+    /* Left Card: Cue Navigator & Action Hierarchy */
+    .mock-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-default);
+      border-radius: var(--radius-lg);
+      padding: var(--space-5);
+      box-shadow: var(--shadow-sm);
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-4);
+    }
+
+    .mock-cue-card {
+      background: var(--bg-surface-soft);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      padding: var(--space-3);
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      transition: all var(--transition-fast);
+    }
+
+    .mock-cue-card.playing {
+      background: var(--cue-playing-bg);
+      border-color: var(--cue-playing-border);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+    }
+
+    .mock-cue-card.selected {
+      background: var(--cue-selected-bg);
+      border-color: var(--cue-selected-border);
+    }
+
+    /* Right Card: Full-Workspace Dark Focus Mode Simulation */
+    .mock-dark-stage {
+      background: var(--bg-cinema-workspace);
+      border: 1px solid var(--border-cinema);
+      border-radius: var(--radius-lg);
+      padding: var(--space-5);
+      color: var(--text-cinema-main);
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-4);
+    }
+
+    .stage-canvas-box {
+      height: 140px;
+      background: var(--bg-cinema-surface);
+      border: 1px solid var(--border-cinema);
+      border-radius: var(--radius-md);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      text-align: center;
+      padding: var(--space-3);
+    }
+
+    .waveform-visual-bar {
+      display: flex;
+      align-items: center;
+      gap: 3px;
+      width: 80%;
+      height: 36px;
+      margin-top: 10px;
+    }
+
+    .wave-seg {
+      flex: 1;
+      background: rgba(255, 255, 255, 0.2);
+      border-radius: 2px;
+      height: 30%;
+    }
+
+    .wave-seg.active {
+      background: var(--accent-primary);
+      height: 90%;
+    }
+
+    /* Variant Comparison Summary Grid */
+    .variant-descriptions-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: var(--space-4);
+      margin-top: var(--space-4);
+    }
+
+    .variant-desc-card {
+      background: var(--bg-surface);
+      border: 1.5px solid var(--border-default);
+      border-radius: var(--radius-md);
+      padding: var(--space-4);
+      cursor: pointer;
+      transition: all var(--transition-fast);
+    }
+
+    .variant-desc-card.active {
+      border-color: var(--accent-primary);
+      box-shadow: var(--shadow-md);
+      background: var(--accent-primary-subtle);
+    }
+
+    .variant-desc-card h4 {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--text-main);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .variant-desc-card p {
+      font-size: 12px;
+      color: var(--text-secondary);
+      margin-top: 6px;
+      line-height: 1.5;
+    }
+
+    /* ==========================================================================
+       SECTION 2: CONTEXTUAL STATE LANGUAGE PROTOTYPE
+       ========================================================================== */
+    .state-scene-tabs {
+      display: flex;
+      gap: var(--space-3);
+      border-bottom: 2px solid var(--border-subtle);
+      padding-bottom: var(--space-2);
+    }
+
+    .state-scene-btn {
+      background: transparent;
+      border: none;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-muted);
+      padding: 6px 12px;
+      cursor: pointer;
+      border-radius: var(--radius-sm);
+      transition: all var(--transition-fast);
+    }
+
+    .state-scene-btn.active {
+      color: var(--accent-primary);
+      background: var(--accent-primary-subtle);
+      font-weight: 700;
+    }
+
+    .scene-container {
+      display: none;
+      flex-direction: column;
+      gap: var(--space-4);
+    }
+
+    .scene-container.active {
+      display: flex;
+    }
+
+    .scene-banner {
+      background: var(--bg-surface);
+      border-left: 4px solid var(--accent-primary);
+      padding: var(--space-4);
+      border-radius: 0 var(--radius-md) var(--radius-md) 0;
+      box-shadow: var(--shadow-sm);
+      border-top: 1px solid var(--border-subtle);
+      border-right: 1px solid var(--border-subtle);
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    /* ==========================================================================
+       SECTION 3: QUICK PREFERENCE CAPTURE
+       ========================================================================== */
+    .feedback-form-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-default);
+      border-radius: var(--radius-lg);
+      padding: var(--space-6);
+      box-shadow: var(--shadow-md);
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-5);
+      max-width: 800px;
+      margin: 0 auto;
+      width: 100%;
+    }
+
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-2);
+    }
+
+    .form-label {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--text-main);
+    }
+
+    .form-help {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    .radio-card-group {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: var(--space-3);
+    }
+
+    .radio-choice-card {
+      border: 1.5px solid var(--border-default);
+      border-radius: var(--radius-md);
+      padding: var(--space-4);
+      background: var(--bg-surface-soft);
+      cursor: pointer;
+      transition: all var(--transition-fast);
+    }
+
+    .radio-choice-card:hover {
+      border-color: var(--border-strong);
+    }
+
+    .radio-choice-card.selected {
+      border-color: var(--accent-primary);
+      background: var(--accent-primary-subtle);
+    }
+
+    .form-textarea {
+      width: 100%;
+      min-height: 100px;
+      padding: 10px 14px;
+      font-family: inherit;
+      font-size: 13px;
+      border: 1px solid var(--border-default);
+      border-radius: var(--radius-sm);
+      background: var(--bg-paper-input);
+      color: var(--text-main);
+      outline: none;
+      resize: vertical;
+    }
+
+    .form-textarea:focus {
+      border-color: var(--accent-primary);
+    }
+
+    .json-output-box {
+      background: #181B22;
+      color: #E2E8F0;
+      padding: var(--space-4);
+      border-radius: var(--radius-md);
+      font-family: var(--font-mono);
+      font-size: 12px;
+      white-space: pre-wrap;
+      max-height: 240px;
+      overflow-y: auto;
+      border: 1px solid var(--border-cinema);
+    }
+  </style>
+</head>
+<body>
+
+  <div class="r2-container">
+
+    <!-- ============================================================== -->
+    <!-- TOP CONTROL & NAVIGATION BAR                                   -->
+    <!-- ============================================================== -->
+    <header class="r2-control-bar">
+      <div class="r2-title-badge">
+        <div class="r2-brand">
+          <span>🎧 ListenTrace M13</span>
+        </div>
+        <span class="r2-tag">Round 2 决策对比包</span>
+      </div>
+
+      <!-- Navigation Tabs: Section 1 / Section 2 / Section 3 -->
+      <nav class="r2-nav-tabs">
+        <button class="r2-nav-tab active" onclick="switchSection('color-section')">
+          🎨 Section 1: 色彩性格对比 (B/C/D/E)
+        </button>
+        <button class="r2-nav-tab" onclick="switchSection('state-section')">
+          🚦 Section 2: 场景状态语言强度 (3场景)
+        </button>
+        <button class="r2-nav-tab" onclick="switchSection('feedback-section')">
+          📝 Section 3: 偏好捕获与 JSON 导出
+        </button>
+      </nav>
+
+      <!-- Color Variant Switcher Pills -->
+      <div class="r2-actions">
+        <div class="color-variant-pills" id="color-pills-bar">
+          <button class="color-pill active" onclick="setColorScheme('b-blue')">
+            <span class="color-dot b"></span> B 沉稳专业蓝
+          </button>
+          <button class="color-pill" onclick="setColorScheme('c-teal')">
+            <span class="color-dot c"></span> C 平衡海青/蓝绿
+          </button>
+          <button class="color-pill" onclick="setColorScheme('d-mono')">
+            <span class="color-dot d"></span> D 极简中性灰阶
+          </button>
+          <button class="color-pill" onclick="setColorScheme('e-scene')">
+            <span class="color-dot e"></span> E 场景双色温体系
+          </button>
+        </div>
+
+        <button class="btn btn-quiet btn-sm" onclick="toggleTheme()" title="切换深色/浅色模式">
+          <span id="theme-toggle-icon">🌙</span> 主题
+        </button>
+      </div>
+    </header>
+
+    <!-- ============================================================== -->
+    <!-- SECTION 1: ACCENT COLOR COMPARISON (B / C / D / E)             -->
+    <!-- ============================================================== -->
+    <section class="r2-section active" id="color-section">
+      <div class="section-intro-card">
+        <h2>🎨 Section 1 — 色彩性格对比 (Color Character Comparison)</h2>
+        <p>
+          <strong>控制变量基准</strong>：排版间距（Spacious Learning）、卡片深度（Prototype A）、双轨外壳（Hybrid Shell）、暗色视听区（Focus Mode）与文案完全恒定。
+          请通过上方药丸按钮实时切换 <strong>B / C / D / E</strong>，评估其在工作台、高亮句段、主次按钮与暗色播放台中的视觉气质。
+        </p>
+      </div>
+
+      <!-- Live Controlled Composite Mockup -->
+      <div class="controlled-workspace-mock">
+        <!-- Sidebar (Hybrid Shell) -->
+        <aside class="mock-sidebar">
+          <div>
+            <div style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; padding: 0 var(--space-4) var(--space-2);">
+              工作台导航
+            </div>
+            <div class="mock-nav-item active">
+              <span>📚 素材资料库</span>
+              <span class="chip chip-primary">12</span>
+            </div>
+            <div class="mock-nav-item">
+              <span>🎧 聚焦播放与快速练习</span>
+              <span>●</span>
+            </div>
+            <div class="mock-nav-item">
+              <span>📝 听写比对与错误归因</span>
+              <span class="chip">Stage 3</span>
+            </div>
+            <div class="mock-nav-item">
+              <span>🎙️ 句子级影子跟读</span>
+              <span class="chip">Stage 4</span>
+            </div>
+            <div class="mock-nav-item">
+              <span>📄 回忆重构与总结</span>
+              <span class="chip">Stage 5</span>
+            </div>
+          </div>
+
+          <div style="padding: 0 var(--space-3);">
+            <div style="background: var(--bg-surface); padding: 8px 10px; border-radius: var(--radius-sm); border: 1px solid var(--border-subtle); font-size: 11px;">
+              <div style="color: var(--text-muted);">循环尾部补偿 (Grace):</div>
+              <strong style="color: var(--accent-primary);">200 ms (校准闭环)</strong>
+            </div>
+          </div>
+        </aside>
+
+        <!-- Main Content Area -->
+        <main class="mock-main-area">
+          <header class="mock-header">
+            <div>
+              <div style="font-size: 11px; color: var(--text-muted);">当前研读素材</div>
+              <h3 style="font-size: 15px; font-weight: 700; color: var(--text-main);">2億年後地球會是什麼樣子？</h3>
+            </div>
+            <div style="display: flex; gap: var(--space-2);">
+              <button class="btn btn-secondary btn-sm">导出学习凭证</button>
+              <button class="btn btn-primary btn-sm">▶ 继续精听 (Stage 3)</button>
+            </div>
+          </header>
+
+          <div class="mock-content-grid">
+            <!-- Left Card: Cue Navigator & Action Hierarchy -->
+            <div class="mock-card">
+              <div style="display: flex; justify-content: space-between; align-items: center;">
+                <strong style="font-size: 13px;">📜 句段流与状态标识 (Cue Navigator)</strong>
+                <span class="chip">Spacious Learning</span>
+              </div>
+
+              <!-- Cue Card 1: Normal -->
+              <div class="mock-cue-card">
+                <div style="display: flex; justify-content: space-between; font-size: 11px; color: var(--text-muted);">
+                  <span style="font-family: var(--font-mono); font-weight: 600;">#06 · 00:22.1 - 00:27.4</span>
+                  <span class="chip chip-success">已掌握</span>
+                </div>
+                <div style="font-size: 13px;">科學家預測，未來的地球將會迎來徹底的陸地重組。</div>
+              </div>
+
+              <!-- Cue Card 2: Playing State (Active Theme Highlight) -->
+              <div class="mock-cue-card playing">
+                <div style="display: flex; justify-content: space-between; font-size: 11px;">
+                  <span style="font-family: var(--font-mono); font-weight: 700; color: var(--accent-primary-text);">
+                    ▶ #08 · 00:32.4 - 00:36.1 (当前播放)
+                  </span>
+                  <span class="chip chip-primary">正在播放</span>
+                </div>
+                <div style="font-size: 13px; font-weight: 600; color: var(--text-main);">
+                  在板塊構造運動的持續推動下，地表將發生翻天覆地的變化。
+                </div>
+                <div style="display: flex; gap: 6px; justify-content: flex-end; margin-top: 4px;">
+                  <button class="btn btn-primary btn-sm">📝 归因此句</button>
+                  <button class="btn btn-secondary btn-sm">🎙️ 跟读</button>
+                </div>
+              </div>
+
+              <!-- Action Grammar Preview -->
+              <div style="border-top: 1px solid var(--border-subtle); padding-top: var(--space-3); display: flex; justify-content: space-between; align-items: center;">
+                <button class="btn btn-danger btn-sm">🗑️ 移除素材</button>
+                <div style="display: flex; gap: 6px;">
+                  <button class="btn btn-quiet btn-sm">跳过此句</button>
+                  <button class="btn btn-secondary btn-sm">⚡ 快速练习</button>
+                  <button class="btn btn-primary btn-sm">保存并进入下一句 →</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Right Card: Dark Focus Mode Treatment -->
+            <div class="mock-dark-stage">
+              <div style="display: flex; justify-content: space-between; align-items: center;">
+                <div style="font-size: 12px; font-weight: 600; color: #9CA3AF;">🎬 视听聚焦舞台 (Focus Mode)</div>
+                <span class="chip" style="background: rgba(255,255,255,0.1); color: #E5E7EB;">200ms Grace</span>
+              </div>
+
+              <div class="stage-canvas-box">
+                <div style="font-size: 18px; font-weight: 600; line-height: 1.4; color: white;">
+                  在板塊構造運動的持續推動下，地表將發生翻天覆地的變化。
+                </div>
+
+                <div class="waveform-visual-bar">
+                  <div class="wave-seg"></div>
+                  <div class="wave-seg"></div>
+                  <div class="wave-seg active"></div>
+                  <div class="wave-seg active"></div>
+                  <div class="wave-seg active"></div>
+                  <div class="wave-seg"></div>
+                  <div class="wave-seg"></div>
+                </div>
+              </div>
+
+              <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.05); padding: 8px 12px; border-radius: var(--radius-md);">
+                <span style="font-size: 11px; font-family: var(--font-mono); color: #9CA3AF;">00:32.4 / 04:18.0</span>
+                <div style="display: flex; gap: 8px;">
+                  <button class="btn btn-quiet btn-sm" style="color: white;">↺ 重听</button>
+                  <button class="btn btn-primary btn-sm" style="border-radius: var(--radius-pill); padding: 4px 14px;">▶ 播放</button>
+                  <button class="btn btn-quiet btn-sm" style="color: white;">🔁 循环</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </main>
+      </div>
+
+      <!-- Color Variant Analysis Cards -->
+      <div class="variant-descriptions-grid">
+        <div class="variant-desc-card active" id="card-b" onclick="setColorScheme('b-blue')">
+          <h4><span class="color-dot b"></span> B — 沉稳专业蓝 (Professional Blue)</h4>
+          <p>
+            <strong>气质</strong>：严谨、经典桌面生产力工具质感（接近 VSCode / Linear）。<br>
+            <strong>优势</strong>：信噪比高，视觉抗疲劳性极佳，与深色视听台搭配自然。
+          </p>
+        </div>
+
+        <div class="variant-desc-card" id="card-c" onclick="setColorScheme('c-teal')">
+          <h4><span class="color-dot c"></span> C — 平衡海青/蓝绿 (Teal)</h4>
+          <p>
+            <strong>气质</strong>：清爽、现代、兼具理性工作台与学习成长的生机感。<br>
+            <strong>优势</strong>：既能作为交互焦点，又具备天然的积极学习反馈属性。
+          </p>
+        </div>
+
+        <div class="variant-desc-card" id="card-d" onclick="setColorScheme('d-mono')">
+          <h4><span class="color-dot d"></span> D — 极简中性灰阶 (Monochrome)</h4>
+          <p>
+            <strong>气质</strong>：极度克制、书卷纸质感最强，界面退至内容之后。<br>
+            <strong>优势</strong>：零色彩干扰，所有注意力均由排版与文本内容主导。
+          </p>
+        </div>
+
+        <div class="variant-desc-card" id="card-e" onclick="setColorScheme('e-scene')">
+          <h4><span class="color-dot e"></span> E — 场景双色温 (Scene-Color System)</h4>
+          <p>
+            <strong>气质</strong>：外层冷色专业工作台（Blue），内层研读暖色高光（Warm Amber）。<br>
+            <strong>优势</strong>：兼顾了管理界面的秩序感与精听研读时的温馨纸面专注感。
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================== -->
+    <!-- SECTION 2: CONTEXTUAL STATE LANGUAGE PROTOTYPE                 -->
+    <!-- ============================================================== -->
+    <section class="r2-section" id="state-section">
+      <div class="section-intro-card">
+        <h2>🚦 Section 2 — 场景状态语言强度对比 (Contextual State-Language Prototype)</h2>
+        <p>
+          在不同学习场景下，状态表达（Progress / Badges / Indicators）的密度与显隐策略应当<strong>动态适配场景目标</strong>，杜绝全天候“徽章云”轰炸。
+        </p>
+      </div>
+
+      <!-- State Scene Switcher Tabs -->
+      <div class="state-scene-tabs">
+        <button class="state-scene-btn active" onclick="switchStateScene('scene-library')">
+          1. 资料库与历史场景 (丰富状态，便于全局扫描)
+        </button>
+        <button class="state-scene-btn" onclick="switchStateScene('scene-player')">
+          2. 播放与聚焦视听场景 (克制状态，零徽章云干扰)
+        </button>
+        <button class="state-scene-btn" onclick="switchStateScene('scene-guided')">
+          3. 引导研读与回忆场景 (平衡状态，辅助认知合成)
+        </button>
+      </div>
+
+      <!-- Scene 1: Material Library / History (Rich State Visibility) -->
+      <div class="scene-container active" id="scene-library">
+        <div class="scene-banner">
+          <strong style="color: var(--text-main); font-size: 14px;">场景策略 1：素材资料库与全局历史（高辨识度扫描）</strong>
+          <p style="font-size: 12px; color: var(--text-secondary); margin-top: 2px;">
+            学习者需要快速掌握多素材的进度、暂停阶段、需关注弱点与归档状态。允许合理使用胶囊徽章（Chips）与多维度状态标识。
+          </p>
+        </div>
+
+        <div style="background: var(--bg-surface); border: 1px solid var(--border-default); border-radius: var(--radius-lg); padding: var(--space-5); box-shadow: var(--shadow-sm);">
+          <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+            <thead>
+              <tr style="border-bottom: 1px solid var(--border-subtle); color: var(--text-muted); font-size: 11px; text-transform: uppercase;">
+                <th style="text-align: left; padding: 8px 12px;">素材与主题</th>
+                <th style="text-align: left; padding: 8px 12px;">学习状态</th>
+                <th style="text-align: left; padding: 8px 12px;">诊断与证据</th>
+                <th style="text-align: right; padding: 8px 12px;">快捷动作</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr style="border-bottom: 1px solid var(--border-subtle);">
+                <td style="padding: 12px;">
+                  <strong style="color: var(--text-main);">2億年後地球會是什麼樣子？</strong>
+                  <div style="font-size: 11px; color: var(--text-muted);">04:18 · 38 句 · MP4</div>
+                </td>
+                <td style="padding: 12px;">
+                  <span class="chip chip-primary">Stage 3 听写比对 (48%)</span>
+                </td>
+                <td style="padding: 12px;">
+                  <span class="chip chip-warning">⚠️ 3 个未掌握难点句</span>
+                  <span class="chip" style="margin-left: 4px;">12 条录音 Take</span>
+                </td>
+                <td style="padding: 12px; text-align: right;">
+                  <button class="btn btn-primary btn-sm">继续训练 ▶</button>
+                </td>
+              </tr>
+
+              <tr style="border-bottom: 1px solid var(--border-subtle);">
+                <td style="padding: 12px;">
+                  <strong style="color: var(--text-main);">TED: 習慣的力量與神經重塑</strong>
+                  <div style="font-size: 11px; color: var(--text-muted);">12:45 · 94 句 · MP3</div>
+                </td>
+                <td style="padding: 12px;">
+                  <span class="chip chip-success">✓ Stage 5 已完成</span>
+                </td>
+                <td style="padding: 12px;">
+                  <span class="chip">18 篇沉淀笔记</span>
+                  <span class="chip" style="margin-left: 4px;">已归档</span>
+                </td>
+                <td style="padding: 12px; text-align: right;">
+                  <button class="btn btn-secondary btn-sm">查看报告</button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Scene 2: Player / Focused Listening (Quiet State Language) -->
+      <div class="scene-container" id="scene-player">
+        <div class="scene-banner">
+          <strong style="color: var(--text-main); font-size: 14px;">场景策略 2：播放与聚焦视听（克制低噪状态）</strong>
+          <p style="font-size: 12px; color: var(--text-secondary); margin-top: 2px;">
+            在连续听音与快速选句时，杜绝满屏徽章干扰。通过<strong>空间高亮、纯色左指示条、微妙波形光泽</strong>传达播放状态，彻底消除视觉杂音。
+          </p>
+        </div>
+
+        <div style="background: var(--bg-cinema-workspace); border: 1px solid var(--border-cinema); border-radius: var(--radius-lg); padding: var(--space-6); color: white; display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-5);">
+          <!-- Left: Minimalist Clean Cue List -->
+          <div style="display: flex; flex-direction: column; gap: var(--space-2);">
+            <div style="font-size: 11px; font-weight: 700; color: #9CA3AF; text-transform: uppercase;">
+              静音化句段流 (Quiet Cue Stream)
+            </div>
+
+            <div style="padding: 10px 12px; background: rgba(255,255,255,0.03); border-radius: var(--radius-sm); font-size: 13px; color: #9CA3AF;">
+              #07 · 大洋板塊將會逐步隱沒，大西洋的擴張最終也會停止。
+            </div>
+
+            <!-- Active Playing with spatial focus, NO badge cloud -->
+            <div style="padding: 12px 14px; background: rgba(255,255,255,0.08); border-left: 3px solid var(--accent-primary); border-radius: 0 var(--radius-sm) var(--radius-sm) 0; font-size: 14px; font-weight: 600; color: white;">
+              #08 · 在板塊構造運動的持續推動下，地表將發生翻天覆地的變化。
+            </div>
+
+            <div style="padding: 10px 12px; background: rgba(255,255,255,0.03); border-radius: var(--radius-sm); font-size: 13px; color: #9CA3AF;">
+              #09 · 所有大陸將再度聚合成一個名為『終極盤古』的超級大陸。
+            </div>
+          </div>
+
+          <!-- Right: Quiet State Metrics -->
+          <div style="display: flex; flex-direction: column; justify-content: center; gap: var(--space-3); background: rgba(255,255,255,0.02); padding: var(--space-4); border-radius: var(--radius-md); border: 1px solid rgba(255,255,255,0.05);">
+            <div style="font-size: 12px; color: #9CA3AF;">当前视听专注度评估：</div>
+            <div style="font-size: 15px; font-weight: 600;">✓ 零杂乱徽章，注意力 100% 聚焦于发音与字幕</div>
+            <div style="font-size: 12px; color: #9CA3AF; line-height: 1.6;">
+              • 播放状态由纯色指示条显性传达<br>
+              • 循环尾部补偿（200ms Grace）收拢至底部状态栏<br>
+              • 选句状态仅通过微妙边框反馈
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Scene 3: Guided Learning / Recall / Diagnosis (Balanced State Language) -->
+      <div class="scene-container" id="scene-guided">
+        <div class="scene-banner">
+          <strong style="color: var(--text-main); font-size: 14px;">场景策略 3：引导研读与回忆重构（平衡辅助认知）</strong>
+          <p style="font-size: 12px; color: var(--text-secondary); margin-top: 2px;">
+            在 Stage 3（听写比对）与 Stage 5（回忆重构）中，状态语言服务于<strong>认知盲区诊断与证据回溯</strong>，采用柔和纸质高亮与分类标签。
+          </p>
+        </div>
+
+        <div style="background: var(--bg-paper); border: 1px solid var(--border-default); border-radius: var(--radius-lg); padding: var(--space-6); box-shadow: var(--shadow-sm); display: flex; flex-direction: column; gap: var(--space-4);">
+          <!-- Step Progress -->
+          <div style="display: flex; gap: var(--space-4); font-size: 12px; font-weight: 600; border-bottom: 1px solid var(--border-subtle); padding-bottom: var(--space-3);">
+            <span style="color: var(--color-success);">✓ Stage 1 盲听</span>
+            <span style="color: var(--color-success);">✓ Stage 2 听写</span>
+            <span style="color: var(--accent-primary); border-bottom: 2px solid var(--accent-primary); padding-bottom: 2px;">● Stage 3 归因中</span>
+            <span style="color: var(--text-muted);">Stage 4 跟读</span>
+            <span style="color: var(--text-muted);">Stage 5 回忆</span>
+          </div>
+
+          <!-- Diff Display -->
+          <div style="background: var(--bg-surface); padding: var(--space-4); border-radius: var(--radius-md); border: 1px solid var(--border-subtle); font-size: 15px; line-height: 1.8;">
+            在 <span style="background: var(--cue-diff-highlight); color: var(--cue-diff-highlight-text); padding: 2px 6px; border-radius: 4px; font-weight: 600;">板塊構造運動</span> 的持續推動下，地表將發生翻天覆地的變化。
+          </div>
+
+          <!-- Multi-dim Taxonomy Chips -->
+          <div style="display: flex; gap: var(--space-2); align-items: center;">
+            <span style="font-size: 12px; font-weight: 700; color: var(--text-secondary);">听音归因分类:</span>
+            <span class="chip chip-primary">⚡ 连音/吞音</span>
+            <span class="chip chip-primary">🔍 专有名词</span>
+            <span class="chip">💭 语法断句</span>
+            <span class="chip">🏃 语速过快</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================== -->
+    <!-- SECTION 3: QUICK PREFERENCE CAPTURE                            -->
+    <!-- ============================================================== -->
+    <section class="r2-section" id="feedback-section">
+      <div class="section-intro-card">
+        <h2>📝 Section 3 — Round 2 偏好捕获与决策导出 (Decision Capture)</h2>
+        <p>
+          请在此快速选择您的设计倾向，点击底部按钮可直接生成并导出标准 JSON 决策文件，作为 M13 PyQt6 正式开发依据。
+        </p>
+      </div>
+
+      <div class="feedback-form-card">
+        <!-- Question 1: Accent Color -->
+        <div class="form-group">
+          <div class="form-label">1. 您首选的色彩性格方案 (Accent Color Selection):</div>
+          <div class="form-help">排版与结构完全恒定，仅代表品牌与学习氛围的主色调。</div>
+          <div class="radio-card-group">
+            <div class="radio-choice-card selected" onclick="selectColorChoice('B')">
+              <strong style="color: var(--text-main);">Option B — 沉稳专业蓝 (Professional Blue)</strong>
+              <div style="font-size: 11px; color: var(--text-secondary); margin-top: 4px;">经典高效桌面工具感，极高抗疲劳度。</div>
+            </div>
+            <div class="radio-choice-card" onclick="selectColorChoice('C')">
+              <strong style="color: var(--text-main);">Option C — 平衡海青/蓝绿 (Teal)</strong>
+              <div style="font-size: 11px; color: var(--text-secondary); margin-top: 4px;">兼具理性与学习成长感，清爽现代。</div>
+            </div>
+            <div class="radio-choice-card" onclick="selectColorChoice('D')">
+              <strong style="color: var(--text-main);">Option D — 极简中性灰阶 (Monochrome)</strong>
+              <div style="font-size: 11px; color: var(--text-secondary); margin-top: 4px;">纯粹纸面书卷感，界面退至内容之后。</div>
+            </div>
+            <div class="radio-choice-card" onclick="selectColorChoice('E')">
+              <strong style="color: var(--text-main);">Option E — 场景双色温 (Scene-Color System)</strong>
+              <div style="font-size: 11px; color: var(--text-secondary); margin-top: 4px;">冷色全局外壳 + 暖色学习高光与进度。</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Question 2: State Language Density -->
+        <div class="form-group">
+          <div class="form-label">2. 场景状态语言分级强度评估 (State-Language Judgment):</div>
+          <div class="radio-card-group">
+            <div class="radio-choice-card selected" onclick="selectStateJudgment('balanced')">
+              <strong style="color: var(--text-main);">恰到好处 (Balanced - 推荐)</strong>
+              <div style="font-size: 11px; color: var(--text-secondary); margin-top: 4px;">资料库丰富、播放器极简、研读页适度。</div>
+            </div>
+            <div class="radio-choice-card" onclick="selectStateJudgment('too-quiet')">
+              <strong style="color: var(--text-main);">偏向安静 (Too Quiet)</strong>
+              <div style="font-size: 11px; color: var(--text-secondary); margin-top: 4px;">希望全场景进一步缩减徽章与状态高亮。</div>
+            </div>
+            <div class="radio-choice-card" onclick="selectStateJudgment('too-busy')">
+              <strong style="color: var(--text-main);">偏向显性 (More Visible)</strong>
+              <div style="font-size: 11px; color: var(--text-secondary); margin-top: 4px;">希望在播放与研读中保留更多状态标签。</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Question 3: Free-Text Notes -->
+        <div class="form-group">
+          <div class="form-label">3. 补充说明与具体调整意见 (Optional Feedback):</div>
+          <textarea class="form-textarea" id="user-notes-input" placeholder="输入您对特定颜色、暗色舞台对比度或纸面研读质感的其他想法...">经对比，方案 E（场景双色温体系）能够很好地平衡工作台与学习专注度；状态语言分级清晰，播放器低噪策略非常适合连续精听。</textarea>
+        </div>
+
+        <!-- Actions & Export -->
+        <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid var(--border-subtle); padding-top: var(--space-4);">
+          <button class="btn btn-primary btn-lg" onclick="generateAndExportJson()">
+            💾 生成并导出 Round 2 决策 JSON
+          </button>
+          <span style="font-size: 12px; color: var(--text-muted);">
+            导出的 JSON 可直接存入项目文档或提交反馈
+          </span>
+        </div>
+
+        <!-- Live JSON Display -->
+        <div class="form-group" style="margin-top: var(--space-2);">
+          <div class="form-label">实时决策 JSON 预览:</div>
+          <div class="json-output-box" id="json-preview-box"></div>
+        </div>
+      </div>
+    </section>
+
+  </div>
+
+  <!-- ============================================================== -->
+  <!-- 4. JAVASCRIPT LOGIC FOR ROUND 2 PROTOTYPE                      -->
+  <!-- ============================================================== -->
+  <script>
+    // State management
+    let currentSection = 'color-section';
+    let currentColorVariant = 'b-blue';
+    let selectedColorChoice = 'B';
+    let selectedStateDensity = 'balanced';
+
+    // Section Switching
+    function switchSection(sectionId) {
+      document.querySelectorAll('.r2-section').forEach(sec => sec.classList.remove('active'));
+      document.querySelectorAll('.r2-nav-tab').forEach(tab => tab.classList.remove('active'));
+
+      const targetSec = document.getElementById(sectionId);
+      if (targetSec) targetSec.classList.add('active');
+
+      const activeBtn = Array.from(document.querySelectorAll('.r2-nav-tab')).find(btn =>
+        btn.getAttribute('onclick') && btn.getAttribute('onclick').includes(sectionId)
+      );
+      if (activeBtn) activeBtn.classList.add('active');
+
+      currentSection = sectionId;
+      if (sectionId === 'feedback-section') updateJsonPreview();
+    }
+
+    // Color Scheme Switching
+    function setColorScheme(schemeKey) {
+      document.documentElement.setAttribute('data-color-scheme', schemeKey);
+      currentColorVariant = schemeKey;
+
+      // Update pills
+      document.querySelectorAll('.color-pill').forEach(pill => {
+        if (pill.getAttribute('onclick').includes(schemeKey)) pill.classList.add('active');
+        else pill.classList.remove('active');
+      });
+
+      // Update description cards
+      const mapKey = schemeKey.split('-')[0]; // 'b', 'c', 'd', 'e'
+      document.querySelectorAll('.variant-desc-card').forEach(card => card.classList.remove('active'));
+      const activeCard = document.getElementById('card-' + mapKey);
+      if (activeCard) activeCard.classList.add('active');
+
+      // Auto-sync feedback radio selection
+      selectColorChoice(mapKey.toUpperCase());
+    }
+
+    // Theme Toggle
+    function toggleTheme() {
+      const html = document.documentElement;
+      const current = html.getAttribute('data-theme');
+      const next = current === 'dark' ? 'light' : 'dark';
+      html.setAttribute('data-theme', next);
+      document.getElementById('theme-toggle-icon').textContent = next === 'dark' ? '☀️' : '🌙';
+    }
+
+    // State Scene Switching (Section 2)
+    function switchStateScene(sceneId) {
+      document.querySelectorAll('.scene-container').forEach(c => c.classList.remove('active'));
+      document.querySelectorAll('.state-scene-btn').forEach(b => b.classList.remove('active'));
+
+      const target = document.getElementById(sceneId);
+      if (target) target.classList.add('active');
+
+      const activeBtn = Array.from(document.querySelectorAll('.state-scene-btn')).find(b =>
+        b.getAttribute('onclick').includes(sceneId)
+      );
+      if (activeBtn) activeBtn.classList.add('active');
+    }
+
+    // Feedback Form Selections (Section 3)
+    function selectColorChoice(optionLetter) {
+      selectedColorChoice = optionLetter;
+      const cards = document.querySelectorAll('#feedback-section .radio-choice-card');
+      cards.forEach((card, idx) => {
+        const letters = ['B', 'C', 'D', 'E'];
+        if (letters[idx] === optionLetter) card.classList.add('selected');
+        else if (idx < 4) card.classList.remove('selected');
+      });
+      updateJsonPreview();
+    }
+
+    function selectStateJudgment(densityKey) {
+      selectedStateDensity = densityKey;
+      const cards = Array.from(document.querySelectorAll('#feedback-section .radio-choice-card')).slice(4);
+      const keys = ['balanced', 'too-quiet', 'too-busy'];
+      cards.forEach((card, idx) => {
+        if (keys[idx] === densityKey) card.classList.add('selected');
+        else card.classList.remove('selected');
+      });
+      updateJsonPreview();
+    }
+
+    function getDecisionObject() {
+      const notes = document.getElementById('user-notes-input') ? document.getElementById('user-notes-input').value : '';
+      return {
+        prototype_pack: "ListenTrace M13 Round 2 Prototype Comparison",
+        timestamp: new Date().toISOString(),
+        frozen_decisions_acknowledged: true,
+        selections: {
+          preferred_accent_color: selectedColorChoice,
+          color_variant_name: {
+            "B": "Professional Blue",
+            "C": "Teal",
+            "D": "Neutral Monochrome",
+            "E": "Scene-Color System"
+          }[selectedColorChoice],
+          state_language_density: selectedStateDensity,
+          feedback_notes: notes
+        },
+        next_step: "Freeze Color & State Contracts -> Begin M13 PyQt6 Theme / Widget Implementation"
+      };
+    }
+
+    function updateJsonPreview() {
+      const obj = getDecisionObject();
+      const preview = document.getElementById('json-preview-box');
+      if (preview) {
+        preview.textContent = JSON.stringify(obj, null, 2);
+      }
+    }
+
+    function generateAndExportJson() {
+      const data = getDecisionObject();
+      const str = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(data, null, 2));
+      const downloadAnchor = document.createElement('a');
+      downloadAnchor.setAttribute("href", str);
+      downloadAnchor.setAttribute("download", "listentrace_m13_round2_decision.json");
+      document.body.appendChild(downloadAnchor);
+      downloadAnchor.click();
+      downloadAnchor.remove();
+      alert("✅ 已成功导出决策文件 listentrace_m13_round2_decision.json！");
+    }
+
+    // Initialize
+    document.addEventListener('DOMContentLoaded', () => {
+      updateJsonPreview();
+      const notesInput = document.getElementById('user-notes-input');
+      if (notesInput) notesInput.addEventListener('input', updateJsonPreview);
+    });
+  </script>
+</body>
+</html>

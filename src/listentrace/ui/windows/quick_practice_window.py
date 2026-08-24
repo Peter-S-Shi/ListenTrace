@@ -8,6 +8,7 @@ from PySide6.QtGui import QTextCursor
 from PySide6.QtWidgets import (
     QButtonGroup,
     QCheckBox,
+    QFrame,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -17,6 +18,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPushButton,
     QRadioButton,
+    QScrollArea,
     QStackedWidget,
     QTextEdit,
     QVBoxLayout,
@@ -24,13 +26,13 @@ from PySide6.QtWidgets import (
 )
 
 from listentrace.application.dto.player_load import PlayerLoadResult
+from listentrace.application.dto.player_state import PlayerTick
 from listentrace.application.dto.quick_practice import QuickPracticeItemState, QuickPracticeSessionState
 from listentrace.application.errors import (
     CueNotFoundError,
     QuickPracticeDiagnosisNotFoundError,
     QuickPracticeValidationError,
 )
-from listentrace.application.dto.player_state import PlayerTick
 from listentrace.application.services import label_preference_service
 from listentrace.application.services import loop_grace_service
 from listentrace.application.services import quick_practice_service as svc
@@ -47,6 +49,7 @@ from listentrace.ui.text_offset_conversion import (
     codepoint_index_to_qt_offset,
     qt_offset_to_codepoint_index,
 )
+from listentrace.ui.theme import SPACE_COMPACT, SPACE_NORMAL, apply_role, apply_surface
 from listentrace.ui.widgets.loop_grace_change_bus import loop_grace_change_bus
 from listentrace.ui.widgets.recording_panel import RecordingPanel
 from listentrace.ui.windows.material_loop_settings_dialog import MaterialLoopSettingsDialog
@@ -65,22 +68,15 @@ _RECALL_LABELS: list[tuple[str, str]] = [
 
 
 class QuickPracticeWindow(QMainWindow):
-    """Milestone 10: a short, low-friction, cue-based practice run — a
-    companion to (never a replacement for) the five-stage Intensive
-    Practice session (`GuidedSessionWindow`).
+    """M13 Reconstructed Quick Practice Workspace.
 
-    Each cue follows one compact, forward-only micro-cycle: Listen & Recall
-    -> Reveal & Diagnose -> Replay & Shadow, then the next cue. There is no
-    back navigation and no exact-step resume (see ROADMAP.md) — closing
-    mid-run either preserves completed cues as read-only "abandoned"
-    history or, if nothing was completed yet, discards the run entirely so
-    it never appears as misleading history.
-
-    Reuses `PlayerSession`/`PlaybackController` for cue timing/loop/replay,
-    `ui.text_offset_conversion`/`ui.annotation_highlighting` for the
-    diagnosis transcript, and the shared `RecordingPanel` for Step 4's
-    optional recording — none of that established logic is reimplemented
-    here.
+    Compact, forward-only cue practice micro-cycle:
+    - Anchored Cue Context & Navigation Header
+    - Step 1: Listen & Self-Assessment Recall Card
+    - Step 2: Reveal & Error Diagnosis Workspace
+    - Step 3: Replay & Shadowing Recording Studio
+    - Step 4: Run Summary Dossier
+    - Hero Primary Progression Action bar
     """
 
     def __init__(
@@ -98,7 +94,8 @@ class QuickPracticeWindow(QMainWindow):
         self._full_cue_index_by_id = {cue.id: index for index, cue in enumerate(load_result.cues) if cue.id is not None}
         self._session_id = quick_practice_session_id
         self.setWindowTitle(f"ListenTrace — Quick Practice — {self._material.title}")
-        self.resize(880, 680)
+        self.resize(920, 700)
+        self.setMinimumSize(780, 560)
 
         self._playback = PlaybackController(self)
         grace_ms = loop_grace_service.effective_loop_end_grace_ms(connection, self._material.id)
@@ -118,22 +115,38 @@ class QuickPracticeWindow(QMainWindow):
         self._recording_panel.request_play_source.connect(self._on_recording_panel_request_play_source)
 
         central = QWidget(self)
+        apply_surface(central, "paper")
         layout = QVBoxLayout(central)
+        layout.setContentsMargins(SPACE_NORMAL, SPACE_NORMAL, SPACE_NORMAL, SPACE_NORMAL)
+        layout.setSpacing(SPACE_NORMAL)
+        apply_surface(self, "paper")
 
+        # -------------------------------------------------------------------
+        # 1. Header & Micro-cycle Context
+        # -------------------------------------------------------------------
         header_row = QHBoxLayout()
         title_label = QLabel(self._material.title)
-        theme.apply_role(title_label, "title")
+        apply_role(title_label, "title")
         header_row.addWidget(title_label)
+
         self._progress_label = QLabel("")
-        theme.apply_role(self._progress_label, "caption")
+        apply_role(self._progress_label, "caption")
         header_row.addWidget(self._progress_label, 1)
+
+        close_top_btn = QPushButton("✕ Exit")
+        apply_role(close_top_btn, "quiet")
+        close_top_btn.clicked.connect(self.close)
+        header_row.addWidget(close_top_btn)
         layout.addLayout(header_row)
 
         self._status_label = QLabel("")
-        theme.apply_role(self._status_label, "error")
+        apply_role(self._status_label, "error")
         self._status_label.setWordWrap(True)
         layout.addWidget(self._status_label)
 
+        # -------------------------------------------------------------------
+        # 2. Main Micro-Cycle Working Stage Stack
+        # -------------------------------------------------------------------
         self._stack = QStackedWidget()
         self._stack.addWidget(self._build_listen_recall_panel())
         self._stack.addWidget(self._build_diagnose_panel())
@@ -141,15 +154,22 @@ class QuickPracticeWindow(QMainWindow):
         self._stack.addWidget(self._build_summary_panel())
         layout.addWidget(self._stack, 1)
 
+        # -------------------------------------------------------------------
+        # 3. Action Footer
+        # -------------------------------------------------------------------
         nav_row = QHBoxLayout()
+        nav_row.addStretch(1)
+
+        self._close_button = QPushButton("Close and Finish")
+        self._close_button.clicked.connect(self.close)
+        apply_role(self._close_button, "quiet")
+        nav_row.addWidget(self._close_button)
+
         self._step_action_button = QPushButton("")
         self._step_action_button.clicked.connect(self._on_step_action_clicked)
-        theme.apply_role(self._step_action_button, "primary")
+        apply_role(self._step_action_button, "primary")
+        self._step_action_button.setMinimumHeight(32)
         nav_row.addWidget(self._step_action_button)
-        self._close_button = QPushButton("Close")
-        self._close_button.clicked.connect(self.close)
-        theme.apply_role(self._close_button, "quiet")
-        nav_row.addWidget(self._close_button)
         layout.addLayout(nav_row)
 
         self.setCentralWidget(central)
@@ -164,11 +184,7 @@ class QuickPracticeWindow(QMainWindow):
         self._refresh_state()
 
     def _apply_step_button_roles(self) -> None:
-        """Milestone 11: `_step_action_button` is this window's single
-        primary action -- its label changes per step (Reveal and Continue /
-        Continue / Next Cue / Finish Run) but it is always the one forward
-        step. `Close` is quiet (it can end in an abandon/discard, but that is
-        confirmed via a dialog, never a color-only signal)."""
+        """Milestone 11 role assignments."""
         for attr in (
             "_listen_play_button",
             "_listen_replay_button",
@@ -179,10 +195,11 @@ class QuickPracticeWindow(QMainWindow):
             "_replay_loop_button",
             "_replay_loop_settings_button",
         ):
-            theme.apply_role(getattr(self, attr), "secondary")
-        theme.apply_role(self._save_diagnosis_button, "secondary")
-        theme.apply_role(self._delete_diagnosis_button, "danger")
-        theme.apply_role(self._mark_shadowed_button, "secondary")
+            if hasattr(self, attr):
+                apply_role(getattr(self, attr), "secondary")
+        apply_role(self._save_diagnosis_button, "secondary")
+        apply_role(self._delete_diagnosis_button, "danger")
+        apply_role(self._mark_shadowed_button, "secondary")
 
     # ---- state loading ----
 
@@ -219,7 +236,7 @@ class QuickPracticeWindow(QMainWindow):
             return
         total = len(self._state.items)
         if self._step == _STEP_SUMMARY:
-            self._progress_label.setText(f"Quick Practice — {self._state.session.status}")
+            self._progress_label.setText(f"Quick Practice — {self._state.session.status.upper()}")
         else:
             self._progress_label.setText(f"Cue {self._index + 1} of {total}")
         self._stack.setCurrentIndex(self._step)
@@ -262,12 +279,6 @@ class QuickPracticeWindow(QMainWindow):
                 getattr(self, attr).setText(text)
 
     def _apply_player_tick(self, tick: PlayerTick) -> None:
-        # See player_window.py's _apply_player_tick for why restart_at_ms
-        # (a Loop iteration restarting on its own) must not run the ordinary
-        # "playback genuinely stopped" side effect below. Shared by both tick
-        # sources: a position update, and the media's own natural end (see
-        # _on_end_of_media). Comparison-replay bookkeeping deliberately stays
-        # out of this shared method -- see _on_position_changed/_on_end_of_media.
         if tick.restart_at_ms is not None:
             self._playback.restart_span(tick.restart_at_ms)
         elif tick.pause:
@@ -317,10 +328,6 @@ class QuickPracticeWindow(QMainWindow):
                 getattr(self, attr).setEnabled(enabled)
 
     def _on_play_clicked(self) -> None:
-        # M12 Round 1 Playback Contract: Listen/Replay are cue-oriented steps,
-        # so Play must default to cue-scoped playback (this cue only) --
-        # previously this just resumed/started whole-media continuous
-        # playback, which could run straight past this cue into the next.
         if self._playback.is_playing:
             self._playback.pause()
             self._sync_playback_button_texts()
@@ -356,13 +363,6 @@ class QuickPracticeWindow(QMainWindow):
         self._status_label.setText(message)
 
     def closeEvent(self, event) -> None:
-        """Decide-then-act: whether confirmation is needed is determined
-        purely by reading state, and nothing about the active recording,
-        take playback, source playback, or Quick Practice session is
-        touched until after the learner has confirmed (or no confirmation
-        was needed). Cancelling must leave every one of those untouched —
-        an active recording must not be aborted just because the learner
-        opened (and then dismissed) the close prompt."""
         session = svc.get_session(self._connection, self._session_id)
         session_is_active = session is not None and session.status == QuickPracticeStatus.ACTIVE.value
         if session_is_active:
@@ -403,18 +403,37 @@ class QuickPracticeWindow(QMainWindow):
 
     def _build_listen_recall_panel(self) -> QWidget:
         panel, layout = theme.make_card()
-        layout.addWidget(QLabel("Listen — the transcript is hidden. Replay as many times as you like."))
+        apply_surface(panel, "paper")
 
-        transport_row = QHBoxLayout()
+        inst_lbl = QLabel("Step 1: Listen without transcript, then choose your comprehension level.")
+        apply_role(inst_lbl, "subtitle")
+        layout.addWidget(inst_lbl)
+
+        # Audio Bar Card
+        audio_card = QFrame()
+        audio_card.setStyleSheet("background: rgba(0, 0, 0, 0.03); border-radius: 6px;")
+        transport_row = QHBoxLayout(audio_card)
+        transport_row.setContentsMargins(8, 6, 8, 6)
+
         self._listen_play_button = QPushButton("Play")
         self._listen_play_button.clicked.connect(self._on_play_clicked)
+        apply_role(self._listen_play_button, "secondary")
+
         self._listen_replay_button = QPushButton("Replay Cue")
         self._listen_replay_button.clicked.connect(self._on_replay_clicked)
+        apply_role(self._listen_replay_button, "secondary")
+
         self._listen_loop_button = QPushButton("Loop Cue")
         self._listen_loop_button.clicked.connect(self._on_loop_clicked)
+        apply_role(self._listen_loop_button, "secondary")
+
         self._listen_loop_settings_button = QPushButton("Loop Settings...")
         self._listen_loop_settings_button.clicked.connect(self._on_open_loop_settings)
+        apply_role(self._listen_loop_settings_button, "quiet")
+
         self._listen_time_label = QLabel("00:00 / 00:00")
+        self._listen_time_label.setStyleSheet("font-family: monospace; font-size: 11px; color: #64748B;")
+
         for button in (
             self._listen_play_button,
             self._listen_replay_button,
@@ -422,25 +441,40 @@ class QuickPracticeWindow(QMainWindow):
             self._listen_loop_settings_button,
         ):
             transport_row.addWidget(button)
+        transport_row.addStretch(1)
         transport_row.addWidget(self._listen_time_label)
-        layout.addLayout(transport_row)
+        layout.addWidget(audio_card)
 
-        layout.addWidget(QLabel("Recall — choose one:"))
+        # Recall Options Card
+        recall_card, recall_layout = theme.make_card()
+        apply_surface(recall_card, "paper")
+
+        recall_hdr = QLabel("Comprehension Self-Assessment:")
+        apply_role(recall_hdr, "caption")
+        recall_layout.addWidget(recall_hdr)
+
         recall_row = QHBoxLayout()
         self._recall_group = QButtonGroup(self)
         self._recall_radio_buttons: dict[str, QRadioButton] = {}
         for value, label_text in _RECALL_LABELS:
             radio = QRadioButton(label_text)
+            radio.setStyleSheet("font-size: 13px; font-weight: 500; padding: 6px;")
             radio.toggled.connect(self._on_recall_choice_changed)
             self._recall_group.addButton(radio)
             self._recall_radio_buttons[value] = radio
             recall_row.addWidget(radio)
-        layout.addLayout(recall_row)
+        recall_layout.addLayout(recall_row)
 
-        layout.addWidget(QLabel("What did you hear? (optional)"))
+        frag_hdr = QLabel("What words/phrases did you catch? (optional)")
+        apply_role(frag_hdr, "caption")
+        recall_layout.addWidget(frag_hdr)
+
         self._heard_fragment_edit = QLineEdit()
-        layout.addWidget(self._heard_fragment_edit)
+        self._heard_fragment_edit.setPlaceholderText("Enter words or sounds you caught...")
+        self._heard_fragment_edit.setMinimumHeight(30)
+        recall_layout.addWidget(self._heard_fragment_edit)
 
+        layout.addWidget(recall_card)
         layout.addStretch(1)
         return panel
 
@@ -482,15 +516,21 @@ class QuickPracticeWindow(QMainWindow):
 
     def _build_diagnose_panel(self) -> QWidget:
         panel, layout = theme.make_card()
-        layout.addWidget(QLabel("Transcript revealed — compare it with what you heard, and diagnose if useful."))
+        apply_surface(panel, "paper")
+
+        inst_lbl = QLabel("Step 2: Transcript revealed — compare and diagnose difficulty if useful.")
+        apply_role(inst_lbl, "subtitle")
+        layout.addWidget(inst_lbl)
 
         self._diagnosis_transcript_view = QTextEdit()
         self._diagnosis_transcript_view.setReadOnly(True)
-        self._diagnosis_transcript_view.setMaximumHeight(90)
+        self._diagnosis_transcript_view.setMinimumHeight(70)
+        self._diagnosis_transcript_view.setMaximumHeight(95)
         layout.addWidget(self._diagnosis_transcript_view)
 
         self._heard_fragment_reference_label = QLabel("")
         self._heard_fragment_reference_label.setWordWrap(True)
+        apply_role(self._heard_fragment_reference_label, "caption")
         layout.addWidget(self._heard_fragment_reference_label)
 
         label_row = QHBoxLayout()
@@ -503,32 +543,47 @@ class QuickPracticeWindow(QMainWindow):
         layout.addLayout(label_row)
 
         heard_as_row = QHBoxLayout()
-        heard_as_row.addWidget(QLabel("Heard as:"))
+        heard_lbl = QLabel("Heard as:")
+        apply_role(heard_lbl, "caption")
+        heard_as_row.addWidget(heard_lbl)
         self._diagnosis_heard_as_edit = QLineEdit()
         self._diagnosis_heard_as_edit.setEnabled(False)
+        self._diagnosis_heard_as_edit.setMinimumHeight(26)
         heard_as_row.addWidget(self._diagnosis_heard_as_edit)
         layout.addLayout(heard_as_row)
 
         note_row = QHBoxLayout()
-        note_row.addWidget(QLabel("Note:"))
+        note_lbl = QLabel("Note:")
+        apply_role(note_lbl, "caption")
+        note_row.addWidget(note_lbl)
         self._diagnosis_note_edit = QLineEdit()
+        self._diagnosis_note_edit.setMinimumHeight(26)
         note_row.addWidget(self._diagnosis_note_edit)
         layout.addLayout(note_row)
 
         buttons_row = QHBoxLayout()
         self._save_diagnosis_button = QPushButton("Save Diagnosis")
         self._save_diagnosis_button.clicked.connect(self._on_save_diagnosis_clicked)
+        apply_role(self._save_diagnosis_button, "secondary")
+
         self._delete_diagnosis_button = QPushButton("Delete Selected")
         self._delete_diagnosis_button.clicked.connect(self._on_delete_diagnosis_clicked)
         self._delete_diagnosis_button.setEnabled(False)
+        apply_role(self._delete_diagnosis_button, "danger")
+
         buttons_row.addWidget(self._save_diagnosis_button)
         buttons_row.addWidget(self._delete_diagnosis_button)
+        buttons_row.addStretch(1)
         layout.addLayout(buttons_row)
 
-        layout.addWidget(QLabel("Diagnosis recorded on this cue during this run:"))
+        diag_hdr = QLabel("Diagnosis recorded on this cue during this run:")
+        apply_role(diag_hdr, "caption")
+        layout.addWidget(diag_hdr)
+
         self._diagnosis_list = QListWidget()
+        apply_role(self._diagnosis_list, "ruled_list")
         theme.configure_long_text_list(self._diagnosis_list)
-        self._diagnosis_list.setMaximumHeight(90)
+        self._diagnosis_list.setMaximumHeight(85)
         self._diagnosis_list.currentItemChanged.connect(self._on_diagnosis_selected)
         layout.addWidget(self._diagnosis_list)
 
@@ -552,16 +607,16 @@ class QuickPracticeWindow(QMainWindow):
 
         self._diagnosis_list.blockSignals(True)
         self._diagnosis_list.clear()
-        for evidence in item_state.diagnosis:
-            heard_as_suffix = f" (heard as: {evidence.heard_as})" if evidence.heard_as else ""
-            list_item = QListWidgetItem(f"[{evidence.label_key}] {evidence.selected_text}{heard_as_suffix}")
-            list_item.setIcon(_color_badge_icon(colors.get(evidence.label_key, "#CCCCCC")))
-            list_item.setData(Qt.ItemDataRole.UserRole, evidence.id)
-            self._diagnosis_list.addItem(list_item)
+        for diag in item_state.diagnosis:
+            heard_as_suffix = f" (heard as: {diag.heard_as})" if diag.heard_as else ""
+            item = QListWidgetItem(f"[{diag.label_key}] {diag.selected_text}{heard_as_suffix}")
+            item.setIcon(_color_badge_icon(colors.get(diag.label_key, "#CCCCCC")))
+            item.setData(Qt.ItemDataRole.UserRole, diag.id)
+            self._diagnosis_list.addItem(item)
         self._diagnosis_list.blockSignals(False)
 
         self._clear_diagnosis_form()
-        self._step_action_button.setText("Continue")
+        self._step_action_button.setText("Continue to Shadowing ▶")
         self._step_action_button.setEnabled(True)
 
     def _clear_diagnosis_form(self) -> None:
@@ -592,6 +647,15 @@ class QuickPracticeWindow(QMainWindow):
         cue = self._current_cue()
         if evidence is None or cue is None:
             return
+
+        for key, checkbox in self._diagnosis_label_checkboxes.items():
+            checkbox.blockSignals(True)
+            checkbox.setChecked(key == evidence.label_key)
+            checkbox.blockSignals(False)
+        self._diagnosis_heard_as_edit.setEnabled(evidence.label_key == AnnotationLabel.MISHEARD.value)
+        self._diagnosis_heard_as_edit.setText(evidence.heard_as or "")
+        self._diagnosis_note_edit.setText(evidence.note or "")
+
         qt_start = codepoint_index_to_qt_offset(cue.text, evidence.selection_start)
         qt_end = codepoint_index_to_qt_offset(cue.text, evidence.selection_end)
         cursor = self._diagnosis_transcript_view.textCursor()
@@ -657,51 +721,97 @@ class QuickPracticeWindow(QMainWindow):
     # ---- Step 4: Replay & Shadow ----
 
     def _build_replay_panel(self) -> QWidget:
-        panel, layout = theme.make_card()
-        layout.addWidget(QLabel("Replay the source and shadow it aloud. Recording is optional."))
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        apply_surface(scroll, "paper")
+
+        panel = QWidget()
+        apply_surface(panel, "paper")
+        layout = QVBoxLayout(panel)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(SPACE_NORMAL)
+
+        # Cue Card
+        cue_card, cue_layout = theme.make_card()
+        apply_surface(cue_card, "paper")
+
+        inst_lbl = QLabel("Step 3: Replay the cue and shadow aloud.")
+        apply_role(inst_lbl, "subtitle")
+        cue_layout.addWidget(inst_lbl)
+
+        self._replay_cue_label = QLabel("")
+        self._replay_cue_label.setWordWrap(True)
+        self._replay_cue_label.setStyleSheet("font-size: 15px; font-weight: 600; padding: 4px 0;")
+        cue_layout.addWidget(self._replay_cue_label)
 
         transport_row = QHBoxLayout()
         self._replay_play_button = QPushButton("Play")
         self._replay_play_button.clicked.connect(self._on_play_clicked)
+        apply_role(self._replay_play_button, "secondary")
+
         self._replay_replay_button = QPushButton("Replay Cue")
         self._replay_replay_button.clicked.connect(self._on_replay_clicked)
+        apply_role(self._replay_replay_button, "secondary")
+
         self._replay_loop_button = QPushButton("Loop Cue")
         self._replay_loop_button.clicked.connect(self._on_loop_clicked)
+        apply_role(self._replay_loop_button, "secondary")
+
         self._replay_loop_settings_button = QPushButton("Loop Settings...")
         self._replay_loop_settings_button.clicked.connect(self._on_open_loop_settings)
+        apply_role(self._replay_loop_settings_button, "quiet")
+
         self._replay_time_label = QLabel("00:00 / 00:00")
-        for button in (
-            self._replay_play_button,
-            self._replay_replay_button,
-            self._replay_loop_button,
-            self._replay_loop_settings_button,
-        ):
-            transport_row.addWidget(button)
+        self._replay_time_label.setStyleSheet("font-family: monospace; font-size: 11px; color: #64748B;")
+
+        transport_row.addWidget(self._replay_play_button)
+        transport_row.addWidget(self._replay_replay_button)
+        transport_row.addWidget(self._replay_loop_button)
+        transport_row.addWidget(self._replay_loop_settings_button)
+        transport_row.addStretch(1)
         transport_row.addWidget(self._replay_time_label)
-        layout.addLayout(transport_row)
+        cue_layout.addLayout(transport_row)
+        layout.addWidget(cue_card)
 
-        self._mark_shadowed_button = QPushButton("Mark Shadowed")
-        self._mark_shadowed_button.clicked.connect(self._on_mark_shadowed_clicked)
-        layout.addWidget(self._mark_shadowed_button)
-
+        # Recording Panel
         layout.addWidget(self._recording_panel)
+
+        # Shadowed Action
+        action_card, action_layout = theme.make_card()
+        apply_surface(action_card, "paper")
+        self._mark_shadowed_button = QPushButton("✓ Mark Shadowed (Optional)")
+        self._mark_shadowed_button.clicked.connect(self._on_mark_shadowed_clicked)
+        apply_role(self._mark_shadowed_button, "secondary")
+        action_layout.addWidget(self._mark_shadowed_button)
+        layout.addWidget(action_card)
+
         layout.addStretch(1)
-        return panel
+        scroll.setWidget(panel)
+        return scroll
 
     def _populate_replay(self) -> None:
-        item_state = self._current_item_state()
         cue = self._current_cue()
-        if item_state is None or cue is None:
+        item_state = self._current_item_state()
+        if cue is None or item_state is None:
             return
+        self._replay_cue_label.setText(f"[{_format_time(cue.start_ms)}-{_format_time(cue.end_ms)}] {cue.text}")
         self._set_playback_controls_enabled(self._playback_usable)
-        self._mark_shadowed_button.setEnabled(item_state.item.shadowed_at is None)
-        self._mark_shadowed_button.setText(
-            "Shadowed ✓" if item_state.item.shadowed_at is not None else "Mark Shadowed"
-        )
-        self._recording_panel.set_context(self._material.id, cue.id, None)
-        self._recording_panel.set_read_only(False)
-        self._step_action_button.setText("Finish Run" if self._is_last_item() else "Next Cue")
+        if cue.id is not None:
+            self._recording_panel.set_context(self._material.id, cue.id, None)
+
+        is_last = self._is_last_item()
+        self._step_action_button.setText("Finish Run" if is_last else "Next Cue")
         self._step_action_button.setEnabled(True)
+
+    def _on_recording_panel_request_play_source(self) -> None:
+        index = self._current_full_cue_index()
+        if index is None:
+            return
+        self._comparison_replay_pending = True
+        seek_to = self._player_session.replay_cue(index)
+        self._playback.seek(seek_to)
+        self._playback.play()
+        self._sync_playback_button_texts()
 
     def _on_mark_shadowed_clicked(self) -> None:
         item_state = self._current_item_state()
@@ -713,16 +823,6 @@ class QuickPracticeWindow(QMainWindow):
             self._show_status(str(exc))
             return
         self._refresh_state()
-
-    def _on_recording_panel_request_play_source(self) -> None:
-        index = self._current_full_cue_index()
-        if index is None:
-            return
-        self._comparison_replay_pending = True
-        seek_to = self._player_session.replay_cue(index)
-        self._playback.seek(seek_to)
-        self._playback.play()
-        self._sync_playback_button_texts()
 
     def _on_finish_item_clicked(self) -> None:
         item_state = self._current_item_state()
@@ -749,13 +849,15 @@ class QuickPracticeWindow(QMainWindow):
         self._recording_panel.abort_active_recording()
         self._refresh_state()
 
-    # ---- Summary ----
+    # ---- Summary Step ----
 
     def _build_summary_panel(self) -> QWidget:
-        panel, layout = theme.make_card()
-        layout.addWidget(QLabel("Run Summary"))
+        panel, layout = theme.make_card("Quick Practice Run Summary")
+        apply_surface(panel, "paper")
+
         self._summary_label = QLabel("")
         self._summary_label.setWordWrap(True)
+        apply_role(self._summary_label, "subtitle")
         layout.addWidget(self._summary_label)
         layout.addStretch(1)
         return panel
@@ -780,7 +882,18 @@ class QuickPracticeWindow(QMainWindow):
             texts = []
             for cue_id in summary.cues_worth_revisiting:
                 cue = self._cue_by_id.get(cue_id)
-                texts.append(cue.text if cue is not None else str(cue_id))
-            lines.append("Cues worth revisiting: " + "; ".join(texts))
+                if cue is not None:
+                    texts.append(f"• {cue.text}")
+            if texts:
+                lines.append("")
+                lines.append("Cues worth revisiting:")
+                lines.extend(texts)
         self._summary_label.setText("\n".join(lines))
-        self._step_action_button.setEnabled(False)
+        self._step_action_button.setText("Done")
+        self._step_action_button.setEnabled(True)
+        try:
+            self._step_action_button.clicked.disconnect()
+        except Exception:
+            pass
+        self._step_action_button.clicked.connect(self.close)
+        self._close_button.setEnabled(False)

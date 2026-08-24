@@ -54,6 +54,15 @@ samples/private/
 # collides with the product's intentional duplicate-file-path invariant.
 !/manual-qa/samples/audio/normal_lesson2.wav
 
+# Manual QA temporary and generated artifacts
+manual-qa/*.json
+manual-qa/*.srt
+manual-qa/*.vtt
+manual-qa/*.db
+manual-qa/screenshots/
+!manual-qa/samples/
+!manual-qa/samples/**
+
 # IDE and operating-system files
 .vscode/
 .idea/
