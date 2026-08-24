@@ -11,6 +11,7 @@ from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QFrame,
+    QGridLayout,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -489,14 +490,24 @@ class PlayerWindow(QMainWindow):
         )
         annotation_column.addWidget(self._editing_transcript_view)
 
-        label_row = QHBoxLayout()
+        # A single horizontal row of all 5 category checkboxes doesn't fit
+        # the Annotate tab's intrinsic width at ~1060-1080px whole-window
+        # width (the right workspace pane is only ~250px wide, narrower than
+        # a full-width surface) -- the last category(ies) clipped off the
+        # right edge. A 2-column grid still clipped the longest label
+        # ("connected reduced speech") at this pane width, so each category
+        # gets its own row instead -- guaranteed to fit at any window width
+        # since it never needs more than one label's worth of horizontal space.
+        label_grid = QGridLayout()
+        label_grid.setHorizontalSpacing(8)
+        label_grid.setVerticalSpacing(2)
         self._label_checkboxes: dict[str, QCheckBox] = {}
-        for label in AnnotationLabel:
+        for index, label in enumerate(AnnotationLabel):
             checkbox = QCheckBox(label.value.replace("_", " "))
             checkbox.stateChanged.connect(self._on_label_checkbox_changed)
             self._label_checkboxes[label.value] = checkbox
-            label_row.addWidget(checkbox)
-        annotation_column.addLayout(label_row)
+            label_grid.addWidget(checkbox, index, 0)
+        annotation_column.addLayout(label_grid)
 
         heard_as_row = QHBoxLayout()
         heard_as_lbl = QLabel("Heard as:")

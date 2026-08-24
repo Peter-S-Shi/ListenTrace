@@ -124,7 +124,8 @@ def test_stage_stepper_and_stage2_scope_fidelity(qapp, conn, tmp_path):
     guided_win = GuidedSessionWindow(conn, load_result, session.id, rec_dir)
     guided_win.show()
 
-    # Stage 1 -> Stage 2 transition
+    # Stage 1 -> Stage 2 transition (requires qualifying evidence to legally advance)
+    guided_win._stage1_edits["where"].setPlainText("A cafe")
     guided_win._on_save_and_continue_clicked()
     assert guided_win._current_stage == StageKey.KEYWORD_CAPTURE.value
 

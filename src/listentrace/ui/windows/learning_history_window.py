@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (
     QComboBox,
     QDateEdit,
     QDialog,
+    QGridLayout,
     QHBoxLayout,
     QHeaderView,
     QLabel,
@@ -75,6 +76,28 @@ def _format_duration_ms(duration_ms: int | None) -> str:
 
 def _format_accuracy(accuracy: float | None) -> str:
     return "no completed attempts yet" if accuracy is None else f"{accuracy:.0%}"
+
+
+# Overview metric grid: (key, display label, tooltip-or-None). Same 10
+# metrics/semantics as before -- only the presentation changed from a raw
+# multi-line QLabel to a scan-oriented 2-column grid. Long clarifying detail
+# that doesn't fit a short label lives in the tooltip instead of inline text.
+_OVERVIEW_METRICS: list[tuple[str, str, str | None]] = [
+    ("materials_practiced", "Materials Practiced", None),
+    ("completed_sessions", "Completed Sessions", None),
+    ("active_sessions", "Active Sessions", None),
+    ("abandoned_sessions", "Abandoned Sessions", None),
+    ("completed_quizzes", "Completed Quizzes", None),
+    ("avg_quiz_accuracy", "Avg Quiz Accuracy", "Across completed attempts only."),
+    ("session_diagnosis_evidence", "Session Diagnosis Evidence", None),
+    (
+        "shadowing_practice_actions",
+        "Shadowing Practice Actions",
+        "Cumulative; approximate under a date filter — see docs.",
+    ),
+    ("retained_recordings", "Retained Recordings", None),
+    ("quick_practices_completed", "Quick Practices Completed", None),
+]
 
 
 class LearningHistoryWindow(QMainWindow):
@@ -158,8 +181,13 @@ class LearningHistoryWindow(QMainWindow):
 
         # Left navigation directory
         self._section_list = QListWidget()
-        self._section_list.setMaximumWidth(168)
-        self._section_list.setMinimumWidth(120)
+        # 168px with no wrapping truncated "Shadowing & Recordings" and forced
+        # an unwanted horizontal scrollbar. Wrapping (plus a modest width
+        # bump) lets every label read in full on two lines without reviving
+        # the old horizontal-tabs layout.
+        self._section_list.setMaximumWidth(190)
+        self._section_list.setMinimumWidth(150)
+        theme.configure_long_text_list(self._section_list)
         apply_surface(self._section_list, "surface_soft")
         apply_role(self._section_list, "nav_directory")
         for section_name in (
@@ -187,7 +215,7 @@ class LearningHistoryWindow(QMainWindow):
         self._section_stack.addWidget(self._build_quick_practice_tab())
         body_splitter.addWidget(self._section_stack)
 
-        body_splitter.setSizes([158, 740])
+        body_splitter.setSizes([180, 718])
         outer_layout.addWidget(body_splitter, 1)
 
         self.setCentralWidget(central)
@@ -275,9 +303,29 @@ class LearningHistoryWindow(QMainWindow):
         layout = QVBoxLayout(widget)
 
         stats_card, stats_column = theme.make_card()
-        self._overview_label = QLabel("")
-        self._overview_label.setWordWrap(True)
-        stats_column.addWidget(self._overview_label)
+        # A raw multi-line QLabel read like a debug/status report rather than
+        # a finished Study Dossier. A scan-oriented 2-column metric grid
+        # keeps exactly the same data/semantics, just recomposed to read at
+        # a glance -- no new metrics, no score/ranking invented.
+        self._overview_grid = QGridLayout()
+        self._overview_grid.setHorizontalSpacing(24)
+        self._overview_grid.setVerticalSpacing(4)
+        self._overview_metric_labels: dict[str, QLabel] = {}
+        for key, name_text, tooltip in _OVERVIEW_METRICS:
+            name_label = QLabel(name_text)
+            theme.apply_role(name_label, "caption")
+            value_label = QLabel("")
+            value_label.setStyleSheet("font-size: 14px; font-weight: 700;")
+            if tooltip:
+                name_label.setToolTip(tooltip)
+                value_label.setToolTip(tooltip)
+            row, col_pair = divmod(_OVERVIEW_METRICS.index((key, name_text, tooltip)), 2)
+            self._overview_grid.addWidget(name_label, row, col_pair * 2)
+            self._overview_grid.addWidget(value_label, row, col_pair * 2 + 1)
+            self._overview_metric_labels[key] = value_label
+        self._overview_grid.setColumnStretch(1, 1)
+        self._overview_grid.setColumnStretch(3, 1)
+        stats_column.addLayout(self._overview_grid)
         layout.addWidget(stats_card)
 
         continue_card, continue_column = theme.make_card(
@@ -324,21 +372,21 @@ class LearningHistoryWindow(QMainWindow):
         self, conn: sqlite3.Connection, material_id: int | None, resolved_range: date_range_rules.ResolvedDateRange
     ) -> None:
         overview = history_svc.get_overview(conn, material_id, resolved_range)
-        lines = [
-            f"Materials Practiced: {overview.materials_practiced}",
-            f"Completed Sessions: {overview.completed_sessions}",
-            f"Active Sessions: {overview.active_sessions}",
-            f"Abandoned Sessions: {overview.abandoned_sessions}",
-            f"Completed Quizzes: {overview.completed_quizzes}",
-            f"Average Quiz Accuracy (across completed attempts): {_format_accuracy(overview.average_quiz_accuracy)}",
-            f"Session Diagnosis Evidence: {overview.session_diagnosis_evidence_count}",
-            f"Shadowing Practice Actions (cumulative; approximate under a date filter — see docs): "
-            f"{overview.shadowing_practice_count}",
-            f"Retained Recordings: {overview.retained_recording_count} "
-            f"({_format_duration_ms(overview.retained_recording_total_duration_ms)} total)",
-            f"Quick Practices Completed: {overview.quick_practices_completed}",
-        ]
-        self._overview_label.setText("\n".join(lines))
+        metric_values = {
+            "materials_practiced": str(overview.materials_practiced),
+            "completed_sessions": str(overview.completed_sessions),
+            "active_sessions": str(overview.active_sessions),
+            "abandoned_sessions": str(overview.abandoned_sessions),
+            "completed_quizzes": str(overview.completed_quizzes),
+            "avg_quiz_accuracy": _format_accuracy(overview.average_quiz_accuracy),
+            "session_diagnosis_evidence": str(overview.session_diagnosis_evidence_count),
+            "shadowing_practice_actions": str(overview.shadowing_practice_count),
+            "retained_recordings": f"{overview.retained_recording_count} "
+            f"({_format_duration_ms(overview.retained_recording_total_duration_ms)})",
+            "quick_practices_completed": str(overview.quick_practices_completed),
+        }
+        for key, value_label in self._overview_metric_labels.items():
+            value_label.setText(metric_values[key])
 
         self._continue_learning_entries = history_svc.list_continue_learning_sessions(conn)
         self._continue_learning_list.clear()

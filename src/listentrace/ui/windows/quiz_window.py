@@ -212,9 +212,14 @@ class QuizWindow(QMainWindow):
         # Deliberate comfortable reading width — a full-window-wide question
         # canvas leaves a large blank field once options are laid out; a
         # capped, centered width makes the canvas read as a designed object
-        # rather than empty space with a few controls floating in it.
-        canvas_card.setMaximumWidth(680)
-        canvas_card.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
+        # rather than empty space with a few controls floating in it. Height
+        # is left at its natural (Preferred) size rather than forced to fill
+        # the window -- a card with 2-3 short options was previously stretched
+        # to the window's full height, leaving a large empty region *inside*
+        # the card's own border. Any leftover vertical space now lives
+        # outside the card (see the trailing stretch below).
+        canvas_card.setMaximumWidth(760)
+        canvas_card.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
 
         # Prompt & Type
         self._question_label = QLabel("")
@@ -257,13 +262,19 @@ class QuizWindow(QMainWindow):
         self._answer_stack = QStackedWidget()
         self._answer_stack.addWidget(self._build_text_answer_panel())
         self._answer_stack.addWidget(self._build_choice_panel())
-        canvas_layout.addWidget(self._answer_stack, 1)
+        canvas_layout.addWidget(self._answer_stack)
 
         canvas_row = QHBoxLayout()
         canvas_row.addStretch(1)
         canvas_row.addWidget(canvas_card, 0)
         canvas_row.addStretch(1)
-        layout.addLayout(canvas_row, 1)
+        # Pin the card to its natural (top-aligned) height -- without this,
+        # a Preferred-policy widget still gets stretched to fill its layout
+        # cell once the cell is taller than its size hint, putting the dead
+        # space right back inside the card.
+        canvas_row.setAlignment(canvas_card, Qt.AlignmentFlag.AlignTop)
+        layout.addLayout(canvas_row)
+        layout.addStretch(1)
 
         # -------------------------------------------------------------------
         # 3. Action Footer

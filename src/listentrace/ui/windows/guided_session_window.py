@@ -81,6 +81,11 @@ _STAGE1_PROMPTS: list[tuple[str, str]] = [
 _RULED_LINE_COLOR = QColor(37, 99, 235, 28)  # Professional Blue at ~11% alpha
 _RULED_LINE_SPACING_PX = 28  # matches comfortable line height at 10pt font
 
+# StageStepper: minimum height for each step QPushButton so the 22px badge,
+# label, internal margins, border, and focus ring are never vertically
+# clipped (see final Pre-HG2 corrective pass #6).
+_STEP_BUTTON_MIN_HEIGHT_PX = 44
+
 
 class RuledTextEdit(QTextEdit):
     """A QTextEdit with visible horizontal ruled lines underneath the text, like a lined notepad.
@@ -88,6 +93,17 @@ class RuledTextEdit(QTextEdit):
     Lines are painted via paintEvent so they scale correctly with any text size, require no
     raster images, and remain visible when the widget is scrolled.
     """
+
+    @staticmethod
+    def _ruled_line_phase(spacing_px: int, scroll_offset_px: int) -> int:
+        """Where the first ruled line should be painted (viewport-relative y)
+        so the periodic line pattern stays anchored to the document instead
+        of the viewport. Painting from a fixed viewport-relative offset drew
+        lines that stayed still while the text scrolled underneath them --
+        correct only when the scroll offset happened to be an exact multiple
+        of `spacing_px`, and visibly drifting out of alignment with text
+        baselines otherwise (final Pre-HG2 corrective pass #12)."""
+        return (spacing_px - 1 - scroll_offset_px) % spacing_px
 
     def paintEvent(self, event) -> None:  # type: ignore[override]
         super().paintEvent(event)
@@ -100,8 +116,7 @@ class RuledTextEdit(QTextEdit):
         viewport_height = self.viewport().height()
         width = self.viewport().width()
 
-        # Start from an offset that aligns with text baseline rhythm
-        y = _RULED_LINE_SPACING_PX - 1
+        y = self._ruled_line_phase(_RULED_LINE_SPACING_PX, self.verticalScrollBar().value())
         while y < viewport_height:
             painter.drawLine(0, y, width, y)
             y += _RULED_LINE_SPACING_PX
@@ -147,6 +162,13 @@ class StageStepper(QFrame):
             btn.setFlat(True)
             btn.setCursor(Qt.CursorShape.PointingHandCursor)
             btn.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+            # A QPushButton with a directly-assigned internal layout does not
+            # reliably size-hint tall enough to contain a 22px badge plus its
+            # margins/border/focus-ring -- it clipped the badge/label/border
+            # on every stage across the reported screenshots. An explicit
+            # minimum height makes the row's own height deterministic instead
+            # of depending on a QPushButton size-hint quirk.
+            btn.setMinimumHeight(_STEP_BUTTON_MIN_HEIGHT_PX)
 
             inner_layout = QHBoxLayout()
             inner_layout.setContentsMargins(8, 6, 8, 6)
@@ -576,8 +598,14 @@ class GuidedSessionWindow(QMainWindow):
         self._save_current_stage_inputs()
         try:
             svc.complete_stage(self._connection, self._session_id, stage)
-        except SessionValidationError:
-            pass
+        except SessionValidationError as exc:
+            # A failed completion attempt must never be silent, and must
+            # never advance -- discarding this and continuing anyway let a
+            # learner reach Stage 5 with Stages 3/4 never actually resolved
+            # (final Pre-HG2 corrective pass #4).
+            self._show_status(str(exc))
+            self._refresh_state()
+            return
         index = STAGE_ORDER.index(stage)
         if index < len(STAGE_ORDER) - 1:
             self._show_stage(STAGE_ORDER[index + 1])
@@ -802,12 +830,16 @@ class GuidedSessionWindow(QMainWindow):
         self._capture_list.currentItemChanged.connect(self._on_capture_selected)
         list_container_layout.addWidget(self._capture_list, 1)
 
+        # Empty state: previously the hint sat underneath a full-height blank
+        # list, leaving most of the stage a meaningless empty region instead
+        # of the hint owning the space. Now the list is hidden/collapsed
+        # while empty and the hint centers itself in the space instead.
         self._capture_empty_hint = QLabel("No captures yet — type a keyword or fragment above and click Add Capture.")
         self._capture_empty_hint.setWordWrap(True)
         self._capture_empty_hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
         apply_role(self._capture_empty_hint, "caption")
         self._capture_empty_hint.setVisible(True)
-        list_container_layout.addWidget(self._capture_empty_hint)
+        list_container_layout.addWidget(self._capture_empty_hint, 1)
 
         layout.addWidget(list_container, 1)
 
@@ -850,8 +882,13 @@ class GuidedSessionWindow(QMainWindow):
             self._capture_list.addItem(item)
         self._capture_list.blockSignals(False)
 
-        # Show empty-state hint only when there are no captures yet
-        self._capture_empty_hint.setVisible(self._capture_list.count() == 0)
+        # Show empty-state hint only when there are no captures yet; hide/
+        # collapse the list so the hint owns the space instead of sitting
+        # beneath a large meaningless blank list region.
+        has_captures = self._capture_list.count() > 0
+        self._capture_empty_hint.setVisible(not has_captures)
+        self._capture_list.setVisible(has_captures)
+        self._capture_list.setMaximumHeight(16777215 if has_captures else 0)
 
         locked = state.session.transcript_revealed_at is not None
         enabled = state.session.status == SessionStatus.ACTIVE.value and not locked

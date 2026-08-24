@@ -124,11 +124,11 @@ def test_overview_reflects_seeded_evidence(qapp, tmp_path):
     material_id, cues, session_id, attempt_id, recording_id = _seed_rich_material(connection, tmp_path)
 
     window = LearningHistoryWindow(connection, tmp_path / "recordings")
-    overview_text = window._overview_label.text()
-    assert "Completed Sessions: 1" in overview_text
-    assert "Completed Quizzes: 1" in overview_text
-    assert "Session Diagnosis Evidence: 1" in overview_text
-    assert "Retained Recordings: 1" in overview_text
+    metrics = window._overview_metric_labels
+    assert metrics["completed_sessions"].text() == "1"
+    assert metrics["completed_quizzes"].text() == "1"
+    assert metrics["session_diagnosis_evidence"].text() == "1"
+    assert metrics["retained_recordings"].text().startswith("1 ")
     assert window._sessions_list.count() == 1
     assert window._quiz_history_list.count() == 1
     assert window._diagnosis_history_list.count() == 1

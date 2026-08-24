@@ -13,7 +13,7 @@ from listentrace.application.services.material_import_service import import_mate
 from listentrace.application.services.player_loading_service import load_material_for_player
 from listentrace.infrastructure.db.connection import open_connection
 from listentrace.infrastructure.db.migrations import migrate
-from listentrace.ui.windows.guided_session_window import GuidedSessionWindow, StageStepper
+from listentrace.ui.windows.guided_session_window import GuidedSessionWindow, RuledTextEdit, StageStepper
 
 
 @pytest.fixture()
@@ -167,3 +167,24 @@ def test_guided_session_m13_stepper_read_only_disables_all(qapp, conn, tmp_path)
         assert not btn.isEnabled()
 
     window.close()
+
+
+def test_ruled_text_edit_line_phase_stays_anchored_to_the_document_at_any_scroll_offset():
+    """Final Pre-HG2 corrective pass #12: the ruled-line pattern must be
+    anchored to the document, not the viewport, so lines don't drift out of
+    alignment with text baselines once the scroll offset isn't an exact
+    multiple of the line spacing."""
+    spacing = 28
+
+    # No scroll: first line at its original fixed offset.
+    assert RuledTextEdit._ruled_line_phase(spacing, 0) == spacing - 1
+
+    # Scrolling by exactly one line spacing must reproduce the same phase.
+    assert RuledTextEdit._ruled_line_phase(spacing, spacing) == RuledTextEdit._ruled_line_phase(spacing, 0)
+
+    # An arbitrary non-multiple scroll offset must shift the phase by the
+    # same (negated, wrapped) amount -- not stay fixed at the un-scrolled value.
+    for offset in (1, 13, 27, 41, 100):
+        phase = RuledTextEdit._ruled_line_phase(spacing, offset)
+        assert 0 <= phase < spacing
+        assert (phase + offset - (spacing - 1)) % spacing == 0
