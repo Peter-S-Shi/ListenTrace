@@ -32,26 +32,35 @@ def _sample_player_load(tmp_path):
     return PlayerLoadResult(material=material, cues=cues)
 
 
-def test_player_window_m13_horizontal_splitter_architecture(qapp, db_conn, tmp_path):
+def test_player_window_m13_notebook_study_desk_architecture(qapp, db_conn, tmp_path):
     load_res = _sample_player_load(tmp_path)
     window = PlayerWindow(load_res, db_conn)
     window.show()
 
-    # 1. Verify Horizontal Splitter Topology
+    # 1. Verify Splitter Topology: Media Page | Spiral Binding | Notebook Page
     assert isinstance(window._main_splitter, QSplitter)
     assert window._main_splitter.orientation() == Qt.Orientation.Horizontal
-    assert window._main_splitter.count() == 2
+    assert window._main_splitter.count() == 3
+    assert window._main_splitter.widget(0) is window._cinema_stage_widget
+    assert window._main_splitter.widget(1) is window._spiral_binding_strip
+    assert window._main_splitter.widget(2) is window._right_workspace_widget
 
-    # 2. Verify Left Cinema Stage and Right Transcript Workspace
-    assert window._cinema_stage_widget.property("surface") == "cinema"
-    assert window._right_workspace_widget.property("surface") == "cinema"
-    assert window.property("surface") == "cinema"
+    # 2. Verify the binding strip anchors the "open book" seam and cannot be
+    #    collapsed/resized away, while the two real pages remain resizable.
+    assert window._spiral_binding_strip.property("role") == "spiral_binding_strip"
+    assert window._main_splitter.isCollapsible(1) is False
+    assert window._spiral_binding_strip.minimumWidth() == window._spiral_binding_strip.maximumWidth()
 
-    # 3. Verify Active Subtitle HUD
+    # 3. Verify warm paper identity replaced the dark cinema shell.
+    assert window._cinema_stage_widget.property("surface") == "paper"
+    assert window._right_workspace_widget.property("surface") == "paper"
+    assert window.property("surface") == "paper"
+
+    # 4. Verify Active Subtitle / Status Strip
     assert hasattr(window, "_active_subtitle_hud")
-    assert window._active_subtitle_hud is not None
+    assert window._active_subtitle_hud.property("role") == "study_status_strip"
 
-    # 4. Verify Task-Oriented Control Roles
+    # 5. Verify Task-Oriented Control Roles
     assert window._play_pause_button.property("role") == "primary"
     assert window._replay_button.property("role") == "secondary"
     assert window._previous_button.property("role") == "secondary"
@@ -61,8 +70,16 @@ def test_player_window_m13_horizontal_splitter_architecture(qapp, db_conn, tmp_p
     assert window._mute_button.property("role") == "quiet"
     assert window._transcript_button.property("role") == "secondary"
 
-    # 5. Verify Cue-as-Card Stream
-    assert window._cue_list.property("role") == "cinema_cue_list"
+    # 6. Verify the transport/loop/utility controls live inside compact mini
+    #    spiral-notebook cards rather than one dense button slab.
+    for notebook in (window._playback_notebook, window._loop_practice_notebook, window._utility_notebook):
+        assert notebook.property("role") == "mini_notebook_card"
+    assert window._playback_notebook.isAncestorOf(window._play_pause_button)
+    assert window._loop_practice_notebook.isAncestorOf(window._loop_cue_button)
+    assert window._utility_notebook.isAncestorOf(window._loop_settings_button)
+
+    # 7. Verify Cue-as-Ruled-Study-Sheet Stream
+    assert window._cue_list.property("role") == "ruled_list_notebook"
     assert window._cue_list.count() == 2
 
     window.close()

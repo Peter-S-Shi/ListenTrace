@@ -93,15 +93,19 @@ def _color_badge_icon(color_hex: str) -> QIcon:
 
 
 class PlayerWindow(QMainWindow):
-    """M13 Reconstructed Full-Workspace Dark Listening Focus Window.
+    """M13 Notebook Study Desk Window -- an open two-page learning journal.
 
     Target Architecture:
-    - Top Level: QScrollArea container hosting a horizontal QSplitter (1.15 : 0.85)
-    - Left: Cinema Stage (media viewport, active subtitle HUD, timeline scrubber,
-      and task-grouped transport / loop / quick-practice controls)
-    - Right: Transcript & Cue Workspace (cue card stream with playing vs selected states,
-      and supporting annotation/language workspace panel)
-    - Whole-workspace Dark Focus with Professional Blue interaction hierarchy.
+    - Top Level: QScrollArea container hosting a horizontal QSplitter with three
+      panes: the media study page, a fixed-width spiral binding strip, and the
+      transcript/annotation notebook page.
+    - Left page: media viewport in a warm paper frame, a quiet status strip,
+      the seek timeline, and playback/loop/quick-practice controls grouped into
+      compact spiral mini-notebook cards.
+    - Right page: Transcript & Cues as a ruled study sheet, and an Annotation
+      Notebook (Annotate / Cue Note / Save Item) below it.
+    - Warm cream/paper surfaces throughout with pale-blue ruled lines; the
+      media viewport itself may remain dark, but the surrounding chrome does not.
     """
 
     def __init__(
@@ -115,7 +119,12 @@ class PlayerWindow(QMainWindow):
         material = load_result.material
         self.setWindowTitle(f"ListenTrace — {material.title}")
         self.resize(1060, 720)
-        self.setMinimumSize(880, 580)
+        # M13 Notebook Study Desk: the three side-by-side mini-notebook control
+        # cards genuinely need more horizontal room than the old single stacked
+        # control card did. 880px caused real clipping/overflow under the new
+        # architecture (measured), so the practical floor moves up with it;
+        # vertical overflow still falls back to the existing QScrollArea.
+        self.setMinimumSize(1040, 620)
 
         self._material = material
         self._connection = connection
@@ -133,7 +142,7 @@ class PlayerWindow(QMainWindow):
         loop_grace_change_bus.material_override_changed.connect(self._on_loop_grace_material_override_changed)
 
         central = QWidget()
-        apply_surface(central, "cinema")
+        apply_surface(central, "paper")
         root_layout = QVBoxLayout(central)
         root_layout.setContentsMargins(SPACE_NORMAL, SPACE_NORMAL, SPACE_NORMAL, SPACE_NORMAL)
         root_layout.setSpacing(SPACE_NORMAL)
@@ -159,7 +168,7 @@ class PlayerWindow(QMainWindow):
         title_row.addWidget(cue_count_tag)
         title_row.addStretch(1)
 
-        subtitle_desc = QLabel("Dark Listening Focus — Synchronized media playback & cue study workspace")
+        subtitle_desc = QLabel("Study Desk — Synchronized playback & cue journal")
         apply_role(subtitle_desc, "caption")
 
         title_col.addLayout(title_row)
@@ -173,21 +182,20 @@ class PlayerWindow(QMainWindow):
         root_layout.addLayout(top_bar)
 
         # -------------------------------------------------------------------
-        # 2. Main Horizontal Splitter (Cinema Stage Left | Transcript Right)
+        # 2. Main Horizontal Splitter (Media Study Page | Binding | Notebook Page)
         # -------------------------------------------------------------------
         self._main_splitter = QSplitter(Qt.Orientation.Horizontal)
         self._main_splitter.setChildrenCollapsible(False)
 
-        # === LEFT PANEL: Cinema Listening Stage ===
+        # === LEFT PANEL: Media Study Page ===
         self._cinema_stage_widget = QWidget(self._main_splitter)
-        apply_surface(self._cinema_stage_widget, "cinema")
+        apply_surface(self._cinema_stage_widget, "paper")
         cinema_layout = QVBoxLayout(self._cinema_stage_widget)
         cinema_layout.setContentsMargins(0, 0, 0, 0)
         cinema_layout.setSpacing(SPACE_NORMAL)
 
-        # Media Stage Card
-        stage_card, stage_layout = theme.make_card()
-        apply_surface(stage_card, "cinema")
+        # Media Frame (viewport placed on the study desk)
+        stage_card, stage_layout = theme.make_media_frame()
         if material.media_kind == "video":
             self._video_widget: QVideoWidget | None = QVideoWidget()
             self._video_widget.setMinimumHeight(240)
@@ -201,156 +209,154 @@ class PlayerWindow(QMainWindow):
             self._audio_placeholder.setMinimumHeight(120)
             apply_role(self._audio_placeholder, "media_placeholder")
             stage_layout.addWidget(self._audio_placeholder)
+        cinema_layout.addWidget(stage_card)
 
-        # Floating Active Subtitle HUD inside Stage
+        # Quiet Active Subtitle / Status Strip below the media frame
         self._active_subtitle_hud = QLabel("[Ready to play]")
         self._active_subtitle_hud.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._active_subtitle_hud.setWordWrap(True)
-        self._active_subtitle_hud.setStyleSheet(
-            "font-size: 15px; font-weight: 600; color: #FFFFFF; "
-            "padding: 8px 14px; background: rgba(0, 0, 0, 0.65); "
-            "border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.12);"
-        )
-        stage_layout.addWidget(self._active_subtitle_hud)
-        cinema_layout.addWidget(stage_card)
+        apply_role(self._active_subtitle_hud, "study_status_strip")
+        cinema_layout.addWidget(self._active_subtitle_hud)
 
-        # Timeline Scrubber Card
+        # Timeline Scrubber Strip
         scrubber_card, scrubber_layout = theme.make_card()
-        apply_surface(scrubber_card, "cinema")
         seek_row = QHBoxLayout()
         self._seek_slider = QSlider(Qt.Orientation.Horizontal)
         self._seek_slider.setRange(0, 0)
         self._seek_slider.sliderPressed.connect(self._on_slider_pressed)
         self._seek_slider.sliderReleased.connect(self._on_slider_released)
         self._time_label = QLabel("00:00 / 00:00")
-        self._time_label.setStyleSheet("font-family: monospace; font-size: 12px; color: #9CA3AF;")
+        apply_role(self._time_label, "monospace")
         seek_row.addWidget(self._seek_slider, 1)
         seek_row.addWidget(self._time_label)
         scrubber_layout.addLayout(seek_row)
         cinema_layout.addWidget(scrubber_card)
 
-        # Task-Grouped Transport Controls Card
-        control_card, control_layout = theme.make_card()
-        apply_surface(control_card, "cinema")
+        # Mini Spiral Notebook Control Cards: Playback | Loop & Practice | Utility
+        notebooks_row = QHBoxLayout()
+        notebooks_row.setSpacing(SPACE_NORMAL)
 
-        # Row 1: Primary Hero Play + Cue Navigation & Replay
-        nav_row = QHBoxLayout()
+        self._playback_notebook, playback_layout = theme.make_mini_notebook("Playback")
+        playback_card = self._playback_notebook
         self._play_pause_button = QPushButton("Play")
         self._play_pause_button.setMinimumHeight(36)
         self._play_pause_button.clicked.connect(self._on_play_pause_clicked)
         apply_role(self._play_pause_button, "primary")
+        playback_layout.addWidget(self._play_pause_button)
 
         self._replay_button = QPushButton("Replay Cue")
         self._replay_button.clicked.connect(self._on_replay_cue)
         apply_role(self._replay_button, "secondary")
+        playback_layout.addWidget(self._replay_button)
 
         self._previous_button = QPushButton("Previous Cue")
         self._previous_button.clicked.connect(self._on_previous_cue)
         apply_role(self._previous_button, "secondary")
+        playback_layout.addWidget(self._previous_button)
 
         self._next_button = QPushButton("Next Cue")
         self._next_button.clicked.connect(self._on_next_cue)
         apply_role(self._next_button, "secondary")
+        playback_layout.addWidget(self._next_button)
 
-        nav_row.addWidget(self._play_pause_button, 1)
-        nav_row.addWidget(self._replay_button)
-        nav_row.addWidget(self._previous_button)
-        nav_row.addWidget(self._next_button)
-        control_layout.addLayout(nav_row)
-
-        # Row 2: Loop Actions & Precision Settings
-        loop_row = QHBoxLayout()
-        self._loop_cue_button = QPushButton("Loop Cue")
-        self._loop_cue_button.clicked.connect(self._on_loop_cue_clicked)
-        apply_role(self._loop_cue_button, "secondary")
-
-        self._loop_range_button = QPushButton("Loop Selection")
-        self._loop_range_button.clicked.connect(self._on_loop_range_clicked)
-        apply_role(self._loop_range_button, "secondary")
-
-        self._loop_settings_button = QPushButton("Loop Settings...")
-        self._loop_settings_button.clicked.connect(self._on_open_loop_settings)
-        apply_role(self._loop_settings_button, "quiet")
-
-        self._label_colors_button = QPushButton("Label Colors...")
-        self._label_colors_button.clicked.connect(self._on_open_label_colors)
-        apply_role(self._label_colors_button, "quiet")
-
-        loop_row.addWidget(self._loop_cue_button)
-        loop_row.addWidget(self._loop_range_button)
-        loop_row.addWidget(self._loop_settings_button)
-        loop_row.addWidget(self._label_colors_button)
-        control_layout.addLayout(loop_row)
-
-        # Row 3: Quick Practice Entry
-        quick_practice_row = QHBoxLayout()
-        self._quick_practice_this_cue_button = QPushButton("Quick Practice This Cue")
-        self._quick_practice_this_cue_button.clicked.connect(self._on_quick_practice_this_cue_clicked)
-        apply_role(self._quick_practice_this_cue_button, "secondary")
-
-        self._quick_practice_selected_button = QPushButton("Quick Practice Selected Cues")
-        self._quick_practice_selected_button.clicked.connect(self._on_quick_practice_selected_clicked)
-        apply_role(self._quick_practice_selected_button, "secondary")
-
-        quick_practice_row.addWidget(self._quick_practice_this_cue_button)
-        quick_practice_row.addWidget(self._quick_practice_selected_button)
-        control_layout.addLayout(quick_practice_row)
-
-        # Row 4: Volume & Auxiliary Controls
-        util_row = QHBoxLayout()
+        volume_row = QHBoxLayout()
         vol_label = QLabel("Volume:")
         apply_role(vol_label, "caption")
-        util_row.addWidget(vol_label)
-
+        volume_row.addWidget(vol_label)
         self._volume_slider = QSlider(Qt.Orientation.Horizontal)
         self._volume_slider.setRange(0, 100)
         self._volume_slider.setValue(80)
-        self._volume_slider.setMaximumWidth(120)
         self._volume_slider.valueChanged.connect(self._on_volume_changed)
-        util_row.addWidget(self._volume_slider)
+        volume_row.addWidget(self._volume_slider, 1)
+        playback_layout.addLayout(volume_row)
 
         self._mute_button = QPushButton("Mute")
         self._mute_button.clicked.connect(self._on_toggle_mute)
         apply_role(self._mute_button, "quiet")
-        util_row.addWidget(self._mute_button)
+        playback_layout.addWidget(self._mute_button)
+        playback_layout.addStretch(1)
+        notebooks_row.addWidget(playback_card, 1)
 
-        util_row.addStretch(1)
+        self._loop_practice_notebook, loop_layout = theme.make_mini_notebook("Loop & Practice")
+        loop_card = self._loop_practice_notebook
+        self._loop_cue_button = QPushButton("Loop Cue")
+        self._loop_cue_button.clicked.connect(self._on_loop_cue_clicked)
+        apply_role(self._loop_cue_button, "secondary")
+        loop_layout.addWidget(self._loop_cue_button)
+
+        self._loop_range_button = QPushButton("Loop Selection")
+        self._loop_range_button.clicked.connect(self._on_loop_range_clicked)
+        apply_role(self._loop_range_button, "secondary")
+        loop_layout.addWidget(self._loop_range_button)
+
+        # Two-line button text (same words, wrapped) keeps these cards
+        # hand-sized instead of the single un-wrapped line forcing the whole
+        # mini-notebook card wider than its neighbors at practical window widths.
+        self._quick_practice_this_cue_button = QPushButton("Quick Practice\nThis Cue")
+        self._quick_practice_this_cue_button.clicked.connect(self._on_quick_practice_this_cue_clicked)
+        apply_role(self._quick_practice_this_cue_button, "secondary")
+        loop_layout.addWidget(self._quick_practice_this_cue_button)
+
+        self._quick_practice_selected_button = QPushButton("Quick Practice\nSelected Cues")
+        self._quick_practice_selected_button.clicked.connect(self._on_quick_practice_selected_clicked)
+        apply_role(self._quick_practice_selected_button, "secondary")
+        loop_layout.addWidget(self._quick_practice_selected_button)
+        loop_layout.addStretch(1)
+        notebooks_row.addWidget(loop_card, 1)
+
+        self._utility_notebook, utility_layout = theme.make_mini_notebook("Utility")
+        utility_card = self._utility_notebook
+        self._loop_settings_button = QPushButton("Loop Settings...")
+        self._loop_settings_button.clicked.connect(self._on_open_loop_settings)
+        apply_role(self._loop_settings_button, "quiet")
+        utility_layout.addWidget(self._loop_settings_button)
+
+        self._label_colors_button = QPushButton("Label Colors...")
+        self._label_colors_button.clicked.connect(self._on_open_label_colors)
+        apply_role(self._label_colors_button, "quiet")
+        utility_layout.addWidget(self._label_colors_button)
 
         self._transcript_button = QPushButton("Hide Transcript")
         self._transcript_button.clicked.connect(self._on_toggle_transcript)
         apply_role(self._transcript_button, "secondary")
-        util_row.addWidget(self._transcript_button)
+        utility_layout.addWidget(self._transcript_button)
+        utility_layout.addStretch(1)
+        notebooks_row.addWidget(utility_card, 1)
 
-        control_layout.addLayout(util_row)
-        cinema_layout.addWidget(control_card)
+        cinema_layout.addLayout(notebooks_row)
         cinema_layout.addStretch(1)
 
         self._main_splitter.addWidget(self._cinema_stage_widget)
 
-        # === RIGHT PANEL: Transcript & Cue Workspace ===
+        # === CENTER: Spiral Binding (open-book seam) ===
+        self._spiral_binding_strip = theme.make_spiral_binding_strip()
+        self._main_splitter.addWidget(self._spiral_binding_strip)
+        self._main_splitter.setCollapsible(1, False)
+
+        # === RIGHT PANEL: Transcript & Annotation Notebook ===
         self._right_workspace_widget = QWidget(self._main_splitter)
-        apply_surface(self._right_workspace_widget, "cinema")
+        apply_surface(self._right_workspace_widget, "paper")
         right_layout = QVBoxLayout(self._right_workspace_widget)
         right_layout.setContentsMargins(0, 0, 0, 0)
         right_layout.setSpacing(SPACE_NORMAL)
 
-        # Transcript Header
-        transcript_header_row = QHBoxLayout()
-        transcript_title = QLabel("TRANSCRIPT & CUES")
-        apply_role(transcript_title, "caption")
-        transcript_header_row.addWidget(transcript_title)
-        transcript_header_row.addStretch(1)
+        # Transcript & Cues study sheet
+        transcript_notebook, transcript_content = theme.make_notebook_surface(
+            context_label="Transcript & Cues"
+        )
 
+        transcript_header_row = QHBoxLayout()
         self._return_to_playing_button = QPushButton("Return to Playing Cue")
         apply_role(self._return_to_playing_button, "quiet")
         self._return_to_playing_button.clicked.connect(self._on_return_to_playing_clicked)
         self._return_to_playing_button.setVisible(False)
+        transcript_header_row.addStretch(1)
         transcript_header_row.addWidget(self._return_to_playing_button)
-        right_layout.addLayout(transcript_header_row)
+        transcript_content.addLayout(transcript_header_row)
 
         # Cue Card Stream List
         self._cue_list = QListWidget()
-        apply_role(self._cue_list, "cinema_cue_list")
+        apply_role(self._cue_list, "ruled_list_notebook")
         self._cue_list.setSelectionMode(QAbstractItemView.SelectionMode.ContiguousSelection)
         self._cue_list.setMinimumHeight(160)
         self._cue_list.setWordWrap(True)
@@ -359,22 +365,28 @@ class PlayerWindow(QMainWindow):
             label = f"[{_format_time(cue.start_ms)}-{_format_time(cue.end_ms)}] {cue.text}"
             self._cue_list.addItem(QListWidgetItem(label))
         self._cue_list.currentItemChanged.connect(self._on_editing_cue_changed)
-        right_layout.addWidget(self._cue_list, 1)
+        transcript_content.addWidget(self._cue_list, 1)
+        right_layout.addWidget(transcript_notebook, 1)
 
         self._follow_playback = True
         self._programmatic_scroll = False
         self._cue_list.verticalScrollBar().valueChanged.connect(self._on_transcript_scrollbar_changed)
 
-        # Workspace Panel (Annotations & Saved Items Drawer)
+        # Annotation Notebook (Annotate / Cue Note / Save Item)
+        annotation_notebook, annotation_content = theme.make_notebook_surface(
+            context_label="Annotation Notebook"
+        )
         self._workspace_panel = self._build_workspace_panel()
-        right_layout.addWidget(self._workspace_panel)
+        annotation_content.addWidget(self._workspace_panel)
+        right_layout.addWidget(annotation_notebook)
 
         self._main_splitter.addWidget(self._right_workspace_widget)
 
-        # Configure Splitter Ratio (Left Stage 11 : Right Transcript 9)
+        # Configure Splitter Ratio (Left Page 11 : Binding 0 : Right Page 9)
         self._main_splitter.setStretchFactor(0, 11)
-        self._main_splitter.setStretchFactor(1, 9)
-        self._main_splitter.setSizes([580, 440])
+        self._main_splitter.setStretchFactor(1, 0)
+        self._main_splitter.setStretchFactor(2, 9)
+        self._main_splitter.setSizes([580, 28, 440])
         root_layout.addWidget(self._main_splitter, 1)
 
         # -------------------------------------------------------------------
@@ -392,10 +404,10 @@ class PlayerWindow(QMainWindow):
 
         scroll_area = QScrollArea()
         scroll_area.setWidgetResizable(True)
-        apply_surface(scroll_area, "cinema")
+        apply_surface(scroll_area, "paper")
         scroll_area.setWidget(central)
         self.setCentralWidget(scroll_area)
-        apply_surface(self, "cinema")
+        apply_surface(self, "paper")
 
         self._playback.position_changed.connect(self._on_position_changed)
         self._playback.duration_changed.connect(self._on_duration_changed)
@@ -469,16 +481,16 @@ class PlayerWindow(QMainWindow):
         annotation/item controls to clip at ~1080 px whole-window width.
         """
         self._cue_tools_tabs = QTabWidget()
-        apply_surface(self._cue_tools_tabs, "cinema")
+        apply_role(self._cue_tools_tabs, "notebook_tabs")
 
         # ---- Tab 1: Annotate ------------------------------------------------
         annotation_widget = QWidget()
-        apply_surface(annotation_widget, "cinema")
         annotation_column = QVBoxLayout(annotation_widget)
         annotation_column.setContentsMargins(8, 8, 8, 8)
         annotation_column.setSpacing(4)
 
         annot_header = QLabel("Editing cue transcript (select text to annotate):")
+        annot_header.setWordWrap(True)
         apply_role(annot_header, "caption")
         annotation_column.addWidget(annot_header)
 
@@ -528,21 +540,23 @@ class PlayerWindow(QMainWindow):
         note_row.addWidget(self._annotation_note_edit)
         annotation_column.addLayout(note_row)
 
-        annotation_buttons_row = QHBoxLayout()
         self._save_annotation_button = QPushButton("Save Annotation")
         self._save_annotation_button.clicked.connect(self._on_save_annotation_clicked)
+        annotation_column.addWidget(self._save_annotation_button)
+
+        annotation_update_delete_row = QHBoxLayout()
         self._update_annotation_button = QPushButton("Update")
         self._update_annotation_button.clicked.connect(self._on_update_annotation_clicked)
         self._update_annotation_button.setEnabled(False)
         self._delete_annotation_button = QPushButton("Delete")
         self._delete_annotation_button.clicked.connect(self._on_delete_annotation_clicked)
         self._delete_annotation_button.setEnabled(False)
-        annotation_buttons_row.addWidget(self._save_annotation_button)
-        annotation_buttons_row.addWidget(self._update_annotation_button)
-        annotation_buttons_row.addWidget(self._delete_annotation_button)
-        annotation_column.addLayout(annotation_buttons_row)
+        annotation_update_delete_row.addWidget(self._update_annotation_button)
+        annotation_update_delete_row.addWidget(self._delete_annotation_button)
+        annotation_column.addLayout(annotation_update_delete_row)
 
         annots_on_cue_lbl = QLabel("Annotations on this cue:")
+        annots_on_cue_lbl.setWordWrap(True)
         apply_role(annots_on_cue_lbl, "caption")
         annotation_column.addWidget(annots_on_cue_lbl)
         self._annotation_list = QListWidget()
@@ -554,7 +568,6 @@ class PlayerWindow(QMainWindow):
 
         # ---- Tab 2: Cue Note ------------------------------------------------
         note_widget = QWidget()
-        apply_surface(note_widget, "cinema")
         note_column = QVBoxLayout(note_widget)
         note_column.setContentsMargins(8, 8, 8, 8)
         note_column.setSpacing(4)
@@ -579,7 +592,6 @@ class PlayerWindow(QMainWindow):
 
         # ---- Tab 3: Save Item -----------------------------------------------
         item_widget = QWidget()
-        apply_surface(item_widget, "cinema")
         item_column = QVBoxLayout(item_widget)
         item_column.setContentsMargins(8, 8, 8, 8)
         item_column.setSpacing(4)
@@ -627,21 +639,23 @@ class PlayerWindow(QMainWindow):
         self._item_context_edit.setMaximumHeight(52)
         item_column.addWidget(self._item_context_edit)
 
-        item_buttons_row = QHBoxLayout()
         self._save_item_button = QPushButton("Save Item")
         self._save_item_button.clicked.connect(self._on_save_item_clicked)
+        item_column.addWidget(self._save_item_button)
+
+        item_update_delete_row = QHBoxLayout()
         self._update_item_button = QPushButton("Update")
         self._update_item_button.clicked.connect(self._on_update_item_clicked)
         self._update_item_button.setEnabled(False)
         self._delete_item_button = QPushButton("Delete")
         self._delete_item_button.clicked.connect(self._on_delete_item_clicked)
         self._delete_item_button.setEnabled(False)
-        item_buttons_row.addWidget(self._save_item_button)
-        item_buttons_row.addWidget(self._update_item_button)
-        item_buttons_row.addWidget(self._delete_item_button)
-        item_column.addLayout(item_buttons_row)
+        item_update_delete_row.addWidget(self._update_item_button)
+        item_update_delete_row.addWidget(self._delete_item_button)
+        item_column.addLayout(item_update_delete_row)
 
         saved_on_cue_lbl = QLabel("Saved items on this cue:")
+        saved_on_cue_lbl.setWordWrap(True)
         apply_role(saved_on_cue_lbl, "caption")
         item_column.addWidget(saved_on_cue_lbl)
         self._saved_items_list = QListWidget()

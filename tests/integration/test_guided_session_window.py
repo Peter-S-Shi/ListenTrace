@@ -97,6 +97,25 @@ def test_save_and_continue_does_not_advance_when_stage1_completion_fails(qapp, c
     window.close()
 
 
+def test_stale_status_banner_clears_on_legal_stage_advance(qapp, conn, tmp_path, monkeypatch):
+    """Player/M13 Notebook Study Desk pass, spec §15: a validation error banner
+    left over from a failed attempt must not still be visible after the
+    learner supplies valid evidence and legally advances."""
+    window, _, _ = _open_guided_window(conn, tmp_path)
+
+    # Stage 1 left empty -- fails, banner is set.
+    window._on_save_and_continue_clicked()
+    assert window._status_label.text() != ""
+
+    # Now supply valid data and legally advance.
+    window._stage1_edits["where"].setPlainText("A cafe")
+    window._on_save_and_continue_clicked()
+
+    assert window._current_stage == "keyword_capture"
+    assert window._status_label.text() == ""
+    window.close()
+
+
 def test_save_and_continue_does_not_advance_when_stage2_completion_fails(qapp, conn, tmp_path, monkeypatch):
     question_calls = []
     monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: question_calls.append(1) or QMessageBox.StandardButton.Yes)

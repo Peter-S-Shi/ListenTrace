@@ -479,6 +479,9 @@ class GuidedSessionWindow(QMainWindow):
                 self._show_status(str(exc))
                 return
 
+        # A prior failed attempt may have left a validation error banner on
+        # screen; a successful stage transition means it's stale.
+        self._show_status("")
         self._current_stage = stage_key
         self._refresh_state()
 

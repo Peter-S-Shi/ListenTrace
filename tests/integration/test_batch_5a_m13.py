@@ -73,7 +73,7 @@ def test_whole_product_surface_inventory(qapp, conn, tmp_path):
 
     # 2. PlayerWindow
     player_win = PlayerWindow(load_result, conn)
-    assert player_win.property("surface") == "cinema"
+    assert player_win.property("surface") == "paper"
 
     # 3. GuidedSessionWindow
     session = practice_session_service.start_session(conn, res.material_id)

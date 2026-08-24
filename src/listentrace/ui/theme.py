@@ -28,7 +28,16 @@ from pathlib import Path
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QIcon
-from PySide6.QtWidgets import QApplication, QFrame, QHBoxLayout, QLabel, QListWidget, QVBoxLayout, QWidget
+from PySide6.QtWidgets import (
+    QApplication,
+    QFrame,
+    QHBoxLayout,
+    QLabel,
+    QListWidget,
+    QSizePolicy,
+    QVBoxLayout,
+    QWidget,
+)
 
 # ---------------------------------------------------------------------------
 # Tokens: Light & Dark Palettes
@@ -71,6 +80,13 @@ _TOKENS_LIGHT: dict[str, tuple[int, int, int, int]] = {
     "chart_bar": (37, 99, 235, 255),       # #2563EB aligned with Professional Blue
     "chart_axis": (156, 163, 175, 255),    # #9CA3AF
     "chart_text": (55, 65, 81, 255),       # #374151
+    # Player Notebook Study Desk (M13 Player Reconstruction) -- scoped, additive tokens.
+    # `line_ruled` above is a translucent dark-ink line and does not read as the mockup's
+    # pale-blue ruled paper; these two tokens exist so the Player's notebook surfaces can use a
+    # genuinely pale blue without altering the shared `line_ruled`/`ruled_list` look already
+    # accepted elsewhere (MainWindow dossier, Guided Session Stage 5).
+    "notebook_rule_blue": (191, 219, 254, 200),  # #BFDBFE pale-blue ruled line
+    "notebook_binding": (125, 152, 191, 255),    # #7D98BF muted spiral-binding blue
 }
 
 _TOKENS_DARK: dict[str, tuple[int, int, int, int]] = {
@@ -224,6 +240,11 @@ def make_notebook_surface(
 
     spiral_cue = QLabel("◎  ◎  ◎  ◎  ◎  ◎  ◎  ◎  ◎  ◎  ◎  ◎  ◎  ◎")
     apply_role(spiral_cue, "notebook_spiral_cues")
+    # Purely decorative -- let the layout shrink it below its natural text
+    # width instead of it forcing the whole notebook surface's minimum width
+    # (a real bug: on a narrow host like the Player's split panes, this label's
+    # un-wrapped sizeHint alone was inflating the surface to 700+px wide).
+    spiral_cue.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
     spiral_layout.addWidget(spiral_cue)
     spiral_layout.addStretch(1)
 
@@ -248,6 +269,68 @@ def make_notebook_surface(
         content_layout.addLayout(header_row)
 
     root_layout.addWidget(content_widget, 1)
+    return frame, content_layout
+
+
+_SPIRAL_BINDING_STRIP_WIDTH_PX = 28
+_SPIRAL_BINDING_RING_COUNT = 28
+
+
+def make_spiral_binding_strip() -> QFrame:
+    """A narrow vertical seam styled as an open-book center binding.
+
+    Placed as the fixed-width middle widget of a 3-pane `QSplitter` so the two
+    outer panes read as facing notebook pages while remaining independently
+    resizable (the binding strip itself is never collapsible or draggable).
+    """
+    strip = QFrame()
+    apply_role(strip, "spiral_binding_strip")
+    strip.setMinimumWidth(_SPIRAL_BINDING_STRIP_WIDTH_PX)
+    strip.setMaximumWidth(_SPIRAL_BINDING_STRIP_WIDTH_PX)
+    layout = QVBoxLayout(strip)
+    layout.setContentsMargins(0, SPACE_SECTION, 0, SPACE_SECTION)
+    layout.setSpacing(0)
+    rings = QLabel("\n".join(["◎"] * _SPIRAL_BINDING_RING_COUNT))
+    rings.setAlignment(Qt.AlignmentFlag.AlignHCenter)
+    apply_role(rings, "spiral_binding_rings")
+    layout.addWidget(rings, 1)
+    return strip
+
+
+def make_media_frame() -> tuple[QFrame, QVBoxLayout]:
+    """A warm paper frame around a media viewport -- media placed on a study desk."""
+    frame = QFrame()
+    apply_role(frame, "media_frame")
+    layout = QVBoxLayout(frame)
+    layout.setContentsMargins(SPACE_NORMAL, SPACE_NORMAL, SPACE_NORMAL, SPACE_NORMAL)
+    layout.setSpacing(SPACE_NORMAL)
+    return frame, layout
+
+
+def make_mini_notebook(title: str) -> tuple[QFrame, QVBoxLayout]:
+    """A compact spiral-topped control card -- a hand-sized notebook page for one control group."""
+    frame = QFrame()
+    apply_role(frame, "mini_notebook_card")
+    root_layout = QVBoxLayout(frame)
+    root_layout.setContentsMargins(0, 0, 0, 0)
+    root_layout.setSpacing(0)
+
+    spiral_bar = QFrame()
+    apply_role(spiral_bar, "mini_notebook_spiral_bar")
+    spiral_layout = QHBoxLayout(spiral_bar)
+    spiral_layout.setContentsMargins(SPACE_NORMAL, SPACE_COMPACT, SPACE_NORMAL, SPACE_COMPACT)
+    title_label = QLabel(title)
+    apply_role(title_label, "mini_notebook_title")
+    spiral_layout.addWidget(title_label)
+    spiral_layout.addStretch(1)
+    root_layout.addWidget(spiral_bar)
+
+    content = QWidget()
+    content_layout = QVBoxLayout(content)
+    content_layout.setContentsMargins(SPACE_NORMAL, SPACE_NORMAL, SPACE_NORMAL, SPACE_NORMAL)
+    content_layout.setSpacing(SPACE_COMPACT)
+    root_layout.addWidget(content, 1)
+
     return frame, content_layout
 
 
@@ -481,6 +564,88 @@ QLabel[role="badge_success"] {{
     padding: 2px 8px;
     font-size: 11px;
     font-weight: 600;
+}}
+
+/* Player Notebook Study Desk (M13 Player Reconstruction) */
+QFrame[role="spiral_binding_strip"] {{
+    background-color: {css('surface_soft', m)};
+    border-left: {BORDER_WIDTH}px solid {css('line', m)};
+    border-right: {BORDER_WIDTH}px solid {css('line', m)};
+}}
+QLabel[role="spiral_binding_rings"] {{
+    color: {css('notebook_binding', m)};
+    font-size: 13px;
+}}
+QFrame[role="media_frame"] {{
+    background-color: {css('surface_paper', m)};
+    border: {BORDER_WIDTH}px solid {css('line', m)};
+    border-radius: {RADIUS_CARD}px;
+}}
+QLabel[role="study_status_strip"] {{
+    background-color: {css('surface_soft', m)};
+    color: {css('ink', m)};
+    border: {BORDER_WIDTH}px solid {css('line', m)};
+    border-radius: {RADIUS_CONTROL}px;
+    padding: {SPACE_COMPACT}px {SPACE_NORMAL}px;
+    font-size: 13px;
+    font-weight: 600;
+}}
+QFrame[role="mini_notebook_card"] {{
+    background-color: {css('surface_paper', m)};
+    border: {BORDER_WIDTH}px solid {css('line', m)};
+    border-radius: {RADIUS_CARD}px;
+}}
+/* Compact button footprint scoped to mini-notebook cards only -- keeps three
+   hand-sized control notebooks side-by-side at practical Player widths
+   without touching the "secondary"/"quiet" roles used elsewhere. */
+QFrame[role="mini_notebook_card"] QPushButton[role="secondary"],
+QFrame[role="mini_notebook_card"] QPushButton[role="quiet"] {{
+    padding: {SPACE_COMPACT}px {SPACE_COMPACT + 2}px;
+    font-size: 9pt;
+}}
+QFrame[role="mini_notebook_spiral_bar"] {{
+    background-color: {css('surface_soft', m)};
+    border-bottom: 1px solid {css('line', m)};
+    border-top-left-radius: {RADIUS_CARD}px;
+    border-top-right-radius: {RADIUS_CARD}px;
+}}
+QLabel[role="mini_notebook_title"] {{
+    color: {css('muted', m)};
+    font-size: 11px;
+    font-weight: 700;
+}}
+QListWidget[role="ruled_list_notebook"] {{
+    background-color: {css('surface_paper', m)};
+    border: {BORDER_WIDTH}px solid {css('line', m)};
+    border-radius: {RADIUS_CARD}px;
+    padding: {SPACE_COMPACT}px;
+}}
+QListWidget[role="ruled_list_notebook"]::item {{
+    padding: {SPACE_NORMAL}px {SPACE_SECTION}px;
+    border-bottom: 2px solid {css('notebook_rule_blue', m)};
+    border-radius: {RADIUS_CONTROL}px;
+    margin-bottom: 2px;
+}}
+QListWidget[role="ruled_list_notebook"]::item:hover {{
+    background-color: {css('surface_soft', m)};
+}}
+QListWidget[role="ruled_list_notebook"]::item:selected, QListWidget[role="ruled_list_notebook"]::item:selected:active {{
+    background-color: {css('accent_subtle', m)};
+    color: {css('accent', m)};
+    border-left: 3px solid {css('accent', m)};
+    font-weight: 600;
+}}
+QListWidget[role="ruled_list_notebook"]::item:selected:!active {{
+    background-color: {css('accent_subtle', m)};
+    color: {css('accent', m)};
+    border-left: 3px solid {css('accent_hover', m)};
+}}
+/* Compact tab bar so the Annotate/Cue Note/Save Item pages fit without
+   Qt's scroll-arrow overflow indicator inside the narrower Annotation
+   Notebook card -- scoped to this tab widget only. */
+QTabWidget[role="notebook_tabs"] QTabBar::tab {{
+    padding: {SPACE_COMPACT}px {SPACE_COMPACT + 2}px;
+    margin-right: 1px;
 }}
 
 /* Surfaces & Containers */
