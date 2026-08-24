@@ -78,6 +78,36 @@ def test_make_notebook_surface_creates_spiral_ruled_frame():
     assert layout.count() >= 1
 
 
+def test_make_spiral_binding_strip_uses_a_real_painted_widget_not_a_glyph_label():
+    """Player Notebook Primitive Hardening corrective: the center binding must
+    be a real QPainter-rendered component, not a QLabel of repeated glyphs."""
+    from listentrace.ui.widgets.notebook_paper import SpiralBindingWidget
+
+    strip = theme.make_spiral_binding_strip()
+
+    assert strip.property("role") == "spiral_binding_strip"
+    binding = strip.findChild(SpiralBindingWidget)
+    assert binding is not None
+
+
+def test_make_mini_notebook_has_a_real_binding_edge_and_ruled_paper_body():
+    from listentrace.ui.widgets.notebook_paper import RuledPaperFrame, SpiralBindingWidget
+
+    frame, content_layout = theme.make_mini_notebook("Playback")
+
+    assert frame.property("role") == "mini_notebook_card"
+    assert frame.findChild(SpiralBindingWidget) is not None
+    body = frame.findChild(RuledPaperFrame)
+    assert body is not None
+    assert body.property("role") == "mini_notebook_body"
+
+    # The returned content_layout is still a normal layout callers can add
+    # real controls to, and those controls land inside the ruled-paper body.
+    marker = QPushButton("Play")
+    content_layout.addWidget(marker)
+    assert body.isAncestorOf(marker)
+
+
 def test_qcolor_and_css_agree_on_the_same_token():
     color = theme.qcolor("accent")
 
@@ -127,6 +157,23 @@ def test_get_app_icon_degrades_gracefully_when_no_candidate_path_exists(monkeypa
 
     assert isinstance(icon, QIcon)
     assert icon.isNull()
+
+
+def test_spiral_binding_widget_ring_count_scales_with_available_height(qapp):
+    """The binding must derive its ring count from real available geometry
+    (dynamic), not a hardcoded count baked in at construction time."""
+    from listentrace.ui.widgets.notebook_paper import SpiralBindingWidget
+
+    binding = SpiralBindingWidget(theme.qcolor("surface_paper"), theme.qcolor("notebook_binding"))
+
+    binding.resize(28, 120)
+    short_count = binding.ring_count()
+
+    binding.resize(28, 600)
+    tall_count = binding.ring_count()
+
+    assert tall_count > short_count
+    assert short_count >= 0
 
 
 def test_icon_search_paths_include_the_frozen_locations_when_frozen(monkeypatch, tmp_path):

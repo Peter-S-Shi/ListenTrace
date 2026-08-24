@@ -525,19 +525,23 @@ def test_central_widget_is_scrollable_and_workspace_fields_have_a_minimum_height
     """M12 Round 2 Layout Contract (m03-01/m03-04/m03-05, L1): reproduces the
     screenshotted human-QA finding that the workspace panel's QLineEdits and
     Save/Update/Delete buttons compressed to unreadable slivers when the
-    window was shorter than the stacked content's combined height. Fixed by
-    wrapping the content in a resizable QScrollArea (the window scrolls
-    instead of squeezing every zero-minimum-height widget) plus an explicit
-    minimum height on the fields/buttons that were reported as unreadable."""
+    window was shorter than the stacked content's combined height. Originally
+    fixed by wrapping the whole Player in a resizable QScrollArea; the M13
+    Player Notebook immersion corrective relocated that scroll ownership to a
+    local QScrollArea around just the Annotation Notebook (so scrolling it no
+    longer carries the media/playback context off-screen) -- the protection
+    against unreadable-sliver compression still applies to the same fields."""
     from PySide6.QtWidgets import QScrollArea
 
     wav_path = tmp_path / "lesson.wav"
     _make_wav(wav_path)
     window = PlayerWindow(_two_cue_result(wav_path), conn)
 
-    central = window.centralWidget()
-    assert isinstance(central, QScrollArea)
-    assert central.widgetResizable() is True
+    assert not isinstance(window.centralWidget(), QScrollArea)
+
+    annotation_scroll = window._annotation_scroll_area
+    assert isinstance(annotation_scroll, QScrollArea)
+    assert annotation_scroll.widgetResizable() is True
 
     for field in (
         window._heard_as_edit,

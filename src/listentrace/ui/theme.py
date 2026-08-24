@@ -39,6 +39,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from listentrace.ui.widgets.notebook_paper import RuledPaperFrame, SpiralBindingWidget
+
 # ---------------------------------------------------------------------------
 # Tokens: Light & Dark Palettes
 # ---------------------------------------------------------------------------
@@ -273,7 +275,11 @@ def make_notebook_surface(
 
 
 _SPIRAL_BINDING_STRIP_WIDTH_PX = 28
-_SPIRAL_BINDING_RING_COUNT = 28
+
+
+def _make_notebook_binding_widget(parent: QWidget | None = None) -> SpiralBindingWidget:
+    """A `SpiralBindingWidget` using the standard notebook hole/loop token pairing."""
+    return SpiralBindingWidget(qcolor("surface_paper"), qcolor("notebook_binding"), parent)
 
 
 def make_spiral_binding_strip() -> QFrame:
@@ -282,18 +288,19 @@ def make_spiral_binding_strip() -> QFrame:
     Placed as the fixed-width middle widget of a 3-pane `QSplitter` so the two
     outer panes read as facing notebook pages while remaining independently
     resizable (the binding strip itself is never collapsible or draggable).
+    The binding itself is a real `QPainter`-rendered `SpiralBindingWidget`
+    (paper-hole + metal-loop rings, findable as `strip.findChild(SpiralBindingWidget)`)
+    whose ring count adapts to the strip's height, not a font-glyph column.
     """
     strip = QFrame()
     apply_role(strip, "spiral_binding_strip")
     strip.setMinimumWidth(_SPIRAL_BINDING_STRIP_WIDTH_PX)
     strip.setMaximumWidth(_SPIRAL_BINDING_STRIP_WIDTH_PX)
     layout = QVBoxLayout(strip)
-    layout.setContentsMargins(0, SPACE_SECTION, 0, SPACE_SECTION)
+    layout.setContentsMargins(0, 0, 0, 0)
     layout.setSpacing(0)
-    rings = QLabel("\n".join(["◎"] * _SPIRAL_BINDING_RING_COUNT))
-    rings.setAlignment(Qt.AlignmentFlag.AlignHCenter)
-    apply_role(rings, "spiral_binding_rings")
-    layout.addWidget(rings, 1)
+    binding = _make_notebook_binding_widget()
+    layout.addWidget(binding, 1)
     return strip
 
 
@@ -307,30 +314,54 @@ def make_media_frame() -> tuple[QFrame, QVBoxLayout]:
     return frame, layout
 
 
+_MINI_NOTEBOOK_BINDING_WIDTH_PX = 10
+
+
 def make_mini_notebook(title: str) -> tuple[QFrame, QVBoxLayout]:
-    """A compact spiral-topped control card -- a hand-sized notebook page for one control group."""
+    """A hand-sized spiral notebook page for one control group.
+
+    A real `SpiralBindingWidget` binding edge runs down the left side, and
+    the body is a `RuledPaperFrame` (pale-blue ruled lines painted as the
+    page surface, not just list-row separators) -- so this reads as an
+    actual notebook page rather than a titled card.
+    """
     frame = QFrame()
     apply_role(frame, "mini_notebook_card")
-    root_layout = QVBoxLayout(frame)
+    root_layout = QHBoxLayout(frame)
     root_layout.setContentsMargins(0, 0, 0, 0)
     root_layout.setSpacing(0)
 
-    spiral_bar = QFrame()
-    apply_role(spiral_bar, "mini_notebook_spiral_bar")
-    spiral_layout = QHBoxLayout(spiral_bar)
-    spiral_layout.setContentsMargins(SPACE_NORMAL, SPACE_COMPACT, SPACE_NORMAL, SPACE_COMPACT)
+    binding_edge = QFrame()
+    apply_role(binding_edge, "mini_notebook_binding_edge")
+    binding_edge.setFixedWidth(_MINI_NOTEBOOK_BINDING_WIDTH_PX)
+    binding_edge_layout = QVBoxLayout(binding_edge)
+    binding_edge_layout.setContentsMargins(0, 0, 0, 0)
+    binding_edge_layout.setSpacing(0)
+    binding_edge_layout.addWidget(_make_notebook_binding_widget(), 1)
+    root_layout.addWidget(binding_edge)
+
+    page = QVBoxLayout()
+    page.setContentsMargins(0, 0, 0, 0)
+    page.setSpacing(0)
+
+    header_bar = QFrame()
+    apply_role(header_bar, "mini_notebook_spiral_bar")
+    header_layout = QHBoxLayout(header_bar)
+    header_layout.setContentsMargins(SPACE_NORMAL, SPACE_COMPACT, SPACE_NORMAL, SPACE_COMPACT)
     title_label = QLabel(title)
     apply_role(title_label, "mini_notebook_title")
-    spiral_layout.addWidget(title_label)
-    spiral_layout.addStretch(1)
-    root_layout.addWidget(spiral_bar)
+    header_layout.addWidget(title_label)
+    header_layout.addStretch(1)
+    page.addWidget(header_bar)
 
-    content = QWidget()
-    content_layout = QVBoxLayout(content)
-    content_layout.setContentsMargins(SPACE_NORMAL, SPACE_NORMAL, SPACE_NORMAL, SPACE_NORMAL)
+    body = RuledPaperFrame()
+    apply_role(body, "mini_notebook_body")
+    content_layout = QVBoxLayout(body)
+    content_layout.setContentsMargins(SPACE_COMPACT, SPACE_COMPACT, SPACE_COMPACT, SPACE_COMPACT)
     content_layout.setSpacing(SPACE_COMPACT)
-    root_layout.addWidget(content, 1)
+    page.addWidget(body, 1)
 
+    root_layout.addLayout(page, 1)
     return frame, content_layout
 
 
@@ -572,9 +603,14 @@ QFrame[role="spiral_binding_strip"] {{
     border-left: {BORDER_WIDTH}px solid {css('line', m)};
     border-right: {BORDER_WIDTH}px solid {css('line', m)};
 }}
-QLabel[role="spiral_binding_rings"] {{
-    color: {css('notebook_binding', m)};
-    font-size: 13px;
+/* Wider drag hit-target for the Player's own splitter only -- every other
+   QSplitter in the app keeps the global 1px handle above. */
+QSplitter[role="player_split"]::handle:horizontal {{
+    width: 6px;
+    background-color: transparent;
+}}
+QSplitter[role="player_split"]::handle:horizontal:hover {{
+    background-color: {css('accent_subtle', m)};
 }}
 QFrame[role="media_frame"] {{
     background-color: {css('surface_paper', m)};
@@ -606,13 +642,23 @@ QFrame[role="mini_notebook_card"] QPushButton[role="quiet"] {{
 QFrame[role="mini_notebook_spiral_bar"] {{
     background-color: {css('surface_soft', m)};
     border-bottom: 1px solid {css('line', m)};
-    border-top-left-radius: {RADIUS_CARD}px;
     border-top-right-radius: {RADIUS_CARD}px;
 }}
 QLabel[role="mini_notebook_title"] {{
     color: {css('muted', m)};
     font-size: 11px;
     font-weight: 700;
+}}
+QFrame[role="mini_notebook_binding_edge"] {{
+    background-color: {css('surface_soft', m)};
+    border-right: 1px solid {css('line', m)};
+    border-top-left-radius: {RADIUS_CARD}px;
+    border-bottom-left-radius: {RADIUS_CARD}px;
+}}
+QFrame[role="mini_notebook_body"] {{
+    background-color: {css('surface_paper', m)};
+    border: none;
+    border-bottom-right-radius: {RADIUS_CARD}px;
 }}
 QListWidget[role="ruled_list_notebook"] {{
     background-color: {css('surface_paper', m)};
@@ -646,6 +692,73 @@ QListWidget[role="ruled_list_notebook"]::item:selected:!active {{
 QTabWidget[role="notebook_tabs"] QTabBar::tab {{
     padding: {SPACE_COMPACT}px {SPACE_COMPACT + 2}px;
     margin-right: 1px;
+}}
+
+/* Annotation Notebook: writing-field / notebook-action grammar so Annotate /
+   Cue Note / Save Item read as a study notebook page rather than a generic
+   desktop CRUD form. */
+QFrame[role="notebook_tab_page"] {{
+    background-color: {css('surface_paper', m)};
+    border: none;
+}}
+QLineEdit[role="notebook_writing_field"] {{
+    background-color: transparent;
+    border: none;
+    border-bottom: {BORDER_WIDTH}px solid {css('notebook_rule_blue', m)};
+    border-radius: 0px;
+    padding: {SPACE_COMPACT}px {SPACE_COMPACT}px;
+}}
+QLineEdit[role="notebook_writing_field"]:focus {{
+    border-bottom: 2px solid {css('accent', m)};
+}}
+QLineEdit[role="notebook_writing_field"]:disabled {{
+    border-bottom: {BORDER_WIDTH}px solid {css('line', m)};
+}}
+QPushButton[role="notebook_primary_action"] {{
+    background-color: {css('accent_subtle', m)};
+    color: {css('accent', m)};
+    font-weight: 600;
+    border: {BORDER_WIDTH}px solid {css('accent', m)};
+    border-radius: {RADIUS_CONTROL}px;
+    padding: {SPACE_COMPACT}px {SPACE_NORMAL}px;
+}}
+QPushButton[role="notebook_primary_action"]:hover {{
+    background-color: {css('accent', m)};
+    color: #FFFFFF;
+}}
+QPushButton[role="notebook_primary_action"]:disabled {{
+    background-color: {css('disabled_surface', m)};
+    color: {css('disabled_text', m)};
+    border-color: {css('line', m)};
+}}
+QPushButton[role="notebook_action"] {{
+    background-color: transparent;
+    color: {css('ink', m)};
+    border: {BORDER_WIDTH}px solid {css('line', m)};
+    border-radius: {RADIUS_CONTROL}px;
+    padding: {SPACE_COMPACT}px {SPACE_NORMAL}px;
+}}
+QPushButton[role="notebook_action"]:hover {{
+    background-color: {css('surface_soft', m)};
+}}
+QPushButton[role="notebook_action"]:disabled {{
+    color: {css('disabled_text', m)};
+    border-color: {css('line', m)};
+}}
+QPushButton[role="notebook_destructive_action"] {{
+    background-color: transparent;
+    color: {css('danger', m)};
+    border: {BORDER_WIDTH}px solid {css('danger', m)};
+    border-radius: {RADIUS_CONTROL}px;
+    padding: {SPACE_COMPACT}px {SPACE_NORMAL}px;
+}}
+QPushButton[role="notebook_destructive_action"]:hover {{
+    background-color: {css('danger', m)};
+    color: #FFFFFF;
+}}
+QPushButton[role="notebook_destructive_action"]:disabled {{
+    color: {css('disabled_text', m)};
+    border-color: {css('line', m)};
 }}
 
 /* Surfaces & Containers */

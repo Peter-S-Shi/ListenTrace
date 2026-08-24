@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QColor, QPainter, QPen, QTextCursor
+from PySide6.QtGui import QTextCursor
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -58,6 +58,7 @@ from listentrace.ui.text_offset_conversion import (
 )
 from listentrace.ui.theme import SPACE_COMPACT, SPACE_NORMAL, apply_role, apply_surface
 from listentrace.ui.widgets.loop_grace_change_bus import loop_grace_change_bus
+from listentrace.ui.widgets.notebook_paper import RuledTextEdit
 from listentrace.ui.widgets.recording_panel import RecordingPanel
 from listentrace.ui.windows.material_loop_settings_dialog import MaterialLoopSettingsDialog
 from listentrace.ui.windows.player_window import _OVERLAP_HIGHLIGHT, _color_badge_icon, _format_time
@@ -77,50 +78,10 @@ _STAGE1_PROMPTS: list[tuple[str, str]] = [
     ("result", "What is the result or outcome?"),
 ]
 
-# Faint blue ink color for ruled lines in Stage 5 writing surface
-_RULED_LINE_COLOR = QColor(37, 99, 235, 28)  # Professional Blue at ~11% alpha
-_RULED_LINE_SPACING_PX = 28  # matches comfortable line height at 10pt font
-
 # StageStepper: minimum height for each step QPushButton so the 22px badge,
 # label, internal margins, border, and focus ring are never vertically
 # clipped (see final Pre-HG2 corrective pass #6).
 _STEP_BUTTON_MIN_HEIGHT_PX = 44
-
-
-class RuledTextEdit(QTextEdit):
-    """A QTextEdit with visible horizontal ruled lines underneath the text, like a lined notepad.
-
-    Lines are painted via paintEvent so they scale correctly with any text size, require no
-    raster images, and remain visible when the widget is scrolled.
-    """
-
-    @staticmethod
-    def _ruled_line_phase(spacing_px: int, scroll_offset_px: int) -> int:
-        """Where the first ruled line should be painted (viewport-relative y)
-        so the periodic line pattern stays anchored to the document instead
-        of the viewport. Painting from a fixed viewport-relative offset drew
-        lines that stayed still while the text scrolled underneath them --
-        correct only when the scroll offset happened to be an exact multiple
-        of `spacing_px`, and visibly drifting out of alignment with text
-        baselines otherwise (final Pre-HG2 corrective pass #12)."""
-        return (spacing_px - 1 - scroll_offset_px) % spacing_px
-
-    def paintEvent(self, event) -> None:  # type: ignore[override]
-        super().paintEvent(event)
-        painter = QPainter(self.viewport())
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing, False)
-        pen = QPen(_RULED_LINE_COLOR)
-        pen.setWidth(1)
-        painter.setPen(pen)
-
-        viewport_height = self.viewport().height()
-        width = self.viewport().width()
-
-        y = self._ruled_line_phase(_RULED_LINE_SPACING_PX, self.verticalScrollBar().value())
-        while y < viewport_height:
-            painter.drawLine(0, y, width, y)
-            y += _RULED_LINE_SPACING_PX
-        painter.end()
 
 
 class StageStepper(QFrame):

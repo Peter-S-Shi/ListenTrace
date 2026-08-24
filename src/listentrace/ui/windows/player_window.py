@@ -62,6 +62,7 @@ from listentrace.ui.text_offset_conversion import (
 )
 from listentrace.ui.theme import SPACE_COMPACT, SPACE_NORMAL, apply_role, apply_surface
 from listentrace.ui.widgets.loop_grace_change_bus import loop_grace_change_bus
+from listentrace.ui.widgets.notebook_paper import RuledPaperFrame, RuledTextEdit
 from listentrace.ui.windows.label_color_dialog import LabelColorDialog
 from listentrace.ui.windows.material_loop_settings_dialog import MaterialLoopSettingsDialog
 
@@ -96,14 +97,16 @@ class PlayerWindow(QMainWindow):
     """M13 Notebook Study Desk Window -- an open two-page learning journal.
 
     Target Architecture:
-    - Top Level: QScrollArea container hosting a horizontal QSplitter with three
-      panes: the media study page, a fixed-width spiral binding strip, and the
-      transcript/annotation notebook page.
+    - Top Level: a fixed (non-scrolling) top bar and horizontal QSplitter with
+      three panes: the media study page, a fixed-width spiral binding strip,
+      and the transcript/annotation notebook page. The media/playback context
+      is always visible -- there is no outer QScrollArea around it.
     - Left page: media viewport in a warm paper frame, a quiet status strip,
       the seek timeline, and playback/loop/quick-practice controls grouped into
       compact spiral mini-notebook cards.
     - Right page: Transcript & Cues as a ruled study sheet, and an Annotation
-      Notebook (Annotate / Cue Note / Save Item) below it.
+      Notebook (Annotate / Cue Note / Save Item) below it, wrapped in its own
+      local QScrollArea so working in it never scrolls the media page away.
     - Warm cream/paper surfaces throughout with pale-blue ruled lines; the
       media viewport itself may remain dark, but the surrounding chrome does not.
     """
@@ -122,8 +125,10 @@ class PlayerWindow(QMainWindow):
         # M13 Notebook Study Desk: the three side-by-side mini-notebook control
         # cards genuinely need more horizontal room than the old single stacked
         # control card did. 880px caused real clipping/overflow under the new
-        # architecture (measured), so the practical floor moves up with it;
-        # vertical overflow still falls back to the existing QScrollArea.
+        # architecture (measured), so the practical floor moves up with it.
+        # Vertical overflow is owned locally by the Annotation Notebook's own
+        # QScrollArea (see _build_workspace_panel's caller) -- the media study
+        # page itself has no scroll wrapper and must simply fit this floor.
         self.setMinimumSize(1040, 620)
 
         self._material = material
@@ -186,6 +191,12 @@ class PlayerWindow(QMainWindow):
         # -------------------------------------------------------------------
         self._main_splitter = QSplitter(Qt.Orientation.Horizontal)
         self._main_splitter.setChildrenCollapsible(False)
+        # The app-wide splitter handle is a deliberately thin 1px seam; that's
+        # too narrow a drag target here where the visual binding strip (not
+        # the handle) carries the seam's visual weight. Widen just this
+        # splitter's hit target via a scoped role/QSS rule rather than
+        # touching the global QSplitter::handle rule used everywhere else.
+        apply_role(self._main_splitter, "player_split")
 
         # === LEFT PANEL: Media Study Page ===
         self._cinema_stage_widget = QWidget(self._main_splitter)
@@ -234,7 +245,7 @@ class PlayerWindow(QMainWindow):
 
         # Mini Spiral Notebook Control Cards: Playback | Loop & Practice | Utility
         notebooks_row = QHBoxLayout()
-        notebooks_row.setSpacing(SPACE_NORMAL)
+        notebooks_row.setSpacing(SPACE_COMPACT)
 
         self._playback_notebook, playback_layout = theme.make_mini_notebook("Playback")
         playback_card = self._playback_notebook
@@ -372,13 +383,25 @@ class PlayerWindow(QMainWindow):
         self._programmatic_scroll = False
         self._cue_list.verticalScrollBar().valueChanged.connect(self._on_transcript_scrollbar_changed)
 
-        # Annotation Notebook (Annotate / Cue Note / Save Item)
+        # Annotation Notebook (Annotate / Cue Note / Save Item). Wrapped in its
+        # own local QScrollArea rather than the whole Player: this is the
+        # piece whose fields/buttons historically compressed to unreadable
+        # slivers in a short window (M12 Round 2 fix), and it's also the only
+        # piece that actually needs to scroll -- keeping that scroll local
+        # means working in it never carries the media/playback context (the
+        # left page) off-screen with it.
         annotation_notebook, annotation_content = theme.make_notebook_surface(
             context_label="Annotation Notebook"
         )
         self._workspace_panel = self._build_workspace_panel()
         annotation_content.addWidget(self._workspace_panel)
-        right_layout.addWidget(annotation_notebook)
+
+        self._annotation_scroll_area = QScrollArea()
+        self._annotation_scroll_area.setWidgetResizable(True)
+        self._annotation_scroll_area.setFrameShape(QFrame.Shape.NoFrame)
+        self._annotation_scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self._annotation_scroll_area.setWidget(annotation_notebook)
+        right_layout.addWidget(self._annotation_scroll_area)
 
         self._main_splitter.addWidget(self._right_workspace_widget)
 
@@ -402,11 +425,11 @@ class PlayerWindow(QMainWindow):
         self._workspace_status_label.setWordWrap(True)
         root_layout.addWidget(self._workspace_status_label)
 
-        scroll_area = QScrollArea()
-        scroll_area.setWidgetResizable(True)
-        apply_surface(scroll_area, "paper")
-        scroll_area.setWidget(central)
-        self.setCentralWidget(scroll_area)
+        # No outer QScrollArea: the top bar and the two-page notebook
+        # workspace stay fixed/always-visible (the media/playback context
+        # must never scroll off-screen while the learner works in the
+        # Annotation Notebook -- see the local QScrollArea around it above).
+        self.setCentralWidget(central)
         apply_surface(self, "paper")
 
         self._playback.position_changed.connect(self._on_position_changed)
@@ -446,18 +469,21 @@ class PlayerWindow(QMainWindow):
             apply_role(button, "quiet")
         for button in (
             self._save_annotation_button,
-            self._update_annotation_button,
             self._save_note_button,
             self._save_item_button,
+        ):
+            apply_role(button, "notebook_primary_action")
+        for button in (
+            self._update_annotation_button,
             self._update_item_button,
         ):
-            apply_role(button, "secondary")
+            apply_role(button, "notebook_action")
         for button in (
             self._delete_annotation_button,
             self._delete_note_button,
             self._delete_item_button,
         ):
-            apply_role(button, "danger")
+            apply_role(button, "notebook_destructive_action")
 
         for button in (
             self._save_annotation_button,
@@ -484,9 +510,10 @@ class PlayerWindow(QMainWindow):
         apply_role(self._cue_tools_tabs, "notebook_tabs")
 
         # ---- Tab 1: Annotate ------------------------------------------------
-        annotation_widget = QWidget()
+        annotation_widget = RuledPaperFrame()
+        apply_role(annotation_widget, "notebook_tab_page")
         annotation_column = QVBoxLayout(annotation_widget)
-        annotation_column.setContentsMargins(8, 8, 8, 8)
+        annotation_column.setContentsMargins(4, 8, 4, 8)
         annotation_column.setSpacing(4)
 
         annot_header = QLabel("Editing cue transcript (select text to annotate):")
@@ -494,7 +521,7 @@ class PlayerWindow(QMainWindow):
         apply_role(annot_header, "caption")
         annotation_column.addWidget(annot_header)
 
-        self._editing_transcript_view = QTextEdit()
+        self._editing_transcript_view = RuledTextEdit()
         self._editing_transcript_view.setReadOnly(True)
         self._editing_transcript_view.setMaximumHeight(90)
         self._editing_transcript_view.cursorPositionChanged.connect(
@@ -528,6 +555,7 @@ class PlayerWindow(QMainWindow):
         self._heard_as_edit = QLineEdit()
         self._heard_as_edit.setMinimumHeight(28)
         self._heard_as_edit.setEnabled(False)
+        apply_role(self._heard_as_edit, "notebook_writing_field")
         heard_as_row.addWidget(self._heard_as_edit)
         annotation_column.addLayout(heard_as_row)
 
@@ -537,6 +565,7 @@ class PlayerWindow(QMainWindow):
         note_row.addWidget(note_lbl)
         self._annotation_note_edit = QLineEdit()
         self._annotation_note_edit.setMinimumHeight(28)
+        apply_role(self._annotation_note_edit, "notebook_writing_field")
         note_row.addWidget(self._annotation_note_edit)
         annotation_column.addLayout(note_row)
 
@@ -567,15 +596,16 @@ class PlayerWindow(QMainWindow):
         self._cue_tools_tabs.addTab(annotation_widget, "Annotate")
 
         # ---- Tab 2: Cue Note ------------------------------------------------
-        note_widget = QWidget()
+        note_widget = RuledPaperFrame()
+        apply_role(note_widget, "notebook_tab_page")
         note_column = QVBoxLayout(note_widget)
-        note_column.setContentsMargins(8, 8, 8, 8)
+        note_column.setContentsMargins(4, 8, 4, 8)
         note_column.setSpacing(4)
 
         cue_note_lbl = QLabel("Cue Note:")
         apply_role(cue_note_lbl, "caption")
         note_column.addWidget(cue_note_lbl)
-        self._cue_note_edit = QTextEdit()
+        self._cue_note_edit = RuledTextEdit()
         self._cue_note_edit.setMaximumHeight(80)
         note_column.addWidget(self._cue_note_edit)
         note_buttons_row = QHBoxLayout()
@@ -591,9 +621,10 @@ class PlayerWindow(QMainWindow):
         self._cue_tools_tabs.addTab(note_widget, "Cue Note")
 
         # ---- Tab 3: Save Item -----------------------------------------------
-        item_widget = QWidget()
+        item_widget = RuledPaperFrame()
+        apply_role(item_widget, "notebook_tab_page")
         item_column = QVBoxLayout(item_widget)
-        item_column.setContentsMargins(8, 8, 8, 8)
+        item_column.setContentsMargins(4, 8, 4, 8)
         item_column.setSpacing(4)
 
         item_hdr = QLabel("Save Language Item")
@@ -622,6 +653,7 @@ class PlayerWindow(QMainWindow):
         meaning_row.addWidget(mean_lbl)
         self._item_meaning_edit = QLineEdit()
         self._item_meaning_edit.setMinimumHeight(28)
+        apply_role(self._item_meaning_edit, "notebook_writing_field")
         meaning_row.addWidget(self._item_meaning_edit)
         item_column.addLayout(meaning_row)
 
@@ -631,11 +663,12 @@ class PlayerWindow(QMainWindow):
         item_note_row.addWidget(inote_lbl)
         self._item_note_edit = QLineEdit()
         self._item_note_edit.setMinimumHeight(28)
+        apply_role(self._item_note_edit, "notebook_writing_field")
         item_note_row.addWidget(self._item_note_edit)
         item_column.addLayout(item_note_row)
 
         item_column.addWidget(QLabel("Context (editable):"))
-        self._item_context_edit = QTextEdit()
+        self._item_context_edit = RuledTextEdit()
         self._item_context_edit.setMaximumHeight(52)
         item_column.addWidget(self._item_context_edit)
 

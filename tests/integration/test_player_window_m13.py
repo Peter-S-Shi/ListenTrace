@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 import pytest
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QSplitter
+from PySide6.QtWidgets import QScrollArea, QSplitter
 
 from listentrace.application.dto.player_load import PlayerLoadResult
 from listentrace.domain.models.material import Material
@@ -81,5 +81,54 @@ def test_player_window_m13_notebook_study_desk_architecture(qapp, db_conn, tmp_p
     # 7. Verify Cue-as-Ruled-Study-Sheet Stream
     assert window._cue_list.property("role") == "ruled_list_notebook"
     assert window._cue_list.count() == 2
+
+    window.close()
+
+
+def test_player_window_m13_splitter_pages_remain_independently_resizable(qapp, db_conn, tmp_path):
+    """Notebook Primitive Hardening corrective #9: the Player's own splitter
+    gets a wider drag hit target (scoped role, not a global QSplitter change),
+    and the left/right pages must still actually resize when dragged."""
+    load_res = _sample_player_load(tmp_path)
+    window = PlayerWindow(load_res, db_conn)
+    window.resize(1400, 800)
+    window.show()
+
+    assert window._main_splitter.property("role") == "player_split"
+
+    before_left, before_binding, before_right = window._main_splitter.sizes()
+    window._main_splitter.moveSplitter(before_left - 100, 1)
+
+    after_left, after_binding, after_right = window._main_splitter.sizes()
+    assert after_left != before_left
+    assert after_binding == before_binding  # the fixed-width binding strip never moves
+    assert after_left + after_right == before_left + before_right
+
+    window.close()
+
+
+def test_player_window_m13_annotation_notebook_scrolls_independently_of_media_page(qapp, db_conn, tmp_path):
+    """Notebook Primitive Hardening corrective #8: scrolling the Annotation
+    Notebook to reach its lower controls must never carry the media/playback
+    context off-screen -- that's the immersion bug this pass fixes. Proven by
+    scrolling the local annotation QScrollArea to its maximum and confirming
+    the media study page's geometry/visibility is completely unaffected."""
+    load_res = _sample_player_load(tmp_path)
+    window = PlayerWindow(load_res, db_conn)
+    window.resize(1040, 620)
+    window.show()
+
+    assert not isinstance(window.centralWidget(), QScrollArea)
+    assert isinstance(window._annotation_scroll_area, QScrollArea)
+
+    before_geometry = window._cinema_stage_widget.geometry()
+    before_visible = window._cinema_stage_widget.isVisible()
+
+    scrollbar = window._annotation_scroll_area.verticalScrollBar()
+    scrollbar.setValue(scrollbar.maximum())
+
+    assert window._cinema_stage_widget.geometry() == before_geometry
+    assert window._cinema_stage_widget.isVisible() == before_visible
+    assert window._video_widget is None or window._video_widget.isVisible()
 
     window.close()
