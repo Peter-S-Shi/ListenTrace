@@ -11,8 +11,8 @@ from PySide6.QtWidgets import (
     QListWidget,
     QListWidgetItem,
     QPushButton,
+    QScrollArea,
     QSplitter,
-    QTextEdit,
     QVBoxLayout,
     QWidget,
 )
@@ -97,10 +97,23 @@ class QuizReviewDialog(QDialog):
         apply_role(detail_hdr, "caption")
         detail_column.addWidget(detail_hdr)
 
-        self._detail_view = QTextEdit()
-        self._detail_view.setReadOnly(True)
-        self._detail_view.setStyleSheet("font-size: 13px; line-height: 1.4;")
-        detail_column.addWidget(self._detail_view, 1)
+        # Structured labeled sections (Question / Result / Source Cue /
+        # Learner Answer / Correct Answer / Feedback) replace the previous
+        # plain-text dump so review reads as a real learning surface rather
+        # than a debug/plain-text inspector.
+        detail_scroll = QScrollArea()
+        detail_scroll.setWidgetResizable(True)
+        detail_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        apply_surface(detail_scroll, "paper")
+
+        self._detail_body = QWidget()
+        apply_surface(self._detail_body, "paper")
+        self._detail_layout = QVBoxLayout(self._detail_body)
+        self._detail_layout.setContentsMargins(0, 0, 0, 0)
+        self._detail_layout.setSpacing(SPACE_NORMAL)
+        self._detail_layout.addStretch(1)
+        detail_scroll.setWidget(self._detail_body)
+        detail_column.addWidget(detail_scroll, 1)
 
         splitter = QSplitter(Qt.Orientation.Horizontal)
         splitter.setChildrenCollapsible(False)
@@ -131,43 +144,63 @@ class QuizReviewDialog(QDialog):
             self._list.setCurrentRow(0)
 
     def _on_selection_changed(self, current: QListWidgetItem, previous: QListWidgetItem) -> None:
+        self._clear_detail_sections()
         if current is None:
-            self._detail_view.setPlainText("")
             return
         question_id = current.data(Qt.ItemDataRole.UserRole)
         item = next((i for i in self._review.items if i.question_id == question_id), None)
         if item is not None:
-            self._detail_view.setPlainText(self._format_item(item))
+            self._populate_detail_sections(item)
 
-    def _format_item(self, item: QuizReviewItem) -> str:
-        type_str = item.question_type.replace("_", " ").upper()
-        res_str = "✓ CORRECT" if item.is_correct else "✗ INCORRECT"
+    def _clear_detail_sections(self) -> None:
+        while self._detail_layout.count() > 1:  # keep the trailing stretch
+            child = self._detail_layout.takeAt(0)
+            widget = child.widget()
+            if widget is not None:
+                widget.deleteLater()
 
-        lines = [
-            f"Question Type: {type_str}",
-            f"Result: {res_str}",
-            f"Source Cue: \"{item.source_cue_text}\"",
-            "─" * 40,
-        ]
+    def _add_detail_section(self, heading: str, body: str) -> None:
+        heading_label = QLabel(heading)
+        apply_role(heading_label, "caption")
+        self._detail_layout.insertWidget(self._detail_layout.count() - 1, heading_label)
+
+        body_label = QLabel(body)
+        body_label.setWordWrap(True)
+        body_label.setStyleSheet("font-size: 13px;")
+        self._detail_layout.insertWidget(self._detail_layout.count() - 1, body_label)
+
+    def _populate_detail_sections(self, item: QuizReviewItem) -> None:
+        type_str = item.question_type.replace("_", " ").title()
+        self._add_detail_section("Question / Type", type_str)
+
+        # Result: text + color, never color alone.
+        result_label = QLabel("✓ Correct" if item.is_correct else "✗ Incorrect")
+        result_label.setStyleSheet(
+            f"font-size: 14px; font-weight: 700; color: {_CORRECT_COLOR if item.is_correct else _INCORRECT_COLOR};"
+        )
+        result_heading = QLabel("Result")
+        apply_role(result_heading, "caption")
+        self._detail_layout.insertWidget(self._detail_layout.count() - 1, result_heading)
+        self._detail_layout.insertWidget(self._detail_layout.count() - 1, result_label)
+
+        self._add_detail_section("Source Cue", item.source_cue_text or "")
 
         if item.question_type in _TEXT_ANSWER_TYPES:
-            lines.append(f"Your Answer:   {item.raw_answer_text or '(no answer)'}")
-            lines.append(f"Correct Answer: {item.correct_answer.get('answer_text', '')}")
+            learner_answer = item.raw_answer_text or "(no answer)"
+            correct_answer = item.correct_answer.get("answer_text", "")
         else:
             choices = item.prompt.get("choices", [])
             selected_index = item.selected_choice_index
-            selected_text = (
+            learner_answer = (
                 choices[selected_index]
                 if selected_index is not None and 0 <= selected_index < len(choices)
                 else "(no answer)"
             )
             correct_index = item.correct_answer.get("correct_choice_index")
-            correct_text = choices[correct_index] if correct_index is not None and correct_index < len(choices) else ""
-            lines.append(f"Your Answer:   {selected_text}")
-            lines.append(f"Correct Answer: {correct_text}")
+            correct_answer = choices[correct_index] if correct_index is not None and correct_index < len(choices) else ""
+
+        self._add_detail_section("Learner Answer", learner_answer)
+        self._add_detail_section("Correct Answer", correct_answer)
 
         if item.explanation:
-            lines.append("─" * 40)
-            lines.append(f"Feedback & Explanation:\n{item.explanation}")
-
-        return "\n".join(lines)
+            self._add_detail_section("Feedback / Explanation", item.explanation)

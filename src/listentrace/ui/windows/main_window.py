@@ -3,7 +3,7 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QSettings
 from PySide6.QtWidgets import (
     QDialog,
     QFrame,
@@ -59,10 +59,15 @@ from listentrace.ui.windows.quiz_window import QuizWindow
 from listentrace.ui.windows.session_history_dialog import SessionHistoryDialog
 from listentrace.ui.windows.shadowing_practice_window import ShadowingPracticeWindow
 
+_SETTINGS_ORG = "ListenTrace"
+_SETTINGS_APP = "ListenTrace"
+_SETTING_SIDEBAR_COLLAPSED = "ui/sidebar_collapsed"
+_SETTING_SIDEBAR_WIDTH = "ui/sidebar_width"
+_DEFAULT_SIDEBAR_WIDTH = 190
+
 _DEFAULT_QUIZ_QUESTION_COUNT = 10
 _MIN_QUIZ_QUESTION_COUNT = 1
 _MAX_QUIZ_QUESTION_COUNT = 50
-
 
 class MainWindow(QMainWindow):
     """M13 Reconstructed Main Workspace & Material Library Window.
@@ -85,8 +90,11 @@ class MainWindow(QMainWindow):
         self._db_path = db_path
         self._recordings_dir = recordings_dir
         self._showing_archived = False
-        self._sidebar_collapsed = False
-        self._last_sidebar_width = 190
+
+        # Restore sidebar state from persisted preferences
+        _settings = QSettings(_SETTINGS_ORG, _SETTINGS_APP)
+        self._sidebar_collapsed: bool = _settings.value(_SETTING_SIDEBAR_COLLAPSED, False, type=bool)
+        self._last_sidebar_width: int = _settings.value(_SETTING_SIDEBAR_WIDTH, _DEFAULT_SIDEBAR_WIDTH, type=int)
 
         self._player_window: PlayerWindow | None = None
         self._guided_session_window: GuidedSessionWindow | None = None
@@ -100,6 +108,12 @@ class MainWindow(QMainWindow):
         self._apply_presentation()
         self._set_action_buttons_enabled(False)
         self.refresh_library()
+
+        # Apply persisted sidebar collapsed state after UI is ready
+        if self._sidebar_collapsed:
+            self._sidebar_widget.setVisible(False)
+            self._toggle_sidebar_button.setText("Show Sidebar")
+
 
     def _init_ui(self) -> None:
         apply_surface(self, "workspace")
@@ -140,18 +154,18 @@ class MainWindow(QMainWindow):
         sidebar_layout.addWidget(dir_caption)
 
         # Left-aligned directory navigation items
-        self._nav_library_button = QPushButton("📁  Material Library")
+        self._nav_library_button = QPushButton("Material Library")
         apply_role(self._nav_library_button, "nav_item")
         self._nav_library_button.setProperty("active", "true")
         self._nav_library_button.clicked.connect(self._on_nav_library_clicked)
         sidebar_layout.addWidget(self._nav_library_button)
 
-        self._learning_history_button = QPushButton("📊  Learning History")
+        self._learning_history_button = QPushButton("Learning History")
         apply_role(self._learning_history_button, "nav_item")
         self._learning_history_button.clicked.connect(self._on_learning_history_clicked)
         sidebar_layout.addWidget(self._learning_history_button)
 
-        self._playback_settings_button = QPushButton("⚙️  Playback Settings...")
+        self._playback_settings_button = QPushButton("Playback Settings...")
         apply_role(self._playback_settings_button, "nav_item")
         self._playback_settings_button.clicked.connect(self._on_open_playback_settings)
         sidebar_layout.addWidget(self._playback_settings_button)
@@ -303,7 +317,7 @@ class MainWindow(QMainWindow):
 
         # Destructive Action: Isolated at Bottom
         danger_row = QHBoxLayout()
-        self._remove_button = QPushButton("🗑️ Remove Material")
+        self._remove_button = QPushButton("Remove Material")
         apply_role(self._remove_button, "danger")
         self._remove_button.clicked.connect(self._on_remove_clicked)
         danger_row.addStretch(1)
@@ -360,19 +374,23 @@ class MainWindow(QMainWindow):
             self.refresh_library()
 
     def _on_toggle_sidebar(self) -> None:
-        """Collapse or expand the navigation sidebar."""
+        """Collapse or expand the navigation sidebar, persisting the preference."""
+        settings = QSettings(_SETTINGS_ORG, _SETTINGS_APP)
         if self._sidebar_widget.isVisible():
             sizes = self._main_splitter.sizes()
             if sizes and sizes[0] > 0:
                 self._last_sidebar_width = sizes[0]
+                settings.setValue(_SETTING_SIDEBAR_WIDTH, self._last_sidebar_width)
             self._sidebar_widget.setVisible(False)
             self._sidebar_collapsed = True
+            settings.setValue(_SETTING_SIDEBAR_COLLAPSED, True)
             self._toggle_sidebar_button.setText("Show Sidebar")
         else:
             self._sidebar_widget.setVisible(True)
-            restore_w = self._last_sidebar_width if self._last_sidebar_width > 50 else 190
+            restore_w = self._last_sidebar_width if self._last_sidebar_width > 50 else _DEFAULT_SIDEBAR_WIDTH
             self._main_splitter.setSizes([restore_w, 770])
             self._sidebar_collapsed = False
+            settings.setValue(_SETTING_SIDEBAR_COLLAPSED, False)
             self._toggle_sidebar_button.setText("Hide Sidebar")
 
     def refresh_library(self) -> None:

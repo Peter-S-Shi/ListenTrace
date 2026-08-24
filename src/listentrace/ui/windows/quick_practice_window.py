@@ -152,10 +152,18 @@ class QuickPracticeWindow(QMainWindow):
         self._stack.addWidget(self._build_diagnose_panel())
         self._stack.addWidget(self._build_replay_panel())
         self._stack.addWidget(self._build_summary_panel())
-        layout.addWidget(self._stack, 1)
+        # M13 corrective: keep the active step card top-centered at a
+        # comfortable working width rather than stretching a small task over
+        # the full window, and keep the progression action directly below it
+        # (see step_column below) instead of far away at the window edge.
+        self._stack.setMaximumWidth(600)
+
+        step_column = QVBoxLayout()
+        step_column.addWidget(self._stack, 1)
 
         # -------------------------------------------------------------------
-        # 3. Action Footer
+        # 3. Action Footer — spatially connected to the active step card,
+        #    not stretched across the full window width.
         # -------------------------------------------------------------------
         nav_row = QHBoxLayout()
         nav_row.addStretch(1)
@@ -170,7 +178,13 @@ class QuickPracticeWindow(QMainWindow):
         apply_role(self._step_action_button, "primary")
         self._step_action_button.setMinimumHeight(32)
         nav_row.addWidget(self._step_action_button)
-        layout.addLayout(nav_row)
+        step_column.addLayout(nav_row)
+
+        centered_row = QHBoxLayout()
+        centered_row.addStretch(1)
+        centered_row.addLayout(step_column, 0)
+        centered_row.addStretch(1)
+        layout.addLayout(centered_row, 1)
 
         self.setCentralWidget(central)
 

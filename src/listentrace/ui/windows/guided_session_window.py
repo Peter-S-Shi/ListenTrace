@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QTextCursor
+from PySide6.QtGui import QColor, QPainter, QPen, QTextCursor
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -77,9 +77,44 @@ _STAGE1_PROMPTS: list[tuple[str, str]] = [
     ("result", "What is the result or outcome?"),
 ]
 
+# Faint blue ink color for ruled lines in Stage 5 writing surface
+_RULED_LINE_COLOR = QColor(37, 99, 235, 28)  # Professional Blue at ~11% alpha
+_RULED_LINE_SPACING_PX = 28  # matches comfortable line height at 10pt font
+
+
+class RuledTextEdit(QTextEdit):
+    """A QTextEdit with visible horizontal ruled lines underneath the text, like a lined notepad.
+
+    Lines are painted via paintEvent so they scale correctly with any text size, require no
+    raster images, and remain visible when the widget is scrolled.
+    """
+
+    def paintEvent(self, event) -> None:  # type: ignore[override]
+        super().paintEvent(event)
+        painter = QPainter(self.viewport())
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, False)
+        pen = QPen(_RULED_LINE_COLOR)
+        pen.setWidth(1)
+        painter.setPen(pen)
+
+        viewport_height = self.viewport().height()
+        width = self.viewport().width()
+
+        # Start from an offset that aligns with text baseline rhythm
+        y = _RULED_LINE_SPACING_PX - 1
+        while y < viewport_height:
+            painter.drawLine(0, y, width, y)
+            y += _RULED_LINE_SPACING_PX
+        painter.end()
+
 
 class StageStepper(QFrame):
-    """Session-local visual stepper indicating the 5 stages of guided intensive practice."""
+    """Session-local visual stepper indicating the 5 stages of guided intensive practice.
+
+    Each stage step is a QPushButton, giving native keyboard focus, Tab/Shift-Tab
+    traversal, Enter/Space activation, and the ability to be disabled (unreached
+    future stages are disabled so mouse AND keyboard cannot jump to them).
+    """
 
     stage_clicked = Signal(str)
 
@@ -91,7 +126,7 @@ class StageStepper(QFrame):
         self._layout.setContentsMargins(0, 0, 0, 0)
         self._layout.setSpacing(SPACE_COMPACT)
 
-        self._step_widgets: dict[str, QFrame] = {}
+        self._step_buttons: dict[str, QPushButton] = {}
         self._step_badges: dict[str, QLabel] = {}
         self._step_labels: dict[str, QLabel] = {}
 
@@ -104,12 +139,18 @@ class StageStepper(QFrame):
         ]
 
         for key, num_str, title in stage_meta:
-            step_box = QFrame()
-            step_box.setObjectName(f"step_{key}")
-            step_box.setCursor(Qt.CursorShape.PointingHandCursor)
-            step_layout = QHBoxLayout(step_box)
-            step_layout.setContentsMargins(8, 6, 8, 6)
-            step_layout.setSpacing(6)
+            # Each stepper item is a QPushButton containing badge + label inside it.
+            # Using a QPushButton provides native: keyboard focus, Tab navigation,
+            # Enter/Space activation, and setEnabled() for blocking future stages.
+            btn = QPushButton()
+            btn.setObjectName(f"step_{key}")
+            btn.setFlat(True)
+            btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            btn.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+
+            inner_layout = QHBoxLayout()
+            inner_layout.setContentsMargins(8, 6, 8, 6)
+            inner_layout.setSpacing(6)
 
             badge = QLabel(num_str)
             badge.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -118,18 +159,26 @@ class StageStepper(QFrame):
                 "border-radius: 11px; background: rgba(0, 0, 0, 0.08); font-weight: 700; font-size: 11px;"
             )
 
-            label = QLabel(title)
-            label.setStyleSheet("font-size: 12px; font-weight: 600;")
+            lbl = QLabel(title)
+            lbl.setStyleSheet("font-size: 12px; font-weight: 600;")
 
-            step_layout.addWidget(badge)
-            step_layout.addWidget(label)
+            inner_layout.addWidget(badge)
+            inner_layout.addWidget(lbl)
 
-            step_box.mousePressEvent = lambda _ev, k=key: self.stage_clicked.emit(k)
+            container = QWidget()
+            container.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+            container.setLayout(inner_layout)
 
-            self._step_widgets[key] = step_box
+            btn_layout = QHBoxLayout(btn)
+            btn_layout.setContentsMargins(0, 0, 0, 0)
+            btn_layout.addWidget(container)
+
+            btn.clicked.connect(lambda _checked=False, k=key: self.stage_clicked.emit(k))
+
+            self._step_buttons[key] = btn
             self._step_badges[key] = badge
-            self._step_labels[key] = label
-            self._layout.addWidget(step_box, 1)
+            self._step_labels[key] = lbl
+            self._layout.addWidget(btn, 1)
 
     def update_stepper(self, current_stage: str, stage_progress: dict[str, Any], read_only: bool) -> None:
         accent = theme.css("accent")
@@ -141,7 +190,7 @@ class StageStepper(QFrame):
         ink = theme.css("ink")
         muted = theme.css("muted")
 
-        for key, widget in self._step_widgets.items():
+        for key, btn in self._step_buttons.items():
             badge = self._step_badges[key]
             label = self._step_labels[key]
             idx_str = str(STAGE_ORDER.index(key) + 1)
@@ -152,10 +201,19 @@ class StageStepper(QFrame):
             is_current = key == current_stage
             is_completed = status == StageStatus.COMPLETED.value
             is_skipped = status == StageStatus.SKIPPED.value
+            is_not_started = status == StageStatus.NOT_STARTED.value
+
+            # Navigation safety: disable future unreached stages (NOT_STARTED and
+            # not the current stage).  read_only sessions disable all stages.
+            is_reachable = is_current or is_completed or is_skipped or (
+                status == StageStatus.IN_PROGRESS.value
+            )
+            btn.setEnabled(not read_only and is_reachable)
 
             if is_current:
-                widget.setStyleSheet(
-                    f"QFrame {{ background: {accent_subtle}; border: 1.5px solid {accent}; border-radius: 8px; }}"
+                btn.setStyleSheet(
+                    f"QPushButton {{ background: {accent_subtle}; border: 1.5px solid {accent}; border-radius: 8px; }}"
+                    f"QPushButton:focus {{ border: 2px solid {accent}; }}"
                 )
                 badge.setStyleSheet(
                     f"border-radius: 11px; background: {accent}; color: #FFFFFF; font-weight: 700; font-size: 11px;"
@@ -163,8 +221,10 @@ class StageStepper(QFrame):
                 badge.setText(idx_str)
                 label.setStyleSheet(f"font-size: 12px; font-weight: 700; color: {ink};")
             elif is_completed:
-                widget.setStyleSheet(
-                    f"QFrame {{ background: {surface}; border: 1px solid {success}; border-radius: 8px; }}"
+                btn.setStyleSheet(
+                    f"QPushButton {{ background: {surface}; border: 1px solid {success}; border-radius: 8px; }}"
+                    f"QPushButton:focus {{ border: 2px solid {accent}; }}"
+                    f"QPushButton:hover {{ background: {accent_subtle}; }}"
                 )
                 badge.setStyleSheet(
                     f"border-radius: 11px; background: {success}; color: #FFFFFF; font-weight: 700; font-size: 11px;"
@@ -172,8 +232,10 @@ class StageStepper(QFrame):
                 badge.setText("✓")
                 label.setStyleSheet(f"font-size: 12px; font-weight: 600; color: {ink};")
             elif is_skipped:
-                widget.setStyleSheet(
-                    f"QFrame {{ background: {surface}; border: 1px solid {warning}; border-radius: 8px; }}"
+                btn.setStyleSheet(
+                    f"QPushButton {{ background: {surface}; border: 1px solid {warning}; border-radius: 8px; }}"
+                    f"QPushButton:focus {{ border: 2px solid {accent}; }}"
+                    f"QPushButton:hover {{ background: {accent_subtle}; }}"
                 )
                 badge.setStyleSheet(
                     f"border-radius: 11px; background: {warning}; color: #FFFFFF; font-weight: 700; font-size: 11px;"
@@ -181,8 +243,10 @@ class StageStepper(QFrame):
                 badge.setText("–")
                 label.setStyleSheet(f"font-size: 12px; font-weight: 500; color: {muted};")
             else:
-                widget.setStyleSheet(
-                    f"QFrame {{ background: {surface}; border: 1px solid {line}; border-radius: 8px; }}"
+                # NOT_STARTED (or any other) — visually disabled future stage
+                btn.setStyleSheet(
+                    f"QPushButton {{ background: {surface}; border: 1px solid {line}; border-radius: 8px; }}"
+                    f"QPushButton:disabled {{ background: {surface}; border: 1px solid {line}; }}"
                 )
                 badge.setStyleSheet(
                     f"border-radius: 11px; background: {line}; color: {muted}; font-weight: 600; font-size: 11px;"
@@ -437,20 +501,18 @@ class GuidedSessionWindow(QMainWindow):
             return
         resolved_statuses = (StageStatus.COMPLETED.value, StageStatus.SKIPPED.value)
         unresolved_titles = []
-        checklist_lines = []
         for stage_key in STAGE_ORDER:
             progress = state.stage_progress.get(stage_key)
             status = progress.status if progress is not None else StageStatus.NOT_STARTED.value
-            resolved = status in resolved_statuses
-            mark = "✓" if resolved else "✗"
-            checklist_lines.append(f"{mark} {_STAGE_TITLES[stage_key]}")
-            if not resolved:
+            if status not in resolved_statuses:
                 unresolved_titles.append(_STAGE_TITLES[stage_key])
         if unresolved_titles:
-            summary = "Complete Session needs: " + "; ".join(unresolved_titles) + "."
+            count = len(unresolved_titles)
+            names = ", ".join(unresolved_titles)
+            self._completion_status_label.setText(f"{count} stage{'s' if count > 1 else ''} remaining: {names}.")
         else:
-            summary = "Ready to complete."
-        self._completion_status_label.setText(summary + "  (" + " | ".join(checklist_lines) + ")")
+            self._completion_status_label.setText("All stages resolved — ready to complete.")
+
 
     def _save_current_stage_inputs(self) -> None:
         session = svc.get_session(self._connection, self._session_id)
@@ -729,10 +791,25 @@ class GuidedSessionWindow(QMainWindow):
         add_row.addWidget(self._capture_add_button)
         layout.addLayout(add_row)
 
+        # Capture list + empty-state hint overlay (the hint is shown when the list is empty)
+        list_container = QWidget()
+        list_container_layout = QVBoxLayout(list_container)
+        list_container_layout.setContentsMargins(0, 0, 0, 0)
+        list_container_layout.setSpacing(0)
+
         self._capture_list = QListWidget()
         apply_role(self._capture_list, "ruled_list")
         self._capture_list.currentItemChanged.connect(self._on_capture_selected)
-        layout.addWidget(self._capture_list, 1)
+        list_container_layout.addWidget(self._capture_list, 1)
+
+        self._capture_empty_hint = QLabel("No captures yet — type a keyword or fragment above and click Add Capture.")
+        self._capture_empty_hint.setWordWrap(True)
+        self._capture_empty_hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        apply_role(self._capture_empty_hint, "caption")
+        self._capture_empty_hint.setVisible(True)
+        list_container_layout.addWidget(self._capture_empty_hint)
+
+        layout.addWidget(list_container, 1)
 
         buttons_row = QHBoxLayout()
         self._capture_update_button = QPushButton("Update Selected")
@@ -773,6 +850,9 @@ class GuidedSessionWindow(QMainWindow):
             self._capture_list.addItem(item)
         self._capture_list.blockSignals(False)
 
+        # Show empty-state hint only when there are no captures yet
+        self._capture_empty_hint.setVisible(self._capture_list.count() == 0)
+
         locked = state.session.transcript_revealed_at is not None
         enabled = state.session.status == SessionStatus.ACTIVE.value and not locked
         self._stage2_locked = not enabled
@@ -784,6 +864,7 @@ class GuidedSessionWindow(QMainWindow):
         self._capture_delete_button.setEnabled(False)
         self._capture_move_up_button.setEnabled(False)
         self._capture_move_down_button.setEnabled(False)
+
 
     def _on_capture_selected(self, current: QListWidgetItem, previous: QListWidgetItem) -> None:
         if current is None:
@@ -1482,13 +1563,16 @@ class GuidedSessionWindow(QMainWindow):
     # ---- Stage 5: Final Recall ----
 
     def _build_stage5_panel(self) -> QWidget:
-        panel, layout = theme.make_notebook_surface("Stage 5: Final Recall Journal")
+        panel, layout = theme.make_notebook_surface(
+            "Stage 5: Final Recall Journal",
+            context_label=None,  # The spiral bar shows no "Study Dossier" stamp here
+        )
         desc_label = QLabel("Transcript hidden. Summarize the material in two or three sentences in the target language.")
         desc_label.setWordWrap(True)
         apply_role(desc_label, "subtitle")
         layout.addWidget(desc_label)
 
-        self._final_summary_edit = QTextEdit()
+        self._final_summary_edit = RuledTextEdit()
         self._final_summary_edit.setMinimumHeight(150)
         self._final_summary_edit.setMaximumHeight(240)
         layout.addWidget(self._final_summary_edit, 1)
@@ -1502,6 +1586,7 @@ class GuidedSessionWindow(QMainWindow):
         self._stage5_reference_view.setMaximumHeight(100)
         layout.addWidget(self._stage5_reference_view)
         return panel
+
 
     def _populate_stage5(self, state: PracticeSessionState) -> None:
         responses = state.stage_responses.get(StageKey.FINAL_SUMMARY.value, {})

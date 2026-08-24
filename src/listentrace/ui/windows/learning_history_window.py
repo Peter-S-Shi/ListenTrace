@@ -18,6 +18,8 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QMessageBox,
     QPushButton,
+    QSplitter,
+    QStackedWidget,
     QTabWidget,
     QTreeWidget,
     QTreeWidgetItem,
@@ -150,22 +152,50 @@ class LearningHistoryWindow(QMainWindow):
         self._error_label.setWordWrap(True)
         outer_layout.addWidget(self._error_label)
 
-        self._tabs = QTabWidget()
-        outer_layout.addWidget(self._tabs, 1)
+        # Left directory + right workspace (Acrobat-style section navigation)
+        body_splitter = QSplitter(Qt.Orientation.Horizontal)
+        body_splitter.setChildrenCollapsible(False)
 
-        self._tabs.addTab(self._build_overview_tab(), "Overview")
-        self._tabs.addTab(self._build_activity_tab(), "Activity")
-        self._tabs.addTab(self._build_sessions_tab(), "Sessions")
-        self._tabs.addTab(self._build_diagnoses_tab(), "Diagnoses")
-        self._tabs.addTab(self._build_quizzes_tab(), "Quizzes")
-        self._tabs.addTab(self._build_shadowing_recordings_tab(), "Shadowing & Recordings")
-        self._tabs.addTab(self._build_quick_practice_tab(), "Quick Practice")
+        # Left navigation directory
+        self._section_list = QListWidget()
+        self._section_list.setMaximumWidth(168)
+        self._section_list.setMinimumWidth(120)
+        apply_surface(self._section_list, "surface_soft")
+        apply_role(self._section_list, "nav_directory")
+        for section_name in (
+            "Overview",
+            "Activity",
+            "Sessions",
+            "Diagnoses",
+            "Quizzes",
+            "Shadowing & Recordings",
+            "Quick Practice",
+        ):
+            item = QListWidgetItem(section_name)
+            self._section_list.addItem(item)
+        self._section_list.currentRowChanged.connect(self._on_section_changed)
+        body_splitter.addWidget(self._section_list)
+
+        # Right section workspace (one page per directory entry)
+        self._section_stack = QStackedWidget()
+        self._section_stack.addWidget(self._build_overview_tab())
+        self._section_stack.addWidget(self._build_activity_tab())
+        self._section_stack.addWidget(self._build_sessions_tab())
+        self._section_stack.addWidget(self._build_diagnoses_tab())
+        self._section_stack.addWidget(self._build_quizzes_tab())
+        self._section_stack.addWidget(self._build_shadowing_recordings_tab())
+        self._section_stack.addWidget(self._build_quick_practice_tab())
+        body_splitter.addWidget(self._section_stack)
+
+        body_splitter.setSizes([158, 740])
+        outer_layout.addWidget(body_splitter, 1)
 
         self.setCentralWidget(central)
 
         self._refresh_material_combo(initial_material_id)
         self._update_custom_range_visibility()
         self._reload()
+        self._section_list.setCurrentRow(0)
 
     # ---- filters ----
 
@@ -214,6 +244,11 @@ class LearningHistoryWindow(QMainWindow):
 
     def _on_reload_clicked(self) -> None:
         self._reload()
+
+    def _on_section_changed(self, row: int) -> None:
+        """Switch the right workspace stack to the selected section page."""
+        if 0 <= row < self._section_stack.count():
+            self._section_stack.setCurrentIndex(row)
 
     # ---- reload ----
 

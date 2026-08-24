@@ -143,8 +143,15 @@ def test_stage_stepper_and_stage2_scope_fidelity(qapp, conn, tmp_path):
     guided_win.close()
 
 
-def test_quick_practice_replacement_regression_retained(qapp, conn, tmp_path):
+def test_quick_practice_replacement_regression_retained(qapp, conn, tmp_path, monkeypatch):
     """Carry-forward check: Quick practice window replacement cleanly abandons prior multi-cue session with evidence."""
+    from PySide6.QtWidgets import QMessageBox
+
+    # Closing the first window mid-run (with one completed cue) triggers the
+    # "Abandon Quick Practice Run?" confirmation — auto-accept it so this
+    # test doesn't block on a real modal dialog.
+    monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.StandardButton.Yes)
+
     res = _setup_material(conn, tmp_path)
     load_result = load_material_for_player(conn, res.material_id)
     player = PlayerWindow(load_result, conn)

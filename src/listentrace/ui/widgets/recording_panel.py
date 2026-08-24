@@ -117,7 +117,7 @@ class RecordingPanel(QWidget):
         record_row = QHBoxLayout()
         self._start_recording_button = QPushButton("Start Recording")
         self._start_recording_button.clicked.connect(self._on_start_recording_clicked)
-        theme.apply_role(self._start_recording_button, "secondary")
+        theme.apply_role(self._start_recording_button, "primary")
         self._stop_recording_button = QPushButton("Stop Recording")
         self._stop_recording_button.clicked.connect(self._on_stop_recording_clicked)
         theme.apply_role(self._stop_recording_button, "secondary")
@@ -137,6 +137,14 @@ class RecordingPanel(QWidget):
         theme.configure_long_text_list(self._takes_list)
         self._takes_list.currentItemChanged.connect(lambda *_: self._update_take_buttons())
         layout.addWidget(self._takes_list)
+
+        # M13 corrective: an empty take list should not consume a large blank
+        # region of the stage — show a calm inline hint and cap the list's
+        # height until there is something to scroll through.
+        self._takes_empty_label = QLabel("Record your first take to begin.")
+        theme.apply_role(self._takes_empty_label, "caption")
+        self._takes_empty_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(self._takes_empty_label)
 
         take_row = QHBoxLayout()
         self._play_take_button = QPushButton("Play Take")
@@ -392,6 +400,10 @@ class RecordingPanel(QWidget):
             item = QListWidgetItem(label)
             item.setData(Qt.ItemDataRole.UserRole, take.id)
             self._takes_list.addItem(item)
+        has_takes = bool(self._takes)
+        self._takes_empty_label.setVisible(not has_takes)
+        self._takes_list.setVisible(has_takes)
+        self._takes_list.setMaximumHeight(16777215 if has_takes else 0)
         self._update_take_buttons()
 
     def _selected_take(self) -> Recording | None:

@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
     QPushButton,
     QRadioButton,
     QScrollArea,
+    QSizePolicy,
     QStackedWidget,
     QVBoxLayout,
     QWidget,
@@ -49,13 +50,21 @@ class QuizOptionCard(QFrame):
         super().__init__(parent)
         self.setObjectName(f"quiz_option_card_{index}")
         self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setMinimumHeight(52)
+        # Keyboard/focus accessibility: the card itself is the interactive
+        # target (not just the nested radio button), so it needs its own
+        # focus policy and a visible focus ring — Tab traversal and
+        # Space/Return activation must work without a mouse.
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self._index = index
+        self._letter = letter
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(12, 10, 12, 10)
         layout.setSpacing(12)
 
         self._radio = QRadioButton()
+        self._radio.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self._badge = QLabel(letter)
         self._badge.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._badge.setFixedSize(24, 24)
@@ -64,9 +73,16 @@ class QuizOptionCard(QFrame):
         self._label.setWordWrap(True)
         self._label.setStyleSheet("font-size: 13px; font-weight: 500;")
 
+        # Non-color selected marker — shown in addition to the accent
+        # border/background so selection is never conveyed by color alone.
+        self._selected_marker = QLabel("")
+        self._selected_marker.setFixedWidth(16)
+        self._selected_marker.setStyleSheet("font-size: 13px; font-weight: 700;")
+
         layout.addWidget(self._radio, 0)
         layout.addWidget(self._badge, 0)
         layout.addWidget(self._label, 1)
+        layout.addWidget(self._selected_marker, 0)
 
         self.mousePressEvent = self._on_card_clicked
         self._radio.toggled.connect(self._on_radio_toggled)
@@ -74,7 +90,16 @@ class QuizOptionCard(QFrame):
 
     def _on_card_clicked(self, event) -> None:
         if self._radio.isEnabled():
+            self.setFocus(Qt.FocusReason.MouseFocusReason)
             self._radio.setChecked(True)
+
+    def keyPressEvent(self, event) -> None:
+        if event.key() in (Qt.Key.Key_Space, Qt.Key.Key_Return, Qt.Key.Key_Enter):
+            if self._radio.isEnabled():
+                self._radio.setChecked(True)
+            event.accept()
+            return
+        super().keyPressEvent(event)
 
     def _on_radio_toggled(self, checked: bool) -> None:
         self._update_appearance(checked)
@@ -89,18 +114,23 @@ class QuizOptionCard(QFrame):
         if checked:
             self.setStyleSheet(
                 f"QFrame {{ background: {accent_subtle}; border: 1.5px solid {accent}; border-radius: 8px; }}"
+                f"QFrame:focus {{ border: 2px solid {accent}; }}"
             )
             self._badge.setStyleSheet(
                 f"border-radius: 12px; background: {accent}; color: #FFFFFF; font-weight: 700; font-size: 11px;"
             )
+            self._selected_marker.setText("✓")
+            self._selected_marker.setStyleSheet(f"font-size: 13px; font-weight: 700; color: {accent};")
         else:
             self.setStyleSheet(
                 f"QFrame {{ background: {surface}; border: 1px solid {line}; border-radius: 8px; }}"
                 f"QFrame:hover {{ border-color: {accent}; }}"
+                f"QFrame:focus {{ border: 2px solid {accent}; }}"
             )
             self._badge.setStyleSheet(
                 f"border-radius: 12px; background: {line}; color: {ink}; font-weight: 700; font-size: 11px;"
             )
+            self._selected_marker.setText("")
 
 
 class QuizWindow(QMainWindow):
@@ -179,6 +209,12 @@ class QuizWindow(QMainWindow):
         # -------------------------------------------------------------------
         canvas_card, canvas_layout = theme.make_card()
         apply_surface(canvas_card, "paper")
+        # Deliberate comfortable reading width — a full-window-wide question
+        # canvas leaves a large blank field once options are laid out; a
+        # capped, centered width makes the canvas read as a designed object
+        # rather than empty space with a few controls floating in it.
+        canvas_card.setMaximumWidth(680)
+        canvas_card.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
 
         # Prompt & Type
         self._question_label = QLabel("")
@@ -223,7 +259,11 @@ class QuizWindow(QMainWindow):
         self._answer_stack.addWidget(self._build_choice_panel())
         canvas_layout.addWidget(self._answer_stack, 1)
 
-        layout.addWidget(canvas_card, 1)
+        canvas_row = QHBoxLayout()
+        canvas_row.addStretch(1)
+        canvas_row.addWidget(canvas_card, 0)
+        canvas_row.addStretch(1)
+        layout.addLayout(canvas_row, 1)
 
         # -------------------------------------------------------------------
         # 3. Action Footer
@@ -268,11 +308,11 @@ class QuizWindow(QMainWindow):
     def _apply_presentation(self) -> None:
         """Milestone 11 button-role assignment."""
         apply_role(self._previous_button, "secondary")
-        apply_role(self._next_button, "secondary")
         apply_role(self._close_button, "quiet")
         apply_role(self._abandon_button, "danger")
-        apply_role(self._submit_button, "primary")
         apply_role(self._review_button, "secondary")
+        # _next_button / _submit_button roles are set dynamically in
+        # _update_nav_buttons() based on question position.
         self._submit_button.setMinimumHeight(32)
 
     # ---- panel construction ----
@@ -522,11 +562,24 @@ class QuizWindow(QMainWindow):
             return
         total = len(self._state.questions)
         read_only = self._state.attempt.status != QuizStatus.ACTIVE.value
+        on_last_question = self._current_index >= total - 1
         self._previous_button.setEnabled(self._current_index > 0)
-        self._next_button.setEnabled(self._current_index < total - 1)
+        self._next_button.setEnabled(not on_last_question)
         self._abandon_button.setEnabled(not read_only)
         self._submit_button.setEnabled(not read_only and total > 0)
         self._review_button.setEnabled(self._state.attempt.status == QuizStatus.COMPLETED.value)
+
+        # Presentation-only action grammar: while there is a next question,
+        # "Next Question" is the strongest next step and "Submit Quiz" stays
+        # quiet-but-available; on the final question, submission becomes the
+        # dominant action. Ability to submit never changes — only which
+        # button visually leads.
+        if on_last_question:
+            apply_role(self._next_button, "quiet")
+            apply_role(self._submit_button, "primary")
+        else:
+            apply_role(self._next_button, "primary")
+            apply_role(self._submit_button, "quiet")
 
     # ---- shared playback plumbing ----
 

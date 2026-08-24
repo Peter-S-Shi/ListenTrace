@@ -68,10 +68,20 @@ def test_quiz_window_m13_architecture(qapp, conn, tmp_path):
         assert isinstance(card, QuizOptionCard)
         assert isinstance(card._radio, QRadioButton)
 
-    # 3. Action Hierarchy
-    assert window._submit_button.property("role") == "primary"
+    # 3. Action Hierarchy — presentation-only action grammar: not on the
+    # last question yet, so "Next Question" leads and "Submit Quiz" is quiet
+    # (but still enabled — submission ability never changes).
+    assert window._next_button.property("role") == "primary"
+    assert window._submit_button.property("role") == "quiet"
+    assert window._submit_button.isEnabled()
     assert window._abandon_button.property("role") == "danger"
     assert window._close_button.property("role") == "quiet"
+
+    # Advance to the last question: Submit Quiz becomes the dominant action.
+    window._show_question(1)
+    assert window._next_button.property("role") == "quiet"
+    assert window._submit_button.property("role") == "primary"
+    assert window._submit_button.isEnabled()
 
     window.close()
 
@@ -85,7 +95,11 @@ def test_quiz_review_dialog_m13_architecture(qapp, conn, tmp_path):
 
     assert dialog.property("surface") == "paper"
     assert hasattr(dialog, "_list")
-    assert hasattr(dialog, "_detail_view")
+    assert hasattr(dialog, "_detail_body")
+    # Structured section widgets (Question/Type, Result, Source Cue, Learner
+    # Answer, Correct Answer) are populated for the selected item, not a
+    # single plain-text dump.
+    assert dialog._detail_layout.count() > 1
 
     dialog.close()
 
@@ -124,7 +138,22 @@ def test_learning_history_window_m13_architecture(qapp, conn, tmp_path):
     window.show()
 
     assert window.property("surface") == "paper"
-    assert hasattr(window, "_tabs")
-    assert window._tabs.count() == 7
+    assert hasattr(window, "_section_list")
+    assert hasattr(window, "_section_stack")
+    assert window._section_list.count() == 7
+    assert window._section_stack.count() == 7
+
+    window.close()
+
+
+def test_learning_history_window_m13_section_navigation(qapp, conn, tmp_path):
+    window = LearningHistoryWindow(conn, tmp_path / "recordings")
+    window.show()
+
+    assert window._section_list.currentRow() == 0
+    assert window._section_stack.currentIndex() == 0
+
+    window._section_list.setCurrentRow(3)
+    assert window._section_stack.currentIndex() == 3
 
     window.close()

@@ -226,7 +226,11 @@ def test_stage5_summary_save_and_continue_enables_complete_button(qapp, conn, tm
 
 def test_complete_button_disabled_reason_is_visible_and_accurate(qapp, conn, tmp_path, monkeypatch):
     """M12 Round 3 Completion/Explainability Contract: a disabled `Complete
-    Session` must show an inspectable reason, not just render grey."""
+    Session` must show an inspectable reason, not just render grey.
+
+    M13 corrective pass (#8): the footer was compressed from a loud
+    full-checklist inline string into a concise unresolved-stage summary —
+    the reason must still be visible and accurate, just quieter."""
     monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.StandardButton.Yes)
     window, _, _ = _open_guided_window(conn, tmp_path)
 
@@ -240,13 +244,11 @@ def test_complete_button_disabled_reason_is_visible_and_accurate(qapp, conn, tmp
     window._on_skip_stage_clicked()  # -> stage5
 
     assert "Final Recall" in window._completion_status_label.text()
-    assert "Global Comprehension" not in window._completion_status_label.text().split("(")[0]
+    assert "Global Comprehension" not in window._completion_status_label.text()
 
     window._final_summary_edit.setPlainText("Short summary.")
     window._on_save_and_continue_clicked()
-    assert window._completion_status_label.text() == "Ready to complete.  (✓ Global Comprehension | " \
-        "✓ Keyword & Fragment Capture | ✓ Transcript Comparison & Error Diagnosis | " \
-        "✓ Sentence-Level Shadowing | ✓ Final Recall)"
+    assert window._completion_status_label.text() == "All stages resolved — ready to complete."
     window.close()
 
 

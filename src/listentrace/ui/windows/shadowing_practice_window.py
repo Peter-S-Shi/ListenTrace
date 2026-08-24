@@ -170,7 +170,7 @@ class ShadowingPracticeWindow(QMainWindow):
         # 4. Footer Actions
         # -------------------------------------------------------------------
         bottom_row = QHBoxLayout()
-        self._delete_material_recordings_button = QPushButton("🗑 Delete All Recordings for This Material")
+        self._delete_material_recordings_button = QPushButton("Delete All Recordings for This Material")
         self._delete_material_recordings_button.clicked.connect(self._on_delete_material_recordings_clicked)
         apply_role(self._delete_material_recordings_button, "danger")
 

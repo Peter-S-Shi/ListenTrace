@@ -5,6 +5,7 @@ import wave
 
 import pytest
 from PySide6.QtCore import Qt
+from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QScrollArea, QSplitter
 
 from listentrace.application.services import practice_session_service as svc
@@ -54,8 +55,20 @@ def test_guided_session_m13_stepper_and_topology(qapp, conn, tmp_path):
     # 1. Top Bar & Stepper Verification
     assert hasattr(window, "_stage_stepper")
     assert isinstance(window._stage_stepper, StageStepper)
-    assert len(window._stage_stepper._step_widgets) == 5
+    assert len(window._stage_stepper._step_buttons) == 5
     assert window._stage_stepper._step_badges["global_comprehension"].text() == "1"
+
+    # Current stage is enabled; future unreached stages are disabled (mouse AND
+    # keyboard cannot jump ahead of legally reached stages).
+    assert window._stage_stepper._step_buttons["global_comprehension"].isEnabled()
+    for future_key in ("transcript_diagnosis", "shadowing", "final_summary"):
+        assert not window._stage_stepper._step_buttons[future_key].isEnabled()
+
+    # Stepper items are keyboard-focusable (StrongFocus), not mouse-only.
+    assert (
+        window._stage_stepper._step_buttons["global_comprehension"].focusPolicy()
+        == Qt.FocusPolicy.StrongFocus
+    )
 
     # 2. Stage 1 Canvas
     stage1_widget = window._stack.widget(0)
@@ -102,5 +115,55 @@ def test_guided_session_m13_stepper_updates_on_stage_advance(qapp, conn, tmp_pat
     assert window._stage_stepper._step_badges["global_comprehension"].text() == "✓"
     # Stage 2 should show active step 2
     assert window._stage_stepper._step_badges["keyword_capture"].text() == "2"
+
+    window.close()
+
+
+def test_guided_session_m13_stepper_blocks_illegal_forward_jump(qapp, conn, tmp_path):
+    window, _, _ = _open_guided_window(conn, tmp_path)
+    window.show()
+
+    # Stage 3/4/5 are unreached from Stage 1: disabled buttons cannot emit
+    # clicked, so no click can reach _on_stepper_stage_clicked for them.
+    for future_key in ("transcript_diagnosis", "shadowing", "final_summary"):
+        btn = window._stage_stepper._step_buttons[future_key]
+        assert not btn.isEnabled()
+        btn.click()  # a disabled QPushButton.click() is a no-op
+
+    assert window._current_stage == "global_comprehension"
+    assert window._stack.currentIndex() == 0
+
+    window.close()
+
+
+def test_guided_session_m13_stepper_keyboard_activation(qapp, conn, tmp_path):
+    window, _, _ = _open_guided_window(conn, tmp_path)
+    window.show()
+
+    window._stage1_edits["who_is_speaking"].setPlainText("Speaker A")
+    window._on_save_and_continue_clicked()
+    assert window._current_stage == "keyword_capture"
+
+    # Stage 1 is now completed/reached and enabled; activate it via keyboard
+    # (Space) rather than a mouse click.
+    stage1_btn = window._stage_stepper._step_buttons["global_comprehension"]
+    assert stage1_btn.isEnabled()
+    stage1_btn.setFocus()
+    QTest.keyClick(stage1_btn, Qt.Key.Key_Space)
+
+    assert window._current_stage == "global_comprehension"
+
+    window.close()
+
+
+def test_guided_session_m13_stepper_read_only_disables_all(qapp, conn, tmp_path):
+    window, _, session_id = _open_guided_window(conn, tmp_path)
+    window.show()
+
+    svc.abandon_session(conn, session_id)
+    window._refresh_state()
+
+    for btn in window._stage_stepper._step_buttons.values():
+        assert not btn.isEnabled()
 
     window.close()

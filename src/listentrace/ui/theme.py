@@ -6,7 +6,15 @@ Milestone 13 (Advanced UI/UX Reconstruction) Theme System:
 - Lined Spiral Notebook & Ruled Study Paper contextual surfaces
 - Spacious Learning density (4 / 8 / 16 / 24 / 32 px scale)
 - Contextual Surface Modes (Workspace, Paper Study, Ruled Notebook, Dark Focus)
-- Full Light and Dark theme support
+- Light theme is the actual runtime mode: `app.py` calls `apply_theme(app)`
+  with no mode argument, so the whole application always renders with
+  `_TOKENS_LIGHT`. The Player's "Dark Focus" cinema surface is a fixed dark
+  *surface* token (`surface_cinema` etc.) defined inside `_TOKENS_LIGHT`
+  itself, not a runtime light/dark mode switch. `_TOKENS_DARK` and
+  `build_stylesheet`/`css`/`qcolor`'s `theme_mode="dark"` parameter exist
+  but nothing in the product calls them with `"dark"` — there is no
+  app-wide runtime light/dark toggle wired in yet. Do not describe this as
+  "full light and dark support" until one exists.
 - Two-layer QSS model (Base Layer + Opt-in Component/Surface Layer)
 
 Product-semantic tokens (cue_active, text_overlap, quiz_correct, quiz_incorrect,
@@ -187,8 +195,20 @@ def make_paper_surface(title: str | None = None) -> tuple[QFrame, QVBoxLayout]:
     return frame, layout
 
 
-def make_notebook_surface(title: str | None = None) -> tuple[QFrame, QVBoxLayout]:
-    """A lined spiral notebook study surface with wire-binding cues and ruled paper styling."""
+def make_notebook_surface(
+    title: str | None = None,
+    context_label: str | None = "Study Dossier",
+) -> tuple[QFrame, QVBoxLayout]:
+    """A lined spiral notebook study surface with wire-binding cues and ruled paper styling.
+
+    Args:
+        title: Optional title rendered inside the content area.
+        context_label: The label shown in the spiral bar header.  Pass ``None``
+            to omit the stamp entirely (e.g. for Stage-5 Final Recall where
+            "Study Dossier" would be semantically wrong).  Defaults to
+            ``"Study Dossier"`` for backward compatibility with the MainWindow
+            dossier panel.
+    """
     frame = QFrame()
     apply_surface(frame, "paper")
     apply_role(frame, "notebook_page")
@@ -207,9 +227,10 @@ def make_notebook_surface(title: str | None = None) -> tuple[QFrame, QVBoxLayout
     spiral_layout.addWidget(spiral_cue)
     spiral_layout.addStretch(1)
 
-    doodle_stamp = QLabel("📝 Study Dossier")
-    apply_role(doodle_stamp, "notebook_doodle_tag")
-    spiral_layout.addWidget(doodle_stamp)
+    if context_label is not None:
+        doodle_stamp = QLabel(context_label)
+        apply_role(doodle_stamp, "notebook_doodle_tag")
+        spiral_layout.addWidget(doodle_stamp)
     root_layout.addWidget(spiral_bar)
 
     # Content container with ruled margins

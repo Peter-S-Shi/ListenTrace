@@ -23,6 +23,7 @@ from PySide6.QtWidgets import (
     QScrollArea,
     QSlider,
     QSplitter,
+    QTabWidget,
     QTextEdit,
     QVBoxLayout,
     QWidget,
@@ -460,15 +461,29 @@ class PlayerWindow(QMainWindow):
     # ---- workspace panel construction ----
 
     def _build_workspace_panel(self) -> QWidget:
-        annotation_frame, annotation_column = theme.make_card()
-        apply_surface(annotation_frame, "cinema")
+        """Build the compact tabbed cue-tools panel below the cue stream.
+
+        Three modes — Annotate, Cue Note, Save Item — are each a tab in a
+        QTabWidget.  This eliminates the inner horizontal QSplitter that caused
+        annotation/item controls to clip at ~1080 px whole-window width.
+        """
+        self._cue_tools_tabs = QTabWidget()
+        apply_surface(self._cue_tools_tabs, "cinema")
+
+        # ---- Tab 1: Annotate ------------------------------------------------
+        annotation_widget = QWidget()
+        apply_surface(annotation_widget, "cinema")
+        annotation_column = QVBoxLayout(annotation_widget)
+        annotation_column.setContentsMargins(8, 8, 8, 8)
+        annotation_column.setSpacing(4)
+
         annot_header = QLabel("Editing cue transcript (select text to annotate):")
         apply_role(annot_header, "caption")
         annotation_column.addWidget(annot_header)
 
         self._editing_transcript_view = QTextEdit()
         self._editing_transcript_view.setReadOnly(True)
-        self._editing_transcript_view.setMaximumHeight(110)
+        self._editing_transcript_view.setMaximumHeight(90)
         self._editing_transcript_view.cursorPositionChanged.connect(
             self._on_transcript_cursor_moved
         )
@@ -520,16 +535,25 @@ class PlayerWindow(QMainWindow):
         apply_role(annots_on_cue_lbl, "caption")
         annotation_column.addWidget(annots_on_cue_lbl)
         self._annotation_list = QListWidget()
-        self._annotation_list.setMaximumHeight(100)
+        self._annotation_list.setMaximumHeight(80)
         self._annotation_list.currentItemChanged.connect(self._on_annotation_selected)
         annotation_column.addWidget(self._annotation_list)
 
+        self._cue_tools_tabs.addTab(annotation_widget, "Annotate")
+
+        # ---- Tab 2: Cue Note ------------------------------------------------
+        note_widget = QWidget()
+        apply_surface(note_widget, "cinema")
+        note_column = QVBoxLayout(note_widget)
+        note_column.setContentsMargins(8, 8, 8, 8)
+        note_column.setSpacing(4)
+
         cue_note_lbl = QLabel("Cue Note:")
         apply_role(cue_note_lbl, "caption")
-        annotation_column.addWidget(cue_note_lbl)
+        note_column.addWidget(cue_note_lbl)
         self._cue_note_edit = QTextEdit()
-        self._cue_note_edit.setMaximumHeight(60)
-        annotation_column.addWidget(self._cue_note_edit)
+        self._cue_note_edit.setMaximumHeight(80)
+        note_column.addWidget(self._cue_note_edit)
         note_buttons_row = QHBoxLayout()
         self._save_note_button = QPushButton("Save Note")
         self._save_note_button.clicked.connect(self._on_save_note_clicked)
@@ -537,16 +561,23 @@ class PlayerWindow(QMainWindow):
         self._delete_note_button.clicked.connect(self._on_delete_note_clicked)
         note_buttons_row.addWidget(self._save_note_button)
         note_buttons_row.addWidget(self._delete_note_button)
-        annotation_column.addLayout(note_buttons_row)
+        note_column.addLayout(note_buttons_row)
+        note_column.addStretch(1)
 
-        item_frame, item_column = theme.make_card()
-        apply_surface(item_frame, "cinema")
+        self._cue_tools_tabs.addTab(note_widget, "Cue Note")
+
+        # ---- Tab 3: Save Item -----------------------------------------------
+        item_widget = QWidget()
+        apply_surface(item_widget, "cinema")
+        item_column = QVBoxLayout(item_widget)
+        item_column.setContentsMargins(8, 8, 8, 8)
+        item_column.setSpacing(4)
+
         item_hdr = QLabel("Save Language Item")
         apply_role(item_hdr, "caption")
         item_column.addWidget(item_hdr)
         source_lock_note = QLabel(
-            "Type, meaning, note, and context can be edited later. The source text/range "
-            "is fixed once saved — delete and save again to change what text an item refers to."
+            "Type, meaning, note, and context can be edited later. Source text/range is fixed once saved."
         )
         source_lock_note.setWordWrap(True)
         apply_role(source_lock_note, "caption")
@@ -582,7 +613,7 @@ class PlayerWindow(QMainWindow):
 
         item_column.addWidget(QLabel("Context (editable):"))
         self._item_context_edit = QTextEdit()
-        self._item_context_edit.setMaximumHeight(60)
+        self._item_context_edit.setMaximumHeight(52)
         item_column.addWidget(self._item_context_edit)
 
         item_buttons_row = QHBoxLayout()
@@ -603,16 +634,14 @@ class PlayerWindow(QMainWindow):
         apply_role(saved_on_cue_lbl, "caption")
         item_column.addWidget(saved_on_cue_lbl)
         self._saved_items_list = QListWidget()
-        self._saved_items_list.setMaximumHeight(100)
+        self._saved_items_list.setMaximumHeight(80)
         self._saved_items_list.currentItemChanged.connect(self._on_saved_item_selected)
         item_column.addWidget(self._saved_items_list)
 
-        splitter = QSplitter(Qt.Orientation.Horizontal)
-        splitter.setChildrenCollapsible(False)
-        splitter.addWidget(annotation_frame)
-        splitter.addWidget(item_frame)
-        splitter.setSizes([320, 260])
-        return splitter
+        self._cue_tools_tabs.addTab(item_widget, "Save Item")
+
+        return self._cue_tools_tabs
+
 
     # ---- transport handlers ----
 
@@ -666,13 +695,25 @@ class PlayerWindow(QMainWindow):
             self._audio_placeholder.setText(f"{self._material.title}\n{text}")
 
     def _update_active_cue_highlight(self) -> None:
-        """Highlight the currently-playing cue via background color only."""
+        """Highlight the currently-playing cue with background color AND a non-color prefix marker."""
         active_index = self._session.active_cue_index
         for i in range(self._cue_list.count()):
             item = self._cue_list.item(i)
             if item is None:
                 continue
-            item.setBackground(_ACTIVE_CUE_HIGHLIGHT if i == active_index else QColor(0, 0, 0, 0))
+            is_active = i == active_index
+            item.setBackground(_ACTIVE_CUE_HIGHLIGHT if is_active else QColor(0, 0, 0, 0))
+
+            # Non-color indicator: add ▶ prefix for playing cue, remove it otherwise.
+            # Strip any existing marker first to avoid accumulating ▶▶▶ on repeated calls.
+            raw_text = item.text()
+            if raw_text.startswith("▶ "):
+                raw_text = raw_text[2:]
+            if is_active:
+                item.setText(f"▶ {raw_text}")
+            else:
+                item.setText(raw_text)
+
         if self._follow_playback and active_index is not None:
             self._scroll_to_cue_if_needed(active_index)
 
