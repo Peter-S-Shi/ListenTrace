@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QFrame,
+    QGridLayout,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -1023,14 +1024,22 @@ class GuidedSessionWindow(QMainWindow):
         self._diagnosis_transcript_view.setMaximumHeight(110)
         right_column.addWidget(self._diagnosis_transcript_view)
 
-        label_row = QHBoxLayout()
+        # A single QHBoxLayout row can't hold all five label names (the
+        # longest, "connected reduced speech", forces the others to squish
+        # or truncate at this splitter pane's width) -- a fixed-column grid
+        # keeps every label fully readable regardless of window/pane width.
+        _LABEL_GRID_COLUMNS = 3
+        label_grid = QGridLayout()
+        label_grid.setHorizontalSpacing(SPACE_NORMAL)
+        label_grid.setVerticalSpacing(SPACE_COMPACT)
         self._diagnosis_label_checkboxes: dict[str, QCheckBox] = {}
-        for label in AnnotationLabel:
+        for index, label in enumerate(AnnotationLabel):
             checkbox = QCheckBox(label.value.replace("_", " "))
             checkbox.stateChanged.connect(self._on_diagnosis_label_checkbox_changed)
             self._diagnosis_label_checkboxes[label.value] = checkbox
-            label_row.addWidget(checkbox)
-        right_column.addLayout(label_row)
+            row, column = divmod(index, _LABEL_GRID_COLUMNS)
+            label_grid.addWidget(checkbox, row, column)
+        right_column.addLayout(label_grid)
 
         heard_as_row = QHBoxLayout()
         heard_lbl = QLabel("Heard as:")
