@@ -62,6 +62,8 @@ class MaterialLoopSettingsDialog(QDialog):
         loop_grace_change_bus.material_override_changed.connect(self._on_material_override_changed_elsewhere)
 
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(theme.SPACE_SECTION, theme.SPACE_SECTION, theme.SPACE_SECTION, theme.SPACE_SECTION)
+        layout.setSpacing(theme.SPACE_NORMAL)
 
         explanation = QLabel(_EXPLANATION)
         explanation.setWordWrap(True)

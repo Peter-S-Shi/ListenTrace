@@ -30,6 +30,8 @@ class ImportDialog(QDialog):
         self.imported_material_id: int | None = None
 
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(theme.SPACE_SECTION, theme.SPACE_SECTION, theme.SPACE_SECTION, theme.SPACE_SECTION)
+        layout.setSpacing(theme.SPACE_NORMAL)
 
         form_card, form_column = theme.make_card()
 

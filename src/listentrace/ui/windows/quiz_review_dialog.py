@@ -21,7 +21,7 @@ from listentrace.application.dto.quiz_review import QuizReviewItem
 from listentrace.application.services import quiz_service
 from listentrace.domain.enums.question_type import QuestionType
 from listentrace.ui import theme
-from listentrace.ui.theme import SPACE_COMPACT, SPACE_NORMAL, apply_role, apply_surface
+from listentrace.ui.theme import SPACE_COMPACT, SPACE_NORMAL, SPACE_SECTION, apply_role, apply_surface
 from listentrace.ui.windows.player_window import _color_badge_icon
 
 _CORRECT_COLOR = theme.css("quiz_correct")
@@ -49,7 +49,7 @@ class QuizReviewDialog(QDialog):
         apply_surface(self, "paper")
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(SPACE_NORMAL, SPACE_NORMAL, SPACE_NORMAL, SPACE_NORMAL)
+        layout.setContentsMargins(SPACE_SECTION, SPACE_SECTION, SPACE_SECTION, SPACE_SECTION)
         layout.setSpacing(SPACE_NORMAL)
 
         # Score Dossier Header
@@ -163,7 +163,7 @@ class QuizReviewDialog(QDialog):
 
         body_label = QLabel(body)
         body_label.setWordWrap(True)
-        body_label.setStyleSheet("font-size: 13px;")
+        apply_role(body_label, "body")
         self._detail_layout.insertWidget(self._detail_layout.count() - 1, body_label)
 
     def _populate_detail_sections(self, item: QuizReviewItem) -> None:
@@ -172,9 +172,8 @@ class QuizReviewDialog(QDialog):
 
         # Result: text + color, never color alone.
         result_label = QLabel("✓ Correct" if item.is_correct else "✗ Incorrect")
-        result_label.setStyleSheet(
-            f"font-size: 14px; font-weight: 700; color: {_CORRECT_COLOR if item.is_correct else _INCORRECT_COLOR};"
-        )
+        apply_role(result_label, "result_status")
+        theme.apply_variant(result_label, outcome="correct" if item.is_correct else "incorrect")
         result_heading = QLabel("Result")
         apply_role(result_heading, "caption")
         self._detail_layout.insertWidget(self._detail_layout.count() - 1, result_heading)

@@ -28,8 +28,8 @@ import sys
 from pathlib import Path
 from typing import NamedTuple
 
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QColor, QIcon, QPainter, QPixmap
+from PySide6.QtCore import QSize, Qt
+from PySide6.QtGui import QColor, QIcon, QPainter, QPalette, QPixmap
 from PySide6.QtWidgets import (
     QApplication,
     QFrame,
@@ -59,6 +59,10 @@ _TOKENS_LIGHT: dict[str, tuple[int, int, int, int]] = {
     "surface_sidebar": (240, 232, 220, 255), # #F0E8DC sidebar_bg
     "surface_paper": (255, 253, 248, 255),  # #FFFDF8 paper_primary
     "surface_cinema": (15, 17, 21, 255),    # #0F1115 media_black
+    "cinema_ink": (237, 237, 236, 255),     # #EDEDEC -- fixed regardless of app light/dark mode
+    "cinema_card_bg": (24, 27, 34, 255),    # #181B22
+    "cinema_muted": (156, 163, 175, 255),   # #9CA3AF
+    "cinema_input_bg": (18, 21, 22, 255),   # #12151B
     "ink": (31, 29, 26, 255),               # #1F1D1A ink_primary
     "muted": (111, 102, 92, 255),           # #6F665C ink_muted
     "line": (216, 207, 193, 255),           # #D8CFC1 warm_border
@@ -147,6 +151,10 @@ _TOKENS_DARK: dict[str, tuple[int, int, int, int]] = {
     "surface_sidebar": (23, 26, 32, 255),  # #171A20
     "surface_paper": (27, 30, 37, 255),    # #1B1E25
     "surface_cinema": (10, 12, 14, 255),   # #0A0C0E
+    "cinema_ink": (237, 237, 236, 255),    # #EDEDEC -- fixed regardless of app light/dark mode
+    "cinema_card_bg": (24, 27, 34, 255),   # #181B22
+    "cinema_muted": (156, 163, 175, 255),  # #9CA3AF
+    "cinema_input_bg": (18, 21, 22, 255),  # #12151B
     "ink": (237, 237, 236, 255),           # #EDEDEC
     "muted": (115, 110, 101, 255),         # #736E65
     "line": (255, 255, 255, 33),           # subtle white border ~13% alpha
@@ -307,8 +315,9 @@ def make_status_row(text: str, status: str) -> QWidget:
     that cannot guarantee an exact value.
 
     Usage: `item = QListWidgetItem(); row = make_status_row(text, status);
-    item.setSizeHint(row.sizeHint()); list_widget.addItem(item);
-    list_widget.setItemWidget(item, row)`.
+    item.setSizeHint(ruled_list_row_size_hint(row)); list_widget.addItem(item);
+    list_widget.setItemWidget(item, row)`. Use `ruled_list_row_size_hint()`,
+    not `row.sizeHint()` directly -- see that function for why.
     """
     row = QWidget()
     row_layout = QHBoxLayout(row)
@@ -323,6 +332,33 @@ def make_status_row(text: str, status: str) -> QWidget:
     label = QLabel(text)
     row_layout.addWidget(label, 1)
     return row
+
+
+# Must mirror the vertical chrome the `QListWidget[role="ruled_list"]::item`
+# QSS rule paints around every row: padding-top + padding-bottom
+# (SPACE_NORMAL each) + border-bottom (1px) + margin-bottom (2px). Qt paints
+# this chrome ON TOP OF an item's set size, not carved out of it -- the same
+# box-model rule that governs widget min-height applies to
+# QListWidgetItem.setSizeHint() too. Single source of truth for both sides
+# so the QSS rule and this constant cannot silently drift apart.
+RULED_LIST_ITEM_VERTICAL_CHROME_PX = (SPACE_NORMAL * 2) + BORDER_WIDTH + 2
+
+
+def ruled_list_row_size_hint(row_widget: QWidget) -> QSize:
+    """The `QSize` a `QListWidgetItem` hosting `row_widget` via
+    `QListWidget.setItemWidget()` inside a `role="ruled_list"` list must be
+    given via `item.setSizeHint(...)`.
+
+    `row_widget.sizeHint()` alone is not enough: the `ruled_list` item QSS
+    (padding/border/margin) is rendered on top of whatever height the item
+    cell is given, so using the bare row height starves the row widget's own
+    content of the space that QSS chrome needs, collapsing it toward zero
+    height -- the row widget and its `status_dot` become invisible, and the
+    QSS border/margin lines end up drawn through the item's own native text
+    instead of below it.
+    """
+    hint = row_widget.sizeHint()
+    return QSize(hint.width(), hint.height() + RULED_LIST_ITEM_VERTICAL_CHROME_PX)
 
 
 def apply_paper_shadow(widget: QWidget, tier: str = "full") -> None:
@@ -652,7 +688,7 @@ def make_mini_notebook(title: str) -> tuple[QFrame, QVBoxLayout]:
     body = RuledPaperFrame()
     apply_role(body, "mini_notebook_body")
     content_layout = QVBoxLayout(body)
-    content_layout.setContentsMargins(SPACE_COMPACT, SPACE_COMPACT, SPACE_COMPACT, SPACE_COMPACT)
+    content_layout.setContentsMargins(SPACE_MEDIUM, SPACE_MEDIUM, SPACE_MEDIUM, SPACE_MEDIUM)
     content_layout.setSpacing(SPACE_COMPACT)
     page.addWidget(body, 1)
 
@@ -687,14 +723,18 @@ QToolTip {{
 }}
 QLineEdit, QTextEdit, QPlainTextEdit, QComboBox, QListWidget, QTableWidget {{
     selection-background-color: {css('accent', m)};
-    selection-color: #FFFFFF;
+    selection-color: {css('ink_on_accent', m)};
 }}
 /* DESIGN.md §8.1: input focus border is `accent` itself (#2563EB), not the
    softer shared `focus` token used elsewhere -- `accent_border_soft`
    (#93C5FD) is the contract's paired "focus ring" value, approximated here
-   via hover border since Qt QSS has no outer-glow/box-shadow primitive. */
+   via hover border since Qt QSS has no outer-glow/box-shadow primitive.
+   2px width matches the contract's "visibly strong focus treatment" (same
+   1px-border -> 2px-focus convention already used by every button role);
+   the same documented, accepted Qt platform limitation applies -- no
+   separate soft outer glow, and a 1px box-model shift on focus. */
 QLineEdit:focus, QTextEdit:focus, QPlainTextEdit:focus, QComboBox:focus, QListWidget:focus {{
-    border: {BORDER_WIDTH}px solid {css('accent', m)};
+    border: 2px solid {css('accent', m)};
 }}
 *:disabled {{
     color: {css('disabled_text', m)};
@@ -832,6 +872,17 @@ QLabel[role="success"] {{ font-size: 12px; font-weight: 600; color: {css('succes
 QLabel[role="monospace"] {{ font-family: {MONOSPACE_FONT_FAMILY}; font-size: 11px; font-weight: 500; color: {css('muted', m)}; }}
 QLabel[role="dominant_cue"] {{ font-size: 17px; font-weight: 600; color: {css('ink', m)}; padding: 4px 0; }}
 QLabel[role="question_stem"] {{ font-size: 16px; font-weight: 650; color: {css('ink', m)}; padding: 4px 0; }}
+QLabel[role="body"], QRadioButton[role="body"], QCheckBox[role="body"] {{ font-size: 14px; font-weight: 400; color: {css('ink', m)}; }}
+QLabel[role="transcript_cue"] {{ font-size: 16px; font-weight: 500; color: {css('ink', m)}; }}
+QLabel[role="metric_value"] {{ font-size: 14px; font-weight: 700; color: {css('ink', m)}; }}
+/* Central semantic result-status role (M13 Stage B corrective) -- Quiz
+   Review's own "correct"/"incorrect" outcome label, replacing a local
+   14px/700/color stylesheet at each call site with one shared role plus an
+   `outcome` variant, per DESIGN.md §4.3's "score/result headline" bold rule
+   and the existing quiz_correct/quiz_incorrect semantic tokens. */
+QLabel[role="result_status"] {{ font-size: 14px; font-weight: 700; }}
+QLabel[role="result_status"][outcome="correct"] {{ color: {css('quiz_correct', m)}; }}
+QLabel[role="result_status"][outcome="incorrect"] {{ color: {css('quiz_incorrect', m)}; }}
 
 /* Notebook & Lined Paper Elements */
 QFrame[role="notebook_page"] {{
@@ -1041,11 +1092,14 @@ QFrame[role="mini_notebook_card"] {{
 }}
 /* Compact button footprint scoped to mini-notebook cards only -- keeps three
    hand-sized control notebooks side-by-side at practical Player widths
-   without touching the "secondary"/"quiet" roles used elsewhere. */
+   without touching the "secondary"/"quiet" roles used elsewhere. Padding
+   only -- a local `font-size: 9pt` override here used to silently diverge
+   from the frozen "Regular button: 13px/600" contract (DESIGN.md §4.2);
+   removed rather than kept, since compacting footprint doesn't require
+   compacting the shared button type scale too. */
 QFrame[role="mini_notebook_card"] QPushButton[role="secondary"],
 QFrame[role="mini_notebook_card"] QPushButton[role="quiet"] {{
     padding: {SPACE_COMPACT}px {SPACE_COMPACT + 2}px;
-    font-size: 9pt;
 }}
 QFrame[role="mini_notebook_spiral_bar"] {{
     background-color: {css('surface_soft', m)};
@@ -1134,7 +1188,7 @@ QPushButton[role="notebook_primary_action"] {{
 }}
 QPushButton[role="notebook_primary_action"]:hover {{
     background-color: {css('accent', m)};
-    color: #FFFFFF;
+    color: {css('ink_on_accent', m)};
 }}
 QPushButton[role="notebook_primary_action"]:disabled {{
     background-color: {css('disabled_surface', m)};
@@ -1166,9 +1220,15 @@ QPushButton[role="notebook_destructive_action"] {{
     /* 2*SPACE_COMPACT=8px vertical padding + 2*1px border -> 34-8-2=24. */
     min-height: 24px;
 }}
+/* DESIGN.md §7.5: ordinary destructive hover stays a subtle paper-pink
+   tint, matching role="danger" -- filled red with white text is reserved
+   for an unambiguous final destructive commit inside a confirmation
+   context, never an ordinary notebook action button's hover state. */
 QPushButton[role="notebook_destructive_action"]:hover {{
-    background-color: {css('danger', m)};
-    color: #FFFFFF;
+    background-color: {css('danger_subtle', m)};
+}}
+QPushButton[role="notebook_destructive_action"]:pressed {{
+    background-color: {css('danger_pressed', m)};
 }}
 QPushButton[role="notebook_destructive_action"]:disabled {{
     color: {css('disabled_text', m)};
@@ -1215,64 +1275,47 @@ QFrame[surface="paper"] {{
     border-radius: {RADIUS_CARD}px;
 }}
 
-/* Cinema / Dark Focus Surface */
+/* Cinema / Dark Focus Surface -- M13 Rendering Map §Surfaces names this as a
+   frozen surface family; no window currently calls apply_surface(widget,
+   "cinema") (it's tied to video-mode playback, untestable in this pass --
+   no video fixture exists under manual-qa/, only audio). Kept and
+   token-sourced rather than deleted since the Map treats it as accepted
+   infrastructure, not dead code -- see M13 Stage B native-visual corrective
+   final report for this exact drift. */
 QMainWindow[surface="cinema"],
 QWidget[surface="cinema"],
 QScrollArea[surface="cinema"],
 QScrollArea[surface="cinema"] > QWidget > QWidget {{
     background-color: {css('surface_cinema', m)};
-    color: #EDEDEC;
+    color: {css('cinema_ink', m)};
 }}
 QFrame[surface="cinema"] {{
-    background-color: #181B22;
-    color: #EDEDEC;
+    background-color: {css('cinema_card_bg', m)};
+    color: {css('cinema_ink', m)};
     border: {BORDER_WIDTH}px solid rgba(255, 255, 255, 0.12);
     border-radius: {RADIUS_CARD}px;
 }}
 QWidget[surface="cinema"] QLabel {{
-    color: #EDEDEC;
+    color: {css('cinema_ink', m)};
 }}
 QWidget[surface="cinema"] QLabel[role="caption"] {{
-    color: #9CA3AF;
+    color: {css('cinema_muted', m)};
 }}
 QWidget[surface="cinema"] QLabel[role="subtitle"] {{
-    color: #9CA3AF;
+    color: {css('cinema_muted', m)};
 }}
 QWidget[surface="cinema"] QCheckBox {{
-    color: #EDEDEC;
+    color: {css('cinema_ink', m)};
 }}
 QWidget[surface="cinema"] QLineEdit,
 QWidget[surface="cinema"] QTextEdit,
 QWidget[surface="cinema"] QPlainTextEdit {{
-    background-color: #12151B;
-    color: #EDEDEC;
+    background-color: {css('cinema_input_bg', m)};
+    color: {css('cinema_ink', m)};
     border: {BORDER_WIDTH}px solid rgba(255, 255, 255, 0.18);
     border-radius: {RADIUS_CONTROL}px;
 }}
 
-QListWidget[role="cinema_cue_list"] {{
-    background-color: #12151B;
-    color: #EDEDEC;
-    border: {BORDER_WIDTH}px solid rgba(255, 255, 255, 0.12);
-    border-radius: {RADIUS_CARD}px;
-    padding: {SPACE_COMPACT}px;
-}}
-QListWidget[role="cinema_cue_list"]::item {{
-    padding: {SPACE_NORMAL}px {SPACE_SECTION}px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: {RADIUS_CONTROL}px;
-    margin-bottom: 2px;
-    color: #D1D5DB;
-}}
-QListWidget[role="cinema_cue_list"]::item:hover {{
-    background-color: rgba(255, 255, 255, 0.05);
-}}
-QListWidget[role="cinema_cue_list"]::item:selected {{
-    background-color: rgba(59, 130, 246, 0.25);
-    color: #FFFFFF;
-    border-left: 3px solid {css('accent', m)};
-    font-weight: 600;
-}}
 QMainWindow[surface="workspace"],
 QWidget[surface="workspace"],
 QScrollArea[surface="workspace"],
@@ -1387,7 +1430,7 @@ QPushButton[role="danger"]:focus {{
 
 QPushButton[role="success"] {{
     background-color: {css('success', m)};
-    color: #FFFFFF;
+    color: {css('ink_on_accent', m)};
     border: {BORDER_WIDTH}px solid {css('success', m)};
     border-radius: {RADIUS_CONTROL}px;
     padding: {SPACE_COMPACT}px {SPACE_MEDIUM}px;
@@ -1447,15 +1490,15 @@ QLabel[role="stepper_item_badge"] {{
 }}
 QLabel[role="stepper_item_badge"][state="current"] {{
     background: {css('accent', m)};
-    color: #FFFFFF;
+    color: {css('ink_on_accent', m)};
 }}
 QLabel[role="stepper_item_badge"][state="completed"] {{
     background: {css('success', m)};
-    color: #FFFFFF;
+    color: {css('ink_on_accent', m)};
 }}
 QLabel[role="stepper_item_badge"][state="skipped"] {{
     background: {css('warning', m)};
-    color: #FFFFFF;
+    color: {css('ink_on_accent', m)};
 }}
 QLabel[role="stepper_item_badge"][state="not_started"] {{
     background: {css('stepper_future_badge', m)};
@@ -1505,7 +1548,7 @@ QLabel[role="quiz_option_badge"] {{
 }}
 QLabel[role="quiz_option_badge"][selected="true"] {{
     background: {css('accent', m)};
-    color: #FFFFFF;
+    color: {css('ink_on_accent', m)};
 }}
 QLabel[role="quiz_option_badge"][selected="false"] {{
     background: {css('line', m)};
@@ -1520,9 +1563,13 @@ QLabel[role="quiz_option_marker"][selected="true"] {{
     color: {css('accent', m)};
 }}
 
-/* RadioButton / CheckBox -- DESIGN.md §8.2: 16px indicator, 8px label gap */
+/* RadioButton / CheckBox -- DESIGN.md §8.2: 16px indicator, 8px label gap;
+   §5.3: 30px interactive-row minimum. No padding/border is declared on the
+   button itself, so min-height sets the full row height directly -- no
+   box-model subtraction needed (contrast with QPushButton, which does). */
 QRadioButton, QCheckBox {{
     spacing: {SPACE_NORMAL}px;
+    min-height: 30px;
 }}
 QRadioButton::indicator {{
     width: 16px;
@@ -1593,6 +1640,14 @@ def build_stylesheet(theme_mode: str = "light") -> str:
 def apply_theme(app: QApplication, theme_mode: str = "light") -> None:
     """Apply ListenTrace's theme to the whole application."""
     app.setStyleSheet(build_stylesheet(theme_mode))
+    # DESIGN.md §8.1 placeholder text color: Qt Style Sheets have no
+    # `placeholder-text-color` property (unlike `color`/`background`), so the
+    # `ink_placeholder` token can only reach QLineEdit/QComboBox through the
+    # application palette's PlaceholderText role -- set once here rather than
+    # per call site.
+    palette = app.palette()
+    palette.setColor(QPalette.ColorRole.PlaceholderText, qcolor("ink_placeholder", theme_mode))
+    app.setPalette(palette)
 
 
 _ICON_FILENAME = "listentrace.ico"
@@ -1685,8 +1740,6 @@ def set_button_icon(
     (16px) or emphasized (18-20px) size, alongside its existing text label
     -- never as a replacement for it. Thin convenience wrapper around
     `get_icon()` so call sites don't each re-derive `QSize(...)`."""
-    from PySide6.QtCore import QSize
-
     size = ICON_SIZE_EMPHASIZED if emphasized else ICON_SIZE_NORMAL
     button.setIcon(get_icon(name, color_token=color_token, size=size))
     button.setIconSize(QSize(size, size))

@@ -359,6 +359,23 @@ def test_make_status_row_dot_is_the_frozen_10px_diameter(qapp):
     assert dot_label.size().height() == 10
 
 
+def test_ruled_list_row_size_hint_reserves_the_ruled_list_item_qss_chrome(qapp):
+    """Regression for the SessionHistoryDialog/QuizHistoryDialog defect: a
+    QListWidgetItem hosting a make_status_row() via setItemWidget() inside a
+    role="ruled_list" list must reserve the ::item QSS's own vertical
+    padding/border/margin on top of the row widget's natural height, or Qt
+    squeezes the row widget (status dot + text) toward zero visible height
+    and the QSS border-bottom/margin lines render through the item's own
+    native text instead of below it."""
+    row = theme.make_status_row("[active] started 2026-01-01 00:00", "active")
+
+    hint = theme.ruled_list_row_size_hint(row)
+
+    assert hint.width() == row.sizeHint().width()
+    assert hint.height() == row.sizeHint().height() + theme.RULED_LIST_ITEM_VERTICAL_CHROME_PX
+    assert hint.height() > row.sizeHint().height()
+
+
 def test_apply_paper_shadow_full_tier_uses_the_frozen_parameters(qapp):
     frame = QFrame()
 

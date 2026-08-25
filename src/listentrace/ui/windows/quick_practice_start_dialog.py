@@ -64,6 +64,8 @@ class QuickPracticeStartDialog(QDialog):
         self.started_session_id: int | None = None
 
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(theme.SPACE_SECTION, theme.SPACE_SECTION, theme.SPACE_SECTION, theme.SPACE_SECTION)
+        layout.setSpacing(theme.SPACE_NORMAL)
 
         header_label = QLabel(f"Quick Practice — {material_title}")
         theme.apply_role(header_label, "title")

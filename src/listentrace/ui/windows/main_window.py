@@ -188,7 +188,7 @@ class MainWindow(QMainWindow):
         # -------------------------------------------------------------------
         self._workspace_widget = QWidget(self._main_splitter)
         workspace_layout = QVBoxLayout(self._workspace_widget)
-        workspace_layout.setContentsMargins(SPACE_PAGE, SPACE_SECTION, SPACE_PAGE, SPACE_SECTION)
+        workspace_layout.setContentsMargins(SPACE_PAGE, SPACE_PAGE, SPACE_PAGE, SPACE_PAGE)
         workspace_layout.setSpacing(SPACE_SECTION)
 
         # Top Bar: View Title & Primary Actions

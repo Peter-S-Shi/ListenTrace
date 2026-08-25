@@ -143,6 +143,8 @@ class ExportDialog(QDialog):
 
         content = QWidget()
         layout = QVBoxLayout(content)
+        layout.setContentsMargins(theme.SPACE_MEDIUM, theme.SPACE_MEDIUM, theme.SPACE_MEDIUM, theme.SPACE_MEDIUM)
+        layout.setSpacing(theme.SPACE_NORMAL)
         scroll.setWidget(content)
 
         # ---- scope ----

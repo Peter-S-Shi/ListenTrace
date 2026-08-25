@@ -27,6 +27,8 @@ class LabelColorDialog(QDialog):
         self._buttons: dict[str, QPushButton] = {}
 
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(theme.SPACE_SECTION, theme.SPACE_SECTION, theme.SPACE_SECTION, theme.SPACE_SECTION)
+        layout.setSpacing(theme.SPACE_NORMAL)
         preferences = label_preference_service.get_label_preferences(connection)
 
         for label in AnnotationLabel:

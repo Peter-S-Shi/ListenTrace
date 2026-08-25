@@ -57,7 +57,15 @@ from listentrace.ui.text_offset_conversion import (
     codepoint_index_to_qt_offset,
     qt_offset_to_codepoint_index,
 )
-from listentrace.ui.theme import SPACE_COMPACT, SPACE_NORMAL, apply_role, apply_surface
+from listentrace.ui.theme import (
+    SPACE_COMPACT,
+    SPACE_MEDIUM,
+    SPACE_NORMAL,
+    SPACE_PAGE,
+    SPACE_SECTION,
+    apply_role,
+    apply_surface,
+)
 from listentrace.ui.widgets.loop_grace_change_bus import loop_grace_change_bus
 from listentrace.ui.widgets.notebook_paper import GrainedDeskWidget, RuledTextEdit
 from listentrace.ui.widgets.recording_panel import RecordingPanel
@@ -253,8 +261,8 @@ class GuidedSessionWindow(QMainWindow):
         central = GrainedDeskWidget(self)
         apply_surface(central, "paper")
         layout = QVBoxLayout(central)
-        layout.setContentsMargins(SPACE_NORMAL, SPACE_NORMAL, SPACE_NORMAL, SPACE_NORMAL)
-        layout.setSpacing(SPACE_NORMAL)
+        layout.setContentsMargins(SPACE_PAGE, SPACE_PAGE, SPACE_PAGE, SPACE_PAGE)
+        layout.setSpacing(SPACE_SECTION)
         apply_surface(self, "paper")
 
         # -------------------------------------------------------------------
@@ -673,9 +681,14 @@ class GuidedSessionWindow(QMainWindow):
         layout.addWidget(self._stage1_lock_hint)
 
         self._stage1_edits: dict[str, QTextEdit] = {}
-        for prompt_key, label_text in _STAGE1_PROMPTS:
+        for index, (prompt_key, label_text) in enumerate(_STAGE1_PROMPTS):
+            if index > 0:
+                # Canonical "unrelated group gap" (DESIGN.md §5.2) between one
+                # prompt+answer group and the next, replacing a local
+                # margin-top stylesheet hack on the label itself.
+                layout.addSpacing(SPACE_MEDIUM)
             prompt_lbl = QLabel(label_text)
-            prompt_lbl.setStyleSheet("font-weight: 600; font-size: 13px; margin-top: 6px;")
+            apply_role(prompt_lbl, "form_label")
             layout.addWidget(prompt_lbl)
             edit = QTextEdit()
             edit.setMinimumHeight(60)

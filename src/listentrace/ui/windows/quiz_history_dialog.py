@@ -48,6 +48,8 @@ class QuizHistoryDialog(QDialog):
         theme.apply_surface(self, "paper")
 
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(theme.SPACE_SECTION, theme.SPACE_SECTION, theme.SPACE_SECTION, theme.SPACE_SECTION)
+        layout.setSpacing(theme.SPACE_NORMAL)
         title_hdr = QLabel("Prior quiz attempts for this material:")
         theme.apply_role(title_hdr, "subtitle")
         layout.addWidget(title_hdr)
@@ -98,7 +100,7 @@ class QuizHistoryDialog(QDialog):
                 label += f", score {attempt.correct_count}/{attempt.actual_count}"
             item = QListWidgetItem(label)
             row = theme.make_status_row(label, attempt.status)
-            item.setSizeHint(row.sizeHint())
+            item.setSizeHint(theme.ruled_list_row_size_hint(row))
             item.setData(Qt.ItemDataRole.UserRole, attempt.id)
             self._list.addItem(item)
             self._list.setItemWidget(item, row)

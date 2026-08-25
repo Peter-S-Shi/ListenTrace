@@ -44,7 +44,7 @@ from listentrace.domain.enums.quick_practice_status import QuickPracticeStatus
 from listentrace.domain.services import date_range as date_range_rules
 from listentrace.ui import theme
 from listentrace.ui.widgets.notebook_paper import GrainedDeskWidget
-from listentrace.ui.theme import SPACE_COMPACT, SPACE_NORMAL, apply_role, apply_surface
+from listentrace.ui.theme import SPACE_COMPACT, SPACE_NORMAL, SPACE_PAGE, SPACE_SECTION, apply_role, apply_surface
 from listentrace.ui.time_display import format_local_timestamp
 from listentrace.ui.widgets.simple_bar_chart import SimpleBarChart
 from listentrace.ui.windows.export_dialog import ExportDialog
@@ -127,8 +127,8 @@ class LearningHistoryWindow(QMainWindow):
         central = GrainedDeskWidget(self)
         apply_surface(central, "paper")
         outer_layout = QVBoxLayout(central)
-        outer_layout.setContentsMargins(SPACE_NORMAL, SPACE_NORMAL, SPACE_NORMAL, SPACE_NORMAL)
-        outer_layout.setSpacing(SPACE_NORMAL)
+        outer_layout.setContentsMargins(SPACE_PAGE, SPACE_PAGE, SPACE_PAGE, SPACE_PAGE)
+        outer_layout.setSpacing(SPACE_SECTION)
         apply_surface(self, "paper")
 
         header = theme.make_surface_header("Study Dossier — Learning History & Insights")
@@ -315,7 +315,7 @@ class LearningHistoryWindow(QMainWindow):
             name_label = QLabel(name_text)
             theme.apply_role(name_label, "caption")
             value_label = QLabel("")
-            value_label.setStyleSheet("font-size: 14px; font-weight: 700;")
+            theme.apply_role(value_label, "metric_value")
             if tooltip:
                 name_label.setToolTip(tooltip)
                 value_label.setToolTip(tooltip)

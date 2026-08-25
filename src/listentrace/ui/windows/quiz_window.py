@@ -34,7 +34,7 @@ from listentrace.domain.enums.quiz_status import QuizStatus
 from listentrace.infrastructure.media.playback import PlaybackController
 from listentrace.ui import theme
 from listentrace.ui.widgets.notebook_paper import GrainedDeskWidget
-from listentrace.ui.theme import SPACE_COMPACT, SPACE_NORMAL, apply_role, apply_surface
+from listentrace.ui.theme import SPACE_COMPACT, SPACE_NORMAL, SPACE_PAGE, SPACE_SECTION, apply_role, apply_surface
 from listentrace.ui.widgets.loop_grace_change_bus import loop_grace_change_bus
 from listentrace.ui.windows.material_loop_settings_dialog import MaterialLoopSettingsDialog
 from listentrace.ui.windows.player_window import _format_time
@@ -74,7 +74,7 @@ class QuizOptionCard(QFrame):
 
         self._label = QLabel("")
         self._label.setWordWrap(True)
-        self._label.setStyleSheet("font-size: 13px; font-weight: 500;")
+        apply_role(self._label, "body")
 
         # Non-color selected marker — shown in addition to the accent
         # border/background so selection is never conveyed by color alone.
@@ -141,8 +141,14 @@ class QuizWindow(QMainWindow):
         self._cue_index_by_id = {cue.id: index for index, cue in enumerate(self._cues) if cue.id is not None}
         self._attempt_id = attempt_id
         self.setWindowTitle(f"ListenTrace — Quiz — {self._material.title}")
-        self.resize(920, 680)
-        self.setMinimumSize(780, 560)
+        # M13 Stage B native-visual corrective: the six-button action footer
+        # (Previous/Abandon/Close/Next/Submit/Review) needs ~960px of real
+        # content width once the workspace outer margin is the frozen 24px
+        # (measured via central.layout().minimumSize() during native visual
+        # verification) -- the previous 920/780 pair clipped footer button
+        # text at both default and minimum width.
+        self.resize(980, 680)
+        self.setMinimumSize(960, 560)
 
         self._playback = PlaybackController(self)
         grace_ms = loop_grace_service.effective_loop_end_grace_ms(connection, self._material.id)
@@ -159,8 +165,8 @@ class QuizWindow(QMainWindow):
         central = GrainedDeskWidget(self)
         apply_surface(central, "paper")
         layout = QVBoxLayout(central)
-        layout.setContentsMargins(SPACE_NORMAL, SPACE_NORMAL, SPACE_NORMAL, SPACE_NORMAL)
-        layout.setSpacing(SPACE_NORMAL)
+        layout.setContentsMargins(SPACE_PAGE, SPACE_PAGE, SPACE_PAGE, SPACE_PAGE)
+        layout.setSpacing(SPACE_SECTION)
         apply_surface(self, "paper")
 
         # -------------------------------------------------------------------
@@ -314,7 +320,7 @@ class QuizWindow(QMainWindow):
 
         self._masked_text_label = QLabel("")
         self._masked_text_label.setWordWrap(True)
-        self._masked_text_label.setStyleSheet("font-family: monospace; font-size: 14px; padding: 6px 0;")
+        apply_role(self._masked_text_label, "transcript_cue")
         layout.addWidget(self._masked_text_label)
 
         ans_lbl = QLabel("Your answer:")

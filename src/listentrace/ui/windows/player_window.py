@@ -60,7 +60,7 @@ from listentrace.ui.text_offset_conversion import (
     codepoint_index_to_qt_offset,
     qt_offset_to_codepoint_index,
 )
-from listentrace.ui.theme import SPACE_COMPACT, SPACE_NORMAL, apply_role, apply_surface
+from listentrace.ui.theme import SPACE_COMPACT, SPACE_NORMAL, SPACE_PAGE, SPACE_SECTION, apply_role, apply_surface
 from listentrace.ui.widgets.loop_grace_change_bus import loop_grace_change_bus
 from listentrace.ui.widgets.notebook_paper import GrainedDeskWidget, RuledPaperFrame, RuledTextEdit
 from listentrace.ui.windows.label_color_dialog import LabelColorDialog
@@ -148,8 +148,8 @@ class PlayerWindow(QMainWindow):
         central = GrainedDeskWidget()
         apply_surface(central, "paper")
         root_layout = QVBoxLayout(central)
-        root_layout.setContentsMargins(SPACE_NORMAL, SPACE_NORMAL, SPACE_NORMAL, SPACE_NORMAL)
-        root_layout.setSpacing(SPACE_NORMAL)
+        root_layout.setContentsMargins(SPACE_PAGE, SPACE_PAGE, SPACE_PAGE, SPACE_PAGE)
+        root_layout.setSpacing(SPACE_SECTION)
 
         # -------------------------------------------------------------------
         # 1. Top Bar (Context Header & Return Action)

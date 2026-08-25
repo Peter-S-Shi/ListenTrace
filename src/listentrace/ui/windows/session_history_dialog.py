@@ -49,6 +49,8 @@ class SessionHistoryDialog(QDialog):
         theme.apply_surface(self, "paper")
 
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(theme.SPACE_SECTION, theme.SPACE_SECTION, theme.SPACE_SECTION, theme.SPACE_SECTION)
+        layout.setSpacing(theme.SPACE_NORMAL)
         title_hdr = QLabel("Prior intensive practice sessions for this material:")
         theme.apply_role(title_hdr, "subtitle")
         layout.addWidget(title_hdr)
@@ -98,7 +100,7 @@ class SessionHistoryDialog(QDialog):
                 label += f", abandoned {format_local_timestamp(session.abandoned_at)}"
             item = QListWidgetItem(label)
             row = theme.make_status_row(label, session.status)
-            item.setSizeHint(row.sizeHint())
+            item.setSizeHint(theme.ruled_list_row_size_hint(row))
             item.setData(Qt.ItemDataRole.UserRole, session.id)
             self._list.addItem(item)
             self._list.setItemWidget(item, row)

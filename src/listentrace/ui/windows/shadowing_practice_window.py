@@ -23,7 +23,7 @@ from listentrace.application.services.player_session import PlayerSession
 from listentrace.infrastructure.media.playback import PlaybackController
 from listentrace.ui import theme
 from listentrace.ui.widgets.notebook_paper import GrainedDeskWidget
-from listentrace.ui.theme import SPACE_COMPACT, SPACE_NORMAL, apply_role, apply_surface
+from listentrace.ui.theme import SPACE_COMPACT, SPACE_NORMAL, SPACE_PAGE, SPACE_SECTION, apply_role, apply_surface
 from listentrace.ui.widgets.loop_grace_change_bus import loop_grace_change_bus
 from listentrace.ui.widgets.recording_panel import RecordingPanel, recording_change_bus
 from listentrace.ui.windows.material_loop_settings_dialog import MaterialLoopSettingsDialog
@@ -82,8 +82,8 @@ class ShadowingPracticeWindow(QMainWindow):
         central = GrainedDeskWidget()
         apply_surface(central, "paper")
         layout = QVBoxLayout(central)
-        layout.setContentsMargins(SPACE_NORMAL, SPACE_NORMAL, SPACE_NORMAL, SPACE_NORMAL)
-        layout.setSpacing(SPACE_NORMAL)
+        layout.setContentsMargins(SPACE_PAGE, SPACE_PAGE, SPACE_PAGE, SPACE_PAGE)
+        layout.setSpacing(SPACE_SECTION)
 
         # -------------------------------------------------------------------
         # 1. Header & Navigation Context

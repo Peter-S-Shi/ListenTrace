@@ -51,7 +51,7 @@ from listentrace.ui.text_offset_conversion import (
     codepoint_index_to_qt_offset,
     qt_offset_to_codepoint_index,
 )
-from listentrace.ui.theme import SPACE_COMPACT, SPACE_NORMAL, apply_role, apply_surface
+from listentrace.ui.theme import SPACE_COMPACT, SPACE_NORMAL, SPACE_PAGE, SPACE_SECTION, apply_role, apply_surface
 from listentrace.ui.widgets.loop_grace_change_bus import loop_grace_change_bus
 from listentrace.ui.widgets.recording_panel import RecordingPanel
 from listentrace.ui.windows.material_loop_settings_dialog import MaterialLoopSettingsDialog
@@ -119,8 +119,8 @@ class QuickPracticeWindow(QMainWindow):
         central = GrainedDeskWidget(self)
         apply_surface(central, "paper")
         layout = QVBoxLayout(central)
-        layout.setContentsMargins(SPACE_NORMAL, SPACE_NORMAL, SPACE_NORMAL, SPACE_NORMAL)
-        layout.setSpacing(SPACE_NORMAL)
+        layout.setContentsMargins(SPACE_PAGE, SPACE_PAGE, SPACE_PAGE, SPACE_PAGE)
+        layout.setSpacing(SPACE_SECTION)
         apply_surface(self, "paper")
 
         # -------------------------------------------------------------------
@@ -472,7 +472,7 @@ class QuickPracticeWindow(QMainWindow):
         self._recall_radio_buttons: dict[str, QRadioButton] = {}
         for value, label_text in _RECALL_LABELS:
             radio = QRadioButton(label_text)
-            radio.setStyleSheet("font-size: 13px; font-weight: 500; padding: 6px;")
+            apply_role(radio, "body")
             radio.toggled.connect(self._on_recall_choice_changed)
             self._recall_group.addButton(radio)
             self._recall_radio_buttons[value] = radio
