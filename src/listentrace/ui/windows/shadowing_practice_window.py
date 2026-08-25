@@ -22,6 +22,7 @@ from listentrace.application.services import recording_service
 from listentrace.application.services.player_session import PlayerSession
 from listentrace.infrastructure.media.playback import PlaybackController
 from listentrace.ui import theme
+from listentrace.ui.widgets.notebook_paper import GrainedDeskWidget
 from listentrace.ui.theme import SPACE_COMPACT, SPACE_NORMAL, apply_role, apply_surface
 from listentrace.ui.widgets.loop_grace_change_bus import loop_grace_change_bus
 from listentrace.ui.widgets.recording_panel import RecordingPanel, recording_change_bus
@@ -78,7 +79,7 @@ class ShadowingPracticeWindow(QMainWindow):
         scroll.setWidgetResizable(True)
         apply_surface(scroll, "paper")
 
-        central = QWidget()
+        central = GrainedDeskWidget()
         apply_surface(central, "paper")
         layout = QVBoxLayout(central)
         layout.setContentsMargins(SPACE_NORMAL, SPACE_NORMAL, SPACE_NORMAL, SPACE_NORMAL)
@@ -87,18 +88,15 @@ class ShadowingPracticeWindow(QMainWindow):
         # -------------------------------------------------------------------
         # 1. Header & Navigation Context
         # -------------------------------------------------------------------
-        header_row = QHBoxLayout()
-        title_label = QLabel(self._material.title)
-        apply_role(title_label, "title")
-        header_row.addWidget(title_label)
-
+        header = theme.make_surface_header(self._material.title)
+        header_row = header.top_bar
         self._progress_label = QLabel("")
         apply_role(self._progress_label, "caption")
-        header_row.addWidget(self._progress_label, 1)
+        header.title_row.addWidget(self._progress_label, 1)
 
         close_top_btn = QPushButton("Exit Studio")
         apply_role(close_top_btn, "quiet")
-        theme.set_button_icon(close_top_btn, "close", color_token="muted")
+        theme.set_button_icon(close_top_btn, "close", color_token="secondary")
         close_top_btn.clicked.connect(self.close)
         header_row.addWidget(close_top_btn)
         layout.addLayout(header_row)
@@ -127,7 +125,7 @@ class ShadowingPracticeWindow(QMainWindow):
         self._previous_button = QPushButton("Previous Cue")
         self._previous_button.clicked.connect(self._on_previous_clicked)
         apply_role(self._previous_button, "secondary")
-        theme.set_button_icon(self._previous_button, "back", color_token="ink")
+        theme.set_button_icon(self._previous_button, "back", color_token="secondary")
 
         self._play_button = QPushButton("Play")
         self._play_button.clicked.connect(self._on_play_clicked)
@@ -144,7 +142,7 @@ class ShadowingPracticeWindow(QMainWindow):
         self._next_button = QPushButton("Next Cue")
         self._next_button.clicked.connect(self._on_next_clicked)
         apply_role(self._next_button, "secondary")
-        theme.set_button_icon(self._next_button, "forward", color_token="ink")
+        theme.set_button_icon(self._next_button, "forward", color_token="secondary")
 
         self._loop_settings_button = QPushButton("Loop Settings...")
         self._loop_settings_button.clicked.connect(self._on_open_loop_settings)
@@ -176,6 +174,7 @@ class ShadowingPracticeWindow(QMainWindow):
         self._delete_material_recordings_button = QPushButton("Delete All Recordings for This Material")
         self._delete_material_recordings_button.clicked.connect(self._on_delete_material_recordings_clicked)
         apply_role(self._delete_material_recordings_button, "danger")
+        theme.set_button_icon(self._delete_material_recordings_button, "delete", color_token="danger")
 
         self._close_button = QPushButton("Close")
         self._close_button.clicked.connect(self.close)

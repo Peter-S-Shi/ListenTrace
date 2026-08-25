@@ -44,6 +44,7 @@ from listentrace.domain.enums.recall_result import RecallResult
 from listentrace.domain.services.text_range import whole_cue_range
 from listentrace.infrastructure.media.playback import PlaybackController
 from listentrace.ui import theme
+from listentrace.ui.widgets.notebook_paper import GrainedDeskWidget
 from listentrace.ui.annotation_highlighting import UNKNOWN_LABEL_COLOR, apply_range_highlighting
 from listentrace.ui.text_offset_conversion import (
     SurrogatePairOffsetError,
@@ -115,7 +116,7 @@ class QuickPracticeWindow(QMainWindow):
         self._recording_panel = RecordingPanel(connection, recordings_dir, self)
         self._recording_panel.request_play_source.connect(self._on_recording_panel_request_play_source)
 
-        central = QWidget(self)
+        central = GrainedDeskWidget(self)
         apply_surface(central, "paper")
         layout = QVBoxLayout(central)
         layout.setContentsMargins(SPACE_NORMAL, SPACE_NORMAL, SPACE_NORMAL, SPACE_NORMAL)
@@ -125,18 +126,15 @@ class QuickPracticeWindow(QMainWindow):
         # -------------------------------------------------------------------
         # 1. Header & Micro-cycle Context
         # -------------------------------------------------------------------
-        header_row = QHBoxLayout()
-        title_label = QLabel(self._material.title)
-        apply_role(title_label, "title")
-        header_row.addWidget(title_label)
-
+        header = theme.make_surface_header(self._material.title)
+        header_row = header.top_bar
         self._progress_label = QLabel("")
         apply_role(self._progress_label, "caption")
-        header_row.addWidget(self._progress_label, 1)
+        header.title_row.addWidget(self._progress_label, 1)
 
         close_top_btn = QPushButton("Exit")
         apply_role(close_top_btn, "quiet")
-        theme.set_button_icon(close_top_btn, "close", color_token="muted")
+        theme.set_button_icon(close_top_btn, "close", color_token="secondary")
         close_top_btn.clicked.connect(self.close)
         header_row.addWidget(close_top_btn)
         layout.addLayout(header_row)
@@ -585,11 +583,13 @@ class QuickPracticeWindow(QMainWindow):
         self._save_diagnosis_button = QPushButton("Save Diagnosis")
         self._save_diagnosis_button.clicked.connect(self._on_save_diagnosis_clicked)
         apply_role(self._save_diagnosis_button, "secondary")
+        theme.set_button_icon(self._save_diagnosis_button, "save", color_token="secondary")
 
         self._delete_diagnosis_button = QPushButton("Delete Selected")
         self._delete_diagnosis_button.clicked.connect(self._on_delete_diagnosis_clicked)
         self._delete_diagnosis_button.setEnabled(False)
         apply_role(self._delete_diagnosis_button, "danger")
+        theme.set_button_icon(self._delete_diagnosis_button, "delete", color_token="danger")
 
         buttons_row.addWidget(self._save_diagnosis_button)
         buttons_row.addWidget(self._delete_diagnosis_button)
@@ -802,7 +802,7 @@ class QuickPracticeWindow(QMainWindow):
         self._mark_shadowed_button = QPushButton("Mark Shadowed (Optional)")
         self._mark_shadowed_button.clicked.connect(self._on_mark_shadowed_clicked)
         apply_role(self._mark_shadowed_button, "secondary")
-        theme.set_button_icon(self._mark_shadowed_button, "check", color_token="ink")
+        theme.set_button_icon(self._mark_shadowed_button, "check", color_token="secondary")
         action_layout.addWidget(self._mark_shadowed_button)
         layout.addWidget(action_card)
 

@@ -58,6 +58,17 @@ def test_grain_tile_is_deterministic_across_calls(qapp):
     assert first.toImage() == second.toImage()
 
 
+def test_grained_desk_widget_paints_grain(qapp, monkeypatch):
+    calls = []
+    monkeypatch.setattr(notebook_paper, "paint_paper_grain", lambda *a, **k: calls.append("grain"))
+
+    widget = notebook_paper.GrainedDeskWidget()
+    widget.resize(100, 100)
+    widget.paintEvent(QPaintEvent(widget.rect()))
+
+    assert calls == ["grain"]
+
+
 def test_make_notebook_surface_uses_the_grained_paper_frame(qapp):
     from listentrace.ui import theme
 

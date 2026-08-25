@@ -43,6 +43,7 @@ from listentrace.application.services.player_loading_service import load_materia
 from listentrace.domain.enums.quick_practice_status import QuickPracticeStatus
 from listentrace.domain.services import date_range as date_range_rules
 from listentrace.ui import theme
+from listentrace.ui.widgets.notebook_paper import GrainedDeskWidget
 from listentrace.ui.theme import SPACE_COMPACT, SPACE_NORMAL, apply_role, apply_surface
 from listentrace.ui.time_display import format_local_timestamp
 from listentrace.ui.widgets.simple_bar_chart import SimpleBarChart
@@ -123,16 +124,15 @@ class LearningHistoryWindow(QMainWindow):
         self._recordings_dir = recordings_dir
         self._child_window: QWidget | None = None
 
-        central = QWidget(self)
+        central = GrainedDeskWidget(self)
         apply_surface(central, "paper")
         outer_layout = QVBoxLayout(central)
         outer_layout.setContentsMargins(SPACE_NORMAL, SPACE_NORMAL, SPACE_NORMAL, SPACE_NORMAL)
         outer_layout.setSpacing(SPACE_NORMAL)
         apply_surface(self, "paper")
 
-        title_label = QLabel("Study Dossier — Learning History & Insights")
-        apply_role(title_label, "title")
-        outer_layout.addWidget(title_label)
+        header = theme.make_surface_header("Study Dossier — Learning History & Insights")
+        outer_layout.addLayout(header.top_bar)
 
         filter_row = QHBoxLayout()
         filter_row.addWidget(QLabel("Material:"))
@@ -892,6 +892,7 @@ class LearningHistoryWindow(QMainWindow):
         self._delete_quick_practice_button.clicked.connect(self._on_delete_quick_practice_clicked)
         self._delete_quick_practice_button.setEnabled(False)
         theme.apply_role(self._delete_quick_practice_button, "danger")
+        theme.set_button_icon(self._delete_quick_practice_button, "delete", color_token="danger")
         column.addWidget(self._delete_quick_practice_button)
         layout.addWidget(card, 1)
         return widget

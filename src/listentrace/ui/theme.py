@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+from typing import NamedTuple
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QIcon, QPainter, QPixmap
@@ -250,25 +251,61 @@ _STATUS_DOT_TOKENS = {
 }
 
 
-def status_dot_icon(status: str) -> QIcon:
-    """A 10px filled-circle `QIcon` in the frozen status-marker color for
-    `status` ("active"/"completed"/"abandoned") -- DESIGN.md §3.6,
-    M13_RENDERING_IMPLEMENTATION_MAP.md `status_dot`. Always set alongside
-    the existing textual status label via `QListWidgetItem.setIcon()`, never
-    as a replacement for it -- color alone must never carry the state.
-    """
+def _status_dot_pixmap(status: str) -> QPixmap:
+    """An exact `_STATUS_DOT_DIAMETER_PX`-square pixmap (no antialiasing
+    margin) so the dot's rendered size and a caller's layout spacing are
+    the only two numbers involved in placing it next to text -- no hidden
+    padding baked into the image that would throw off an exact gap."""
     token = _STATUS_DOT_TOKENS.get(status, "neutral_state")
-    canvas = _STATUS_DOT_DIAMETER_PX + 4
-    pixmap = QPixmap(canvas, canvas)
+    pixmap = QPixmap(_STATUS_DOT_DIAMETER_PX, _STATUS_DOT_DIAMETER_PX)
     pixmap.fill(Qt.GlobalColor.transparent)
     painter = QPainter(pixmap)
     painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
     painter.setPen(Qt.PenStyle.NoPen)
     painter.setBrush(qcolor(token))
-    offset = (canvas - _STATUS_DOT_DIAMETER_PX) / 2
-    painter.drawEllipse(offset, offset, _STATUS_DOT_DIAMETER_PX, _STATUS_DOT_DIAMETER_PX)
+    painter.drawEllipse(0, 0, _STATUS_DOT_DIAMETER_PX, _STATUS_DOT_DIAMETER_PX)
     painter.end()
-    return QIcon(pixmap)
+    return pixmap
+
+
+def status_dot_icon(status: str) -> QIcon:
+    """A 10px filled-circle `QIcon` in the frozen status-marker color for
+    `status` ("active"/"completed"/"abandoned") -- DESIGN.md §3.6,
+    M13_RENDERING_IMPLEMENTATION_MAP.md `status_dot`. Always set alongside
+    the existing textual status label, never as a replacement for it --
+    color alone must never carry the state.
+
+    Prefer `make_status_row()` over `QListWidgetItem.setIcon()` with this
+    icon directly: `setIcon()` leaves the icon-to-text gap to Qt's
+    unspecified native list-item style metrics, which cannot guarantee the
+    frozen 6px gap.
+    """
+    return QIcon(_status_dot_pixmap(status))
+
+
+def make_status_row(text: str, status: str) -> QWidget:
+    """A `status_dot` + status text row with the frozen 6px icon-to-text
+    gap enforced via real layout spacing -- not `QListWidgetItem.setIcon()`,
+    whose icon-to-text gap is an unspecified native list-item style metric
+    that cannot guarantee an exact value.
+
+    Usage: `item = QListWidgetItem(); row = make_status_row(text, status);
+    item.setSizeHint(row.sizeHint()); list_widget.addItem(item);
+    list_widget.setItemWidget(item, row)`.
+    """
+    row = QWidget()
+    row_layout = QHBoxLayout(row)
+    row_layout.setContentsMargins(0, 0, 0, 0)
+    row_layout.setSpacing(ICON_TEXT_GAP_PX)
+
+    dot = QLabel()
+    dot.setPixmap(_status_dot_pixmap(status))
+    dot.setFixedSize(_STATUS_DOT_DIAMETER_PX, _STATUS_DOT_DIAMETER_PX)
+    row_layout.addWidget(dot)
+
+    label = QLabel(text)
+    row_layout.addWidget(label, 1)
+    return row
 
 
 def apply_paper_shadow(widget: QWidget, tier: str = "full") -> None:
@@ -364,6 +401,13 @@ def make_notebook_surface(
     spiral_layout.addWidget(spiral_cue)
     spiral_layout.addStretch(1)
 
+    # A single decorative motif in the spiral bar's own title/tape zone --
+    # already purely decorative content (spiral cues + optional doodle
+    # stamp), never over learning content or controls. One motif per
+    # notebook surface, well within every consumer's per-surface budget
+    # (Player 3, Guided Session 3, Main Library 2) -- DESIGN.md §10.1.
+    spiral_layout.addWidget(make_decorative_motif("star", size_px=16))
+
     if context_label is not None:
         doodle_stamp = QLabel(context_label)
         apply_role(doodle_stamp, "notebook_doodle_tag")
@@ -439,19 +483,46 @@ def make_inset_panel(dense: bool = False) -> tuple[QFrame, QVBoxLayout]:
     return frame, layout
 
 
+class SurfaceHeader(NamedTuple):
+    """Return value of `make_surface_header()`. `subtitle_label` is `None`
+    when no `subtitle` was passed."""
+
+    top_bar: QHBoxLayout
+    title_row: QHBoxLayout
+    title_label: QLabel
+    subtitle_label: QLabel | None
+
+
 def make_surface_header(
     title: str,
     subtitle: str | None = None,
     chips: list[tuple[str, str]] | None = None,
-) -> QHBoxLayout:
-    """The shared workspace surface-header row (M13 Stage B, G6): a title
-    with optional inline metadata chips on one row, and an optional
+    title_role: str = "title",
+) -> SurfaceHeader:
+    """The shared workspace surface-header vocabulary (M13 Stage B, G6): a
+    title (+ optional inline metadata chips) on one row, and an optional
     subtitle/mode caption below. `chips` is a list of `(text, role)` pairs,
     e.g. `[("VIDEO", "badge_primary"), ("12 CUES", "badge_secondary")]`.
+    `title_role` lets a surface use a different title tier (e.g. Main
+    Library's larger `page_title`) rather than forcing every surface onto
+    the same visual weight.
 
-    Returns the outer `QHBoxLayout` with the title block already added at
-    stretch factor 1 -- the caller appends any trailing action (e.g. a
-    "Return to Library"/"Exit" button) via `top_bar.addWidget(...)`.
+    Returns a `SurfaceHeader(top_bar, title_row, title_label, subtitle_label)`.
+    `top_bar` already owns the title block
+    (in a column with the chip row + optional subtitle) at stretch factor
+    1; the caller decides how to fill the rest of the row, since real
+    surfaces vary here (a legitimate-variant seam, not one rigid shape):
+
+    - Add a static trailing action directly: `title_row.addStretch(1)`,
+      then `top_bar.addWidget(close_button)` (e.g. Player's "Return to
+      Library").
+    - Add a live, expanding status label mid-row instead of chips (e.g.
+      Guided Session/Quick Practice/Shadowing/Quiz's stage-or-cue progress
+      caption): `title_row.addWidget(progress_label, 1)`, then
+      `top_bar.addWidget(close_button)`.
+    - Add several trailing actions (e.g. Main Library's Hide Sidebar/Show
+      Archived/Import): `top_bar.addStretch(1)` (skipping title_row's own
+      stretch entirely), then `top_bar.addWidget(...)` per action.
 
     Scoped to the 7 rich workspace surfaces this rendering map names
     (Player, Guided Session, Quick Practice Run, Shadowing, Quiz, Main
@@ -465,46 +536,48 @@ def make_surface_header(
     title_row.setSpacing(SPACE_NORMAL)
 
     title_label = QLabel(title)
-    apply_role(title_label, "title")
+    apply_role(title_label, title_role)
     title_row.addWidget(title_label)
 
     for chip_text, chip_role in chips or ():
         chip = QLabel(chip_text)
         apply_role(chip, chip_role)
         title_row.addWidget(chip)
-    title_row.addStretch(1)
 
     title_col.addLayout(title_row)
+    subtitle_label: QLabel | None = None
     if subtitle is not None:
         subtitle_label = QLabel(subtitle)
-        apply_role(subtitle_label, "caption")
+        apply_role(subtitle_label, "subtitle" if title_role == "page_title" else "caption")
         title_col.addWidget(subtitle_label)
 
     top_bar.addLayout(title_col, 1)
-    return top_bar
+    return SurfaceHeader(top_bar, title_row, title_label, subtitle_label)
 
 
 _DECORATIVE_MOTIFS = {
-    "star": ("★", "star_gold"),
-    "leaf": ("❧", "leaf_green"),
-    "flower": ("✿", "flower_pink"),
+    "star": ("motif_star", "star_gold"),
+    "leaf": ("motif_leaf", "leaf_green"),
+    "flower": ("motif_flower", "flower_pink"),
 }
 
 
 def make_decorative_motif(kind: str, size_px: int = 20) -> QLabel:
-    """A single decorative motif glyph (DESIGN.md §10.1) in its frozen
-    token color -- `kind` is one of "star"/"leaf"/"flower". Purely
+    """A single decorative motif (DESIGN.md §10.1), rendered from the
+    bundled `icons/motif_{kind}.svg` family (deterministic local vector,
+    not a font/Unicode glyph -- font rendering of decorative symbols isn't
+    guaranteed consistent across platforms/font substitution) in its
+    frozen token color. `kind` is one of "star"/"leaf"/"flower". Purely
     ornamental; carries no interaction and must only be placed in a
     genuinely empty paper corner or title/tape zone, never over learning
     content, controls, dense evidence, or beside danger/error regions, and
     never merely to fill empty space. Each surface's per-motif budget and
-    eligible zones are in M13_RENDERING_IMPLEMENTATION_MAP.md §7 --
-    placement is a per-surface visual-QA decision, not something this
-    helper decides.
+    eligible zones are in M13_RENDERING_IMPLEMENTATION_MAP.md §7.
     """
-    glyph, token = _DECORATIVE_MOTIFS[kind]
-    label = QLabel(glyph)
-    label.setStyleSheet(f"color: {css(token)}; font-size: {size_px}px; background: transparent;")
+    icon_name, token = _DECORATIVE_MOTIFS[kind]
+    label = QLabel()
+    label.setPixmap(get_icon(icon_name, color_token=token, size=size_px).pixmap(size_px, size_px))
+    label.setFixedSize(size_px, size_px)
     return label
 
 
@@ -1479,9 +1552,14 @@ def get_icon(name: str, color_token: str = "secondary", size: int = ICON_SIZE_NO
     null `QIcon` if the file can't be found (degrades to no icon, never a
     crash -- callers keep their existing text label either way).
 
-    `color_token` should track the icon's semantic state per DESIGN.md §7.6:
-    `secondary` (ink_secondary) normal, `accent` active/primary, `danger`
-    danger, `disabled_text` (ink_disabled) disabled.
+    `color_token` is the icon's *enabled* state color per DESIGN.md §7.6:
+    `secondary` (ink_secondary) normal, `ink_on_accent` primary/active,
+    `danger` danger. The returned icon also carries a `QIcon.Mode.Disabled`
+    pixmap tinted with `disabled_text` (ink_disabled) -- Qt selects it
+    automatically from the button's own `isEnabled()` state, so a button
+    that gets `setEnabled(False)` anywhere in the codebase always renders
+    the correct disabled tint with no risk of a stale enabled-state color
+    lingering (no per-call-site re-tinting required).
     """
     from PySide6.QtSvg import QSvgRenderer
 
@@ -1490,11 +1568,18 @@ def get_icon(name: str, color_token: str = "secondary", size: int = ICON_SIZE_NO
         return QIcon()
 
     renderer = QSvgRenderer(str(path))
-    pixmap = QPixmap(size, size)
-    pixmap.fill(Qt.GlobalColor.transparent)
-    painter = QPainter(pixmap)
-    renderer.render(painter)
-    painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceIn)
-    painter.fillRect(pixmap.rect(), qcolor(color_token))
-    painter.end()
-    return QIcon(pixmap)
+
+    def _tinted_pixmap(token: str) -> QPixmap:
+        pixmap = QPixmap(size, size)
+        pixmap.fill(Qt.GlobalColor.transparent)
+        painter = QPainter(pixmap)
+        renderer.render(painter)
+        painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceIn)
+        painter.fillRect(pixmap.rect(), qcolor(token))
+        painter.end()
+        return pixmap
+
+    icon = QIcon()
+    icon.addPixmap(_tinted_pixmap(color_token), QIcon.Mode.Normal)
+    icon.addPixmap(_tinted_pixmap("disabled_text"), QIcon.Mode.Disabled)
+    return icon

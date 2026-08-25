@@ -106,6 +106,7 @@ class RecordingPanel(QWidget):
         self._refresh_devices_button = QPushButton("Refresh")
         self._refresh_devices_button.clicked.connect(self.refresh_devices)
         theme.apply_role(self._refresh_devices_button, "quiet")
+        theme.set_button_icon(self._refresh_devices_button, "refresh", color_token="secondary")
         device_row.addWidget(self._refresh_devices_button)
         layout.addLayout(device_row)
 
@@ -118,9 +119,11 @@ class RecordingPanel(QWidget):
         self._start_recording_button = QPushButton("Start Recording")
         self._start_recording_button.clicked.connect(self._on_start_recording_clicked)
         theme.apply_role(self._start_recording_button, "primary")
+        theme.set_button_icon(self._start_recording_button, "record", color_token="ink_on_accent")
         self._stop_recording_button = QPushButton("Stop Recording")
         self._stop_recording_button.clicked.connect(self._on_stop_recording_clicked)
         theme.apply_role(self._stop_recording_button, "secondary")
+        theme.set_button_icon(self._stop_recording_button, "stop", color_token="secondary")
         record_row.addWidget(self._start_recording_button)
         record_row.addWidget(self._stop_recording_button)
         layout.addLayout(record_row)
@@ -156,9 +159,11 @@ class RecordingPanel(QWidget):
         self._delete_take_button = QPushButton("Delete Take")
         self._delete_take_button.clicked.connect(self._on_delete_take_clicked)
         theme.apply_role(self._delete_take_button, "danger")
+        theme.set_button_icon(self._delete_take_button, "delete", color_token="danger")
         self._delete_cue_takes_button = QPushButton("Delete All Takes for This Cue")
         self._delete_cue_takes_button.clicked.connect(self._on_delete_all_takes_for_cue_clicked)
         theme.apply_role(self._delete_cue_takes_button, "danger")
+        theme.set_button_icon(self._delete_cue_takes_button, "delete", color_token="danger")
         for button in (
             self._play_take_button,
             self._compare_button,

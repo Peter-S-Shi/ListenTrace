@@ -77,6 +77,7 @@ class ImportDialog(QDialog):
         browse_button = QPushButton("Browse...")
         browse_button.clicked.connect(on_browse)
         theme.apply_role(browse_button, "secondary")
+        theme.set_button_icon(browse_button, "browse", color_token="secondary")
         row.addWidget(browse_button)
         return row
 

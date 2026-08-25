@@ -312,9 +312,14 @@ class ExportDialog(QDialog):
         for row, button in enumerate(ordered_buttons):
             actions_grid.addWidget(button, row, 0)
         actions_grid.setColumnStretch(0, 1)
-        for button in save_buttons + copy_buttons:
+        for button in save_buttons:
             button.setEnabled(False)
             theme.apply_role(button, "secondary")
+            theme.set_button_icon(button, "save", color_token="secondary")
+        for button in copy_buttons:
+            button.setEnabled(False)
+            theme.apply_role(button, "secondary")
+            theme.set_button_icon(button, "copy", color_token="secondary")
         layout.addLayout(actions_grid)
 
         self._status_label = QLabel("")

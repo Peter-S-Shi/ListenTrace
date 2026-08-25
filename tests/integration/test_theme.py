@@ -281,7 +281,57 @@ def test_get_icon_degrades_to_a_null_icon_for_an_unknown_name(qapp):
 def test_make_decorative_motif_uses_the_frozen_token_color(qapp, kind, token):
     label = theme.make_decorative_motif(kind)
 
-    assert theme.css(token) in label.styleSheet()
+    pixmap = label.pixmap()
+    assert pixmap is not None and not pixmap.isNull()
+    image = pixmap.toImage()
+    expected = theme.qcolor(token).getRgb()[:3]
+    # Scan for the tinted color rather than assuming a specific pixel is
+    # opaque -- the three motifs are different shapes (filled vs. stroked),
+    # so no single coordinate is guaranteed covered by all of them.
+    found = any(
+        image.pixelColor(x, y).alpha() > 0 and image.pixelColor(x, y).getRgb()[:3] == expected
+        for x in range(image.width())
+        for y in range(image.height())
+    )
+    assert found
+
+
+def test_make_surface_header_default_title_role(qapp):
+    header = theme.make_surface_header("Some Material")
+
+    assert header.title_label.property("role") == "title"
+    assert header.subtitle_label is None
+
+
+def test_make_surface_header_supports_a_different_title_role_variant(qapp):
+    header = theme.make_surface_header("Material Library", subtitle="Study archive", title_role="page_title")
+
+    assert header.title_label.property("role") == "page_title"
+    assert header.subtitle_label is not None
+    assert header.subtitle_label.property("role") == "subtitle"
+
+
+def test_make_surface_header_chips_get_their_own_roles(qapp):
+    header = theme.make_surface_header("Title", chips=[("VIDEO", "badge_primary")])
+
+    chip = header.title_row.itemAt(1).widget()
+    assert chip.text() == "VIDEO"
+    assert chip.property("role") == "badge_primary"
+
+
+def test_make_status_row_enforces_the_frozen_6px_icon_text_gap(qapp):
+    row = theme.make_status_row("Active", "active")
+
+    layout = row.layout()
+    assert layout.spacing() == theme.ICON_TEXT_GAP_PX
+
+
+def test_make_status_row_dot_is_the_frozen_10px_diameter(qapp):
+    row = theme.make_status_row("Active", "active")
+
+    dot_label = row.layout().itemAt(0).widget()
+    assert dot_label.size().width() == 10
+    assert dot_label.size().height() == 10
 
 
 def test_apply_paper_shadow_full_tier_uses_the_frozen_parameters(qapp):

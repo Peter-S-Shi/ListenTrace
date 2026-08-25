@@ -33,6 +33,7 @@ from listentrace.domain.enums.question_type import QuestionType
 from listentrace.domain.enums.quiz_status import QuizStatus
 from listentrace.infrastructure.media.playback import PlaybackController
 from listentrace.ui import theme
+from listentrace.ui.widgets.notebook_paper import GrainedDeskWidget
 from listentrace.ui.theme import SPACE_COMPACT, SPACE_NORMAL, apply_role, apply_surface
 from listentrace.ui.widgets.loop_grace_change_bus import loop_grace_change_bus
 from listentrace.ui.windows.material_loop_settings_dialog import MaterialLoopSettingsDialog
@@ -155,7 +156,7 @@ class QuizWindow(QMainWindow):
         self._current_cue_index: int | None = None
         self._initialized = False
 
-        central = QWidget(self)
+        central = GrainedDeskWidget(self)
         apply_surface(central, "paper")
         layout = QVBoxLayout(central)
         layout.setContentsMargins(SPACE_NORMAL, SPACE_NORMAL, SPACE_NORMAL, SPACE_NORMAL)
@@ -165,18 +166,15 @@ class QuizWindow(QMainWindow):
         # -------------------------------------------------------------------
         # 1. Header Row
         # -------------------------------------------------------------------
-        header_row = QHBoxLayout()
-        title_label = QLabel(self._material.title)
-        apply_role(title_label, "title")
-        header_row.addWidget(title_label)
-
+        header = theme.make_surface_header(self._material.title)
+        header_row = header.top_bar
         self._progress_label = QLabel("")
         apply_role(self._progress_label, "caption")
-        header_row.addWidget(self._progress_label, 1)
+        header.title_row.addWidget(self._progress_label, 1)
 
         close_top_btn = QPushButton("Exit")
         apply_role(close_top_btn, "quiet")
-        theme.set_button_icon(close_top_btn, "close", color_token="muted")
+        theme.set_button_icon(close_top_btn, "close", color_token="secondary")
         close_top_btn.clicked.connect(self.close)
         header_row.addWidget(close_top_btn)
         layout.addLayout(header_row)
@@ -275,7 +273,7 @@ class QuizWindow(QMainWindow):
         self._close_button.clicked.connect(self.close)
         self._next_button = QPushButton("Next Question")
         self._next_button.clicked.connect(self._on_next_clicked)
-        self._submit_button = QPushButton("★ Submit Quiz")
+        self._submit_button = QPushButton("Submit Quiz")
         self._submit_button.clicked.connect(self._on_submit_clicked)
         self._review_button = QPushButton("View Consolidated Review")
         self._review_button.clicked.connect(self._on_view_review_clicked)
@@ -301,7 +299,7 @@ class QuizWindow(QMainWindow):
     def _apply_presentation(self) -> None:
         """Milestone 11 button-role assignment."""
         apply_role(self._previous_button, "secondary")
-        theme.set_button_icon(self._previous_button, "back", color_token="ink")
+        theme.set_button_icon(self._previous_button, "back", color_token="secondary")
         apply_role(self._close_button, "quiet")
         apply_role(self._abandon_button, "danger")
         apply_role(self._review_button, "secondary")
@@ -569,11 +567,13 @@ class QuizWindow(QMainWindow):
         if on_last_question:
             apply_role(self._next_button, "quiet")
             apply_role(self._submit_button, "primary")
-            theme.set_button_icon(self._next_button, "forward", color_token="muted")
+            theme.set_button_icon(self._next_button, "forward", color_token="secondary")
+            theme.set_button_icon(self._submit_button, "motif_star", color_token="ink_on_accent")
         else:
             apply_role(self._next_button, "primary")
             apply_role(self._submit_button, "quiet")
             theme.set_button_icon(self._next_button, "forward", color_token="ink_on_accent")
+            theme.set_button_icon(self._submit_button, "motif_star", color_token="secondary")
 
     # ---- shared playback plumbing ----
 

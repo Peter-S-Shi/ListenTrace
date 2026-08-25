@@ -68,6 +68,7 @@ class QuizHistoryDialog(QDialog):
         self._delete_button.clicked.connect(self._on_delete_clicked)
         self._delete_button.setEnabled(False)
         theme.apply_role(self._delete_button, "danger")
+        theme.set_button_icon(self._delete_button, "delete", color_token="danger")
         close_button = QPushButton("Close")
         close_button.clicked.connect(self.reject)
         theme.apply_role(close_button, "quiet")
@@ -96,9 +97,11 @@ class QuizHistoryDialog(QDialog):
             if attempt.status == "completed":
                 label += f", score {attempt.correct_count}/{attempt.actual_count}"
             item = QListWidgetItem(label)
-            item.setIcon(theme.status_dot_icon(attempt.status))
+            row = theme.make_status_row(label, attempt.status)
+            item.setSizeHint(row.sizeHint())
             item.setData(Qt.ItemDataRole.UserRole, attempt.id)
             self._list.addItem(item)
+            self._list.setItemWidget(item, row)
 
     def _on_selection_changed(self, current: QListWidgetItem, previous: QListWidgetItem) -> None:
         attempt_id = current.data(Qt.ItemDataRole.UserRole) if current is not None else None

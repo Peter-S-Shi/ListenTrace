@@ -62,7 +62,7 @@ from listentrace.ui.text_offset_conversion import (
 )
 from listentrace.ui.theme import SPACE_COMPACT, SPACE_NORMAL, apply_role, apply_surface
 from listentrace.ui.widgets.loop_grace_change_bus import loop_grace_change_bus
-from listentrace.ui.widgets.notebook_paper import RuledPaperFrame, RuledTextEdit
+from listentrace.ui.widgets.notebook_paper import GrainedDeskWidget, RuledPaperFrame, RuledTextEdit
 from listentrace.ui.windows.label_color_dialog import LabelColorDialog
 from listentrace.ui.windows.material_loop_settings_dialog import MaterialLoopSettingsDialog
 
@@ -145,7 +145,7 @@ class PlayerWindow(QMainWindow):
         loop_grace_change_bus.global_default_changed.connect(self._on_loop_grace_global_default_changed)
         loop_grace_change_bus.material_override_changed.connect(self._on_loop_grace_material_override_changed)
 
-        central = QWidget()
+        central = GrainedDeskWidget()
         apply_surface(central, "paper")
         root_layout = QVBoxLayout(central)
         root_layout.setContentsMargins(SPACE_NORMAL, SPACE_NORMAL, SPACE_NORMAL, SPACE_NORMAL)
@@ -154,7 +154,7 @@ class PlayerWindow(QMainWindow):
         # -------------------------------------------------------------------
         # 1. Top Bar (Context Header & Return Action)
         # -------------------------------------------------------------------
-        top_bar = theme.make_surface_header(
+        header = theme.make_surface_header(
             material.title,
             subtitle="Study Desk — Synchronized playback & cue journal",
             chips=[
@@ -162,6 +162,8 @@ class PlayerWindow(QMainWindow):
                 (f"{len(self._session.cues)} CUES", "badge_secondary"),
             ],
         )
+        top_bar = header.top_bar
+        header.title_row.addStretch(1)
 
         return_button = QPushButton("Return to Library")
         apply_role(return_button, "quiet")
@@ -313,6 +315,7 @@ class PlayerWindow(QMainWindow):
         self._transcript_button = QPushButton("Hide Transcript")
         self._transcript_button.clicked.connect(self._on_toggle_transcript)
         apply_role(self._transcript_button, "secondary")
+        theme.set_button_icon(self._transcript_button, "hide", color_token="secondary")
         utility_layout.addWidget(self._transcript_button)
         utility_layout.addStretch(1)
         notebooks_row.addWidget(utility_card, 1)
@@ -468,6 +471,7 @@ class PlayerWindow(QMainWindow):
             self._save_item_button,
         ):
             apply_role(button, "notebook_primary_action")
+            theme.set_button_icon(button, "save", color_token="accent")
         for button in (
             self._update_annotation_button,
             self._update_item_button,
@@ -479,6 +483,7 @@ class PlayerWindow(QMainWindow):
             self._delete_item_button,
         ):
             apply_role(button, "notebook_destructive_action")
+            theme.set_button_icon(button, "delete", color_token="danger")
 
     # ---- workspace panel construction ----
 
@@ -876,6 +881,7 @@ class PlayerWindow(QMainWindow):
         visible = self._session.transcript_visible
         self._cue_list.setVisible(visible)
         self._transcript_button.setText("Hide Transcript" if visible else "Show Transcript")
+        theme.set_button_icon(self._transcript_button, "hide" if visible else "show", color_token="secondary")
         self._refresh_editing_cue_panels()
 
     def _on_toggle_mute(self) -> None:

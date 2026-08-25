@@ -59,7 +59,7 @@ from listentrace.ui.text_offset_conversion import (
 )
 from listentrace.ui.theme import SPACE_COMPACT, SPACE_NORMAL, apply_role, apply_surface
 from listentrace.ui.widgets.loop_grace_change_bus import loop_grace_change_bus
-from listentrace.ui.widgets.notebook_paper import RuledTextEdit
+from listentrace.ui.widgets.notebook_paper import GrainedDeskWidget, RuledTextEdit
 from listentrace.ui.widgets.recording_panel import RecordingPanel
 from listentrace.ui.windows.material_loop_settings_dialog import MaterialLoopSettingsDialog
 from listentrace.ui.windows.player_window import _OVERLAP_HIGHLIGHT, _color_badge_icon, _format_time
@@ -250,7 +250,7 @@ class GuidedSessionWindow(QMainWindow):
         self._recording_panel = RecordingPanel(connection, recordings_dir, self)
         self._recording_panel.request_play_source.connect(self._on_recording_panel_request_play_source)
 
-        central = QWidget(self)
+        central = GrainedDeskWidget(self)
         apply_surface(central, "paper")
         layout = QVBoxLayout(central)
         layout.setContentsMargins(SPACE_NORMAL, SPACE_NORMAL, SPACE_NORMAL, SPACE_NORMAL)
@@ -260,18 +260,15 @@ class GuidedSessionWindow(QMainWindow):
         # -------------------------------------------------------------------
         # 1. Header & Stage Stepper
         # -------------------------------------------------------------------
-        header_row = QHBoxLayout()
-        title_label = QLabel(self._material.title)
-        apply_role(title_label, "title")
-        header_row.addWidget(title_label)
-
+        header = theme.make_surface_header(self._material.title)
+        header_row = header.top_bar
         self._stage_progress_label = QLabel("")
         apply_role(self._stage_progress_label, "caption")
-        header_row.addWidget(self._stage_progress_label, 1)
+        header.title_row.addWidget(self._stage_progress_label, 1)
 
         close_top_btn = QPushButton("Exit Session")
         apply_role(close_top_btn, "quiet")
-        theme.set_button_icon(close_top_btn, "close", color_token="muted")
+        theme.set_button_icon(close_top_btn, "close", color_token="secondary")
         close_top_btn.clicked.connect(self.close)
         header_row.addWidget(close_top_btn)
         layout.addLayout(header_row)
@@ -319,9 +316,9 @@ class GuidedSessionWindow(QMainWindow):
 
         self._close_button = QPushButton("Close and Resume Later")
         self._close_button.clicked.connect(self.close)
-        self._continue_button = QPushButton("Save and Continue ▶")
+        self._continue_button = QPushButton("Save and Continue")
         self._continue_button.clicked.connect(self._on_save_and_continue_clicked)
-        self._complete_button = QPushButton("★ Complete Session")
+        self._complete_button = QPushButton("Complete Session")
         self._complete_button.clicked.connect(self._on_complete_session_clicked)
 
         nav_row.addWidget(self._close_button)
@@ -346,12 +343,14 @@ class GuidedSessionWindow(QMainWindow):
     def _apply_presentation(self) -> None:
         """Milestone 11 button-role assignment."""
         apply_role(self._back_button, "quiet")
-        theme.set_button_icon(self._back_button, "back", color_token="muted")
+        theme.set_button_icon(self._back_button, "back", color_token="secondary")
         apply_role(self._skip_button, "quiet")
         apply_role(self._continue_button, "primary")
+        theme.set_button_icon(self._continue_button, "save", color_token="ink_on_accent")
         apply_role(self._close_button, "quiet")
         apply_role(self._abandon_button, "danger")
         apply_role(self._complete_button, "success")
+        theme.set_button_icon(self._complete_button, "motif_star", color_token="ink_on_accent")
 
     # ---- read-only / status helpers ----
 
@@ -776,18 +775,19 @@ class GuidedSessionWindow(QMainWindow):
         self._capture_delete_button.clicked.connect(self._on_delete_capture_clicked)
         self._capture_delete_button.setEnabled(False)
         apply_role(self._capture_delete_button, "danger")
+        theme.set_button_icon(self._capture_delete_button, "delete", color_token="danger")
 
         self._capture_move_up_button = QPushButton("Move Up")
         self._capture_move_up_button.clicked.connect(self._on_move_capture_up_clicked)
         self._capture_move_up_button.setEnabled(False)
         apply_role(self._capture_move_up_button, "quiet")
-        theme.set_button_icon(self._capture_move_up_button, "up", color_token="muted")
+        theme.set_button_icon(self._capture_move_up_button, "up", color_token="secondary")
 
         self._capture_move_down_button = QPushButton("Move Down")
         self._capture_move_down_button.clicked.connect(self._on_move_capture_down_clicked)
         self._capture_move_down_button.setEnabled(False)
         apply_role(self._capture_move_down_button, "quiet")
-        theme.set_button_icon(self._capture_move_down_button, "down", color_token="muted")
+        theme.set_button_icon(self._capture_move_down_button, "down", color_token="secondary")
 
         buttons_row.addWidget(self._capture_update_button)
         buttons_row.addWidget(self._capture_delete_button)
@@ -1022,16 +1022,18 @@ class GuidedSessionWindow(QMainWindow):
         self._save_diagnosis_button = QPushButton("Save Diagnosis")
         self._save_diagnosis_button.clicked.connect(self._on_save_diagnosis_clicked)
         apply_role(self._save_diagnosis_button, "secondary")
+        theme.set_button_icon(self._save_diagnosis_button, "save", color_token="secondary")
 
         self._delete_diagnosis_button = QPushButton("Delete")
         self._delete_diagnosis_button.clicked.connect(self._on_delete_diagnosis_clicked)
         self._delete_diagnosis_button.setEnabled(False)
         apply_role(self._delete_diagnosis_button, "danger")
+        theme.set_button_icon(self._delete_diagnosis_button, "delete", color_token="danger")
 
         self._no_difficulty_button = QPushButton("No Notable Difficulty")
         self._no_difficulty_button.clicked.connect(self._on_no_difficulty_clicked)
         apply_role(self._no_difficulty_button, "secondary")
-        theme.set_button_icon(self._no_difficulty_button, "check", color_token="ink")
+        theme.set_button_icon(self._no_difficulty_button, "check", color_token="secondary")
 
         diag_buttons_row.addWidget(self._save_diagnosis_button)
         diag_buttons_row.addWidget(self._delete_diagnosis_button)
@@ -1309,7 +1311,7 @@ class GuidedSessionWindow(QMainWindow):
         self._shadowing_previous_button = QPushButton("Previous Cue")
         self._shadowing_previous_button.clicked.connect(self._on_shadowing_previous_clicked)
         apply_role(self._shadowing_previous_button, "secondary")
-        theme.set_button_icon(self._shadowing_previous_button, "back", color_token="ink")
+        theme.set_button_icon(self._shadowing_previous_button, "back", color_token="secondary")
 
         self._shadowing_play_button = QPushButton("Play")
         self._shadowing_play_button.clicked.connect(self._on_shadowing_play_clicked)
@@ -1326,7 +1328,7 @@ class GuidedSessionWindow(QMainWindow):
         self._shadowing_next_button = QPushButton("Next Cue")
         self._shadowing_next_button.clicked.connect(self._on_shadowing_next_clicked)
         apply_role(self._shadowing_next_button, "secondary")
-        theme.set_button_icon(self._shadowing_next_button, "forward", color_token="ink")
+        theme.set_button_icon(self._shadowing_next_button, "forward", color_token="secondary")
 
         self._shadowing_loop_settings_button = QPushButton("Loop Settings...")
         self._shadowing_loop_settings_button.clicked.connect(self._on_open_loop_settings)
@@ -1361,7 +1363,7 @@ class GuidedSessionWindow(QMainWindow):
         self._mark_practiced_button = QPushButton("Mark Practiced")
         self._mark_practiced_button.clicked.connect(self._on_mark_practiced_clicked)
         apply_role(self._mark_practiced_button, "secondary")
-        theme.set_button_icon(self._mark_practiced_button, "check", color_token="ink")
+        theme.set_button_icon(self._mark_practiced_button, "check", color_token="secondary")
 
         self._skip_cue_button = QPushButton("Skip Cue")
         self._skip_cue_button.clicked.connect(self._on_skip_shadowing_cue_clicked)

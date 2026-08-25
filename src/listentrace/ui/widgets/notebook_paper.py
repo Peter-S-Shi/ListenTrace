@@ -119,6 +119,22 @@ class GrainedPaperFrame(QFrame):
         painter.end()
 
 
+class GrainedDeskWidget(QWidget):
+    """The root workspace/desk background surface with restrained
+    procedural grain (M13 Stage B) -- the drop-in replacement for a bare
+    `QWidget()` central widget on any workspace window carrying
+    `apply_surface(widget, "paper")`/`"workspace"` at the window-root
+    level. NOT used for media viewports, form controls, or nested
+    surfaces -- only the one root desk-background widget per window.
+    """
+
+    def paintEvent(self, event) -> None:  # type: ignore[override]
+        super().paintEvent(event)
+        painter = QPainter(self)
+        paint_paper_grain(painter, self.width(), self.height())
+        painter.end()
+
+
 class RuledTextEdit(QTextEdit):
     """A QTextEdit with visible horizontal ruled lines underneath the text, like a lined notepad.
 

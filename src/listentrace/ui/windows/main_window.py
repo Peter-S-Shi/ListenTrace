@@ -45,6 +45,7 @@ from listentrace.ui.theme import (
     configure_long_text_list,
     make_card,
     make_notebook_surface,
+    make_surface_header,
     set_button_icon,
 )
 from listentrace.ui.widgets.recording_panel import recording_change_bus
@@ -114,6 +115,7 @@ class MainWindow(QMainWindow):
         if self._sidebar_collapsed:
             self._sidebar_widget.setVisible(False)
             self._toggle_sidebar_button.setText("Show Sidebar")
+            set_button_icon(self._toggle_sidebar_button, "show", color_token="secondary")
 
 
     def _init_ui(self) -> None:
@@ -190,24 +192,25 @@ class MainWindow(QMainWindow):
         workspace_layout.setSpacing(SPACE_SECTION)
 
         # Top Bar: View Title & Primary Actions
-        top_bar = QHBoxLayout()
-        top_bar_text = QVBoxLayout()
-        self._view_title_label = QLabel("Material Library")
-        apply_role(self._view_title_label, "page_title")
-        self._view_subtitle_label = QLabel("Study archive and lined diagnosis workspace")
-        apply_role(self._view_subtitle_label, "subtitle")
-        top_bar_text.addWidget(self._view_title_label)
-        top_bar_text.addWidget(self._view_subtitle_label)
-        top_bar.addLayout(top_bar_text)
-        top_bar.addStretch(1)
+        header = make_surface_header(
+            "Material Library",
+            subtitle="Study archive and lined diagnosis workspace",
+            title_role="page_title",
+        )
+        top_bar = header.top_bar
+        self._view_title_label = header.title_label
+        self._view_subtitle_label = header.subtitle_label
+        header.title_row.addStretch(1)
 
         self._toggle_sidebar_button = QPushButton("Hide Sidebar")
         apply_role(self._toggle_sidebar_button, "quiet")
+        set_button_icon(self._toggle_sidebar_button, "hide", color_token="secondary")
         self._toggle_sidebar_button.clicked.connect(self._on_toggle_sidebar)
         top_bar.addWidget(self._toggle_sidebar_button)
 
         self._toggle_archived_button = QPushButton("Show Archived")
         apply_role(self._toggle_archived_button, "secondary")
+        set_button_icon(self._toggle_archived_button, "show", color_token="secondary")
         self._toggle_archived_button.clicked.connect(self._on_toggle_archived)
         top_bar.addWidget(self._toggle_archived_button)
 
@@ -308,8 +311,10 @@ class MainWindow(QMainWindow):
         self._quiz_history_button.clicked.connect(self._on_quiz_history_clicked)
         self._rename_button = QPushButton("Rename")
         self._rename_button.clicked.connect(self._on_rename_clicked)
+        set_button_icon(self._rename_button, "rename", color_token="secondary")
         self._archive_restore_button = QPushButton("Archive")
         self._archive_restore_button.clicked.connect(self._on_archive_restore_clicked)
+        set_button_icon(self._archive_restore_button, "archive", color_token="secondary")
 
         util_row.addWidget(self._session_history_button)
         util_row.addWidget(self._quiz_history_button)
@@ -321,6 +326,7 @@ class MainWindow(QMainWindow):
         danger_row = QHBoxLayout()
         self._remove_button = QPushButton("Remove Material")
         apply_role(self._remove_button, "danger")
+        set_button_icon(self._remove_button, "delete", color_token="danger")
         self._remove_button.clicked.connect(self._on_remove_clicked)
         danger_row.addStretch(1)
         danger_row.addWidget(self._remove_button)
@@ -387,6 +393,7 @@ class MainWindow(QMainWindow):
             self._sidebar_collapsed = True
             settings.setValue(_SETTING_SIDEBAR_COLLAPSED, True)
             self._toggle_sidebar_button.setText("Show Sidebar")
+            set_button_icon(self._toggle_sidebar_button, "show", color_token="secondary")
         else:
             self._sidebar_widget.setVisible(True)
             restore_w = self._last_sidebar_width if self._last_sidebar_width > 50 else _DEFAULT_SIDEBAR_WIDTH
@@ -394,6 +401,7 @@ class MainWindow(QMainWindow):
             self._sidebar_collapsed = False
             settings.setValue(_SETTING_SIDEBAR_COLLAPSED, False)
             self._toggle_sidebar_button.setText("Hide Sidebar")
+            set_button_icon(self._toggle_sidebar_button, "hide", color_token="secondary")
 
     def refresh_library(self) -> None:
         self._material_list.clear()
