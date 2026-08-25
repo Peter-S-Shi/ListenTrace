@@ -1,1199 +1,1653 @@
 # ListenTrace — DESIGN.md
 
-> Status: M13 Design Authority Draft v0.1  
-> Scope: Milestone 13 — Advanced UI/UX Reconstruction  
-> Product: ListenTrace  
-> UI stack: PySide6 / Qt Widgets  
-> Design evidence: Human QA screenshots, M13 Prototype A, UI Design Grill Round 1, Round 2 Comparison Prototype, Round 2 human decision  
-> Authority model: This file is the long-lived product design authority. The section **M13 Frozen UI/UX Design Contract** records decisions that M13 implementation must not casually reinterpret.
+> **Status:** M13 Rendering Authority v1.0  
+> **Scope:** Final visual rendering, interaction styling, typography, color, paper/notebook treatment, decorative grammar, acoustic feedback, and visual acceptance.  
+> **Product:** ListenTrace  
+> **UI stack:** PySide6 / Qt Widgets  
+> **Primary visual system:** **Notebook Study Desk**  
+> **North Star:** the approved warm spiral-notebook Learning Session / Player composition and the approved final design boards for Quick Practice, Shadowing, Guided Session, Quiz/Review, Learning History, Main Library/Dossier, History dialogs, Settings, Import, and Export.  
+> **Architecture relationship:** Surface architecture, workflow, persistence, domain semantics, and module composition are defined elsewhere. This document begins **after the correct QWidget/layout/module architecture exists** and tells the implementation agent how to render it into the final product.
 
 ---
 
-## 1. Purpose
+## 0. Authority and migration rule
 
-ListenTrace is a local-first desktop learning product for intensive listening practice, transcript-centered diagnosis, cue-level replay, guided practice, shadowing, recall, quiz, and learning-history workflows.
+This document is the final rendering authority for the current M13 Notebook Study Desk direction.
 
-The product already has mature functional behavior. M13 is not a feature-expansion milestone. Its purpose is to reconstruct the visual and interaction architecture so that the existing product behaves and feels like one coherent desktop learning system.
+It supersedes older visual directions where they conflict with the approved final design boards, including:
 
-The design goal is not “make Qt prettier.”
+- generic “professional dashboard” styling;
+- app-wide dark listening-shell concepts;
+- ordinary white SaaS cards placed on a warm background;
+- inconsistent per-window button styling;
+- decorative paper texture used only as wallpaper;
+- ad-hoc colors, fonts, radii, and spacing chosen inside individual windows.
 
-The goal is:
+The **media viewport may remain black/dark** because it is a media surface. The surrounding Player is a warm Notebook Study Desk, not an app-wide dark control panel.
 
-> Make the current learning workflows easier to understand, easier to operate, easier to resize, calmer to study in, and more internally consistent without reopening settled domain behavior.
+The current codebase already contains useful M13 primitives and tokens. Implementation should **migrate and consolidate them toward this contract**, not create a parallel theme system.
 
----
+If an existing token conflicts with this document:
 
-## 2. Product Design Philosophy
-
-ListenTrace should feel like a **Warm Professional Learning Desk**:
-
-- professional enough for long, repeated desktop use;
-- calm enough for cognitively demanding listening work;
-- spacious enough to reduce unnecessary visual pressure;
-- structured enough that the next action and current state are immediately legible;
-- focused enough that media, transcript, diagnosis, recall, and recording never compete equally for attention.
-
-A useful shorthand is:
-
-> **Professional workspace outside.  
-> Full focus when listening.  
-> Calm study surface when learning.**
-
-The software chrome should become quieter as the learning task becomes more cognitively demanding.
+1. preserve behavior and domain semantics;
+2. update the central theme/shared primitive;
+3. update consumers through the shared token/role;
+4. do not patch individual windows with local magic values unless a documented platform exception requires it.
 
 ---
 
-# 3. M13 Frozen UI/UX Design Contract
+# 1. Design identity — Notebook Study Desk
 
-The following decisions are frozen for M13 unless a genuine Product / Scope Gate proves that one of them makes the real application unusable.
+ListenTrace should feel like a **personal language-learning desk that has been digitized without losing the clarity of modern desktop software**.
 
-## 3.1 Product Personality
-
-**Frozen:** Warm Professional Learning Desk.
-
-ListenTrace is not:
-
-- a generic enterprise dashboard;
-- a playful gamified language app;
-- a marketing-style SaaS interface;
-- an extreme minimalist showcase;
-- a dense engineering IDE.
-
-It should combine professional desktop clarity with an intentionally calm learning atmosphere.
-
----
-
-## 3.2 Product-Family Relationship with Quiz Studio
-
-ListenTrace and Quiz Studio should visibly belong to the same personal learning-product family.
-
-Shared family traits should include:
-
-- Professional Blue as the primary accent family;
-- spacious learning-oriented composition;
-- restrained card depth;
-- strong typography and action hierarchy;
-- clear semantic states;
-- strong Light / Dark support;
-- learning surfaces that visually recede behind the task;
-- accessibility as a baseline, not an optional mode.
-
-This is **family resemblance, not pixel-level cloning**.
-
-ListenTrace retains product-specific visual modes that Quiz Studio does not need:
-
-- full-workspace dark listening Focus Mode;
-- cue-centered interaction language;
-- transcript-follow and cue-selection states;
-- context-sensitive paper study surfaces;
-- recording / take workflows.
-
----
-
-## 3.3 Accent Color
-
-**Frozen:** Professional Blue.
-
-The accent should communicate:
-
-- stability;
-- trust;
-- mature productivity software;
-- clear interaction focus;
-- compatibility with long-duration use;
-- visual continuity with Quiz Studio.
-
-The exact production HEX values are implementation tokens, not immutable product semantics.
-
-Recommended starting family for visual validation:
+The visual metaphor is not “a paper texture theme.” It is a coherent family of study objects:
 
 ```text
-Primary Blue:        #2563EB / #3B82F6 family
-Primary Hover:       darker blue
-Primary Subtle:      very light blue tint
-Focus Ring:          translucent blue ring
-Dark-mode Accent:    slightly brighter blue
+Desk
+├─ Notebook
+├─ Ruled Study Sheet
+├─ Cue / Transcript Sheet
+├─ Practice Page
+├─ Material Dossier
+├─ Archive / History Record
+├─ Settings Form
+└─ Evidence Export Worksheet
 ```
 
-Final token values may be tuned during implementation visual validation, but the design must remain recognizably **Professional Blue**, not drift into teal, orange, purple, or multi-accent branding.
+The product should feel:
+
+- warm;
+- intimate;
+- studious;
+- tactile;
+- calm;
+- focused;
+- archival where evidence is being reviewed;
+- non-corporate;
+- non-gamified;
+- clearly interactive.
+
+A concise identity string for agents:
+
+> **Warm analog study desk + personal learning journal + archival dossier + modern desktop controls.**
 
 ---
 
-## 3.4 Information Density
+## 1.1 Paper is structure, not decoration
 
-**Frozen:** Spacious Learning.
+**Paper is Structure, not Decoration.**
 
-Prototype A was judged slightly too compact.
+A surface should use a paper/notebook form because that form helps explain the information architecture.
 
-M13 should therefore prefer:
+Examples:
 
-- more breathing room around primary learning content;
-- fewer simultaneous controls in the immediate visual field;
-- larger separation between unrelated action groups;
-- readable transcript and recall spacing;
-- desktop space used deliberately rather than left as accidental blank area.
+- Transcript & Cues → ruled reference sheet;
+- Diagnosis → diagnosis notebook;
+- Recording → recording notebook;
+- Final Recall → large ruled writing journal;
+- Main material detail → study dossier;
+- Learning History → evidence dossier/archive;
+- Settings → orderly preference sheet;
+- Import → compact intake sheet;
+- Export → evidence-packaging worksheet.
 
-“Spacious” does not mean oversized marketing whitespace.
-
-Management-heavy screens may remain denser than active learning screens.
-
----
-
-## 3.5 Global Shell
-
-**Frozen:** Hybrid Shell.
-
-Management-oriented views may use a persistent global shell.
-
-Immersive learning views should visually weaken global navigation so that the learning task becomes dominant.
-
-### Sidebar contract
-
-The global sidebar should:
-
-- exist where persistent global navigation has real value;
-- be resizable;
-- support collapse;
-- permit the user to keep it collapsed when they choose that preference;
-- avoid taking permanent visual priority during focused learning;
-- not become the navigation container for every Guided Session stage.
-
-Preferred implementation direction:
-
-- use a resizable desktop layout primitive such as `QSplitter`;
-- reuse existing UI-preference infrastructure where available;
-- do not create a second unrelated settings mechanism solely for M13.
-
-Exact default / min / max widths are implementation decisions to validate in the real app.
+Do **not** place a paper texture behind an otherwise generic collection of SaaS cards and call the work complete.
 
 ---
 
-## 3.6 Guided Session Navigation
+## 1.2 Modern interaction remains explicit
 
-**Frozen:** Stage 1–5 are session-local workflow navigation.
+The physical metaphor must never reduce interaction clarity.
 
-They are not permanent first-level global navigation.
+A checkbox still looks and behaves like a checkbox.  
+A radio still behaves like a radio.  
+A button still has clear normal, hover, pressed, focus, disabled, and selected states.  
+A destructive action remains visibly destructive.  
+Keyboard focus remains visible.  
+Read-only state remains distinguishable.
 
-Conceptually:
+The governing rule is:
+
+> **Simulate a study object, not a historical physical object.**
+
+---
+
+# 2. Visual intensity by surface type
+
+Not every window receives the same amount of notebook decoration.
+
+| Surface class | Notebook intensity | Rendering direction |
+|---|---:|---|
+| Player / primary Learning Session | 5 / 5 | Full Notebook Study Desk; open-book composition; strongest physical-paper identity |
+| Guided Session | 5 / 5 | Persistent study-book shell; stage pages; strong notebook chapter language |
+| Quick Practice / Shadowing / Quiz | 4 / 5 | Focused practice sheets/notebooks; less decoration; one dominant task |
+| Quiz Review / Main Library / Learning History | 3 / 5 | Dossier/archive language; scan-friendly structure; restrained scrapbook accents |
+| Session History / Quiz History / Settings | 2 / 5 | Paper-form family; clean ruled lists/forms; little decoration |
+| Import | 2 / 5 | Compact intake sheet; almost no decorative noise |
+| Export | 3 / 5 | Large structured evidence worksheet; complexity handled by hierarchy, not decoration |
+
+Rules:
+
+- Dense information surfaces are **not** made more decorative to compensate for density.
+- Small dialogs should not inherit the full open-book composition.
+- Spiral binding is reserved for surfaces that genuinely read as notebook pages/modules.
+- Flowers, stars, tape, paperclips, and sticky notes are accents, not mandatory badges.
+
+---
+
+# 3. Canonical color system
+
+## 3.1 Color token policy
+
+Every production color must come from a central token.
+
+**Forbidden:**
+
+```python
+widget.setStyleSheet("color: #some-new-value")
+```
+
+inside a window merely because the local result “looks close.”
+
+When a new semantic color is genuinely required, add a named central token and document its purpose.
+
+All values below are the canonical **light/warm Notebook Study Desk palette**.
+
+---
+
+## 3.2 Macro surfaces
+
+| Token | Hex | Use |
+|---|---|---|
+| `desk_bg` | `#F6F1E7` | Root workspace / warm desk background |
+| `paper_primary` | `#FFFDF8` | Primary paper sheets, main notebook pages |
+| `paper_secondary` | `#FAF6ED` | Secondary panels, mini notebooks, light inset areas |
+| `paper_deep` | `#F3EBDD` | Deeper paper layer, directory backing, paper edge contrast |
+| `sidebar_bg` | `#F0E8DC` | App directory / archive sidebar |
+| `surface_plain` | `#FFFEFB` | Plain clean form/table surface when ruled paper is unnecessary |
+| `media_black` | `#0F1115` | Media/video viewport only |
+| `paper_edge` | `#CFC3B2` | Visible paper/card edge |
+| `warm_border` | `#D8CFC1` | Ordinary panel/control border |
+| `warm_divider` | `#E6DED2` | Quiet section separator |
+
+The application should never drift back to a cold `#FFFFFF + #E5E7EB` enterprise palette.
+
+---
+
+## 3.3 Ink and text
+
+| Token | Hex | Use |
+|---|---|---|
+| `ink_primary` | `#1F1D1A` | Main readable text |
+| `ink_secondary` | `#5A5147` | Secondary text, noncritical labels |
+| `ink_muted` | `#6F665C` | Helper text and low-emphasis metadata |
+| `ink_caption` | `#7B7165` | Captions at 12px+ |
+| `ink_placeholder` | `#948A7D` | Placeholder text only |
+| `ink_disabled` | `#9B9388` | Disabled controls; never used for important active information |
+| `ink_on_accent` | `#FFFDF8` | Text/icons on primary blue |
+| `ink_on_dark` | `#F7F4EE` | Text over media/dark-only surfaces |
+
+Small active text must use `ink_primary`, `ink_secondary`, or `ink_muted`.  
+Do not use very low-contrast warm gray for required instructions.
+
+---
+
+## 3.4 Academic blue interaction family
+
+| Token | Hex | Use |
+|---|---|---|
+| `accent` | `#2563EB` | Primary academic blue |
+| `accent_hover` | `#1D4ED8` | Hover |
+| `accent_pressed` | `#1E40AF` | Pressed |
+| `accent_soft` | `#EFF6FF` | Very light selected/active background |
+| `accent_selected` | `#DBEAFE` | Stronger selected row/state |
+| `accent_border_soft` | `#93C5FD` | Secondary hover/focus border |
+| `focus_ring` | `#60A5FA` | Keyboard focus ring |
+| `rule_blue` | `#BFDBFE` | Ruled notebook line base color |
+| `handwritten_blue` | `#2458B8` | Decorative handwritten labels, tape labels, pen-like headings |
+
+Blue means **current learning action, selection, focus, or notebook ink**.  
+It is not a license to make every button blue.
+
+---
+
+## 3.5 Notebook and paper detail colors
+
+| Token | Hex | Use |
+|---|---|---|
+| `rule_blue` | `#BFDBFE` | Ruled lines; render at 52% opacity by default |
+| `margin_line` | `#E6A7AD` | Vertical notebook margin line; render at 46% opacity |
+| `spiral_metal` | `#7D8794` | Spiral ring base |
+| `spiral_shadow` | `#4D5660` | Spiral underside/shadow at 25% opacity |
+| `paper_hole` | `#E9E1D5` | Punched paper holes |
+| `tape_cream` | `#E8D6A8` | Cream masking tape |
+| `tape_blue` | `#91B4E4` | Blue decorative tape |
+| `sticky_note` | `#F2E2B4` | Helper sticky note |
+| `paperclip_metal` | `#7C858D` | Paperclip / metal detail |
+| `leaf_green` | `#4F7A58` | Sparse botanical doodle |
+| `flower_pink` | `#D78EA2` | Sparse flower accent |
+| `star_gold` | `#D2A43A` | Decorative star outline/fill accent |
+
+Decorative colors are never used to encode correctness, error, or workflow state.
+
+---
+
+## 3.6 Semantic colors
+
+| Token | Hex | Subtle background | Use |
+|---|---|---|---|
+| `success` | `#168247` | `#EDF8F1` | completed, correct, success |
+| `warning` | `#C87508` | `#FFF4D6` | skipped, abandoned, caution |
+| `danger` | `#D9383A` | `#FDF2F2` | destructive actions, errors |
+| `danger_hover` | `#BF2628` | `#FBE8E8` | destructive hover |
+| `incorrect` | `#DC2626` | `#FEF2F2` | quiz incorrect result |
+| `info` | `#2563EB` | `#EFF6FF` | informational active state |
+| `neutral_state` | `#776E64` | `#F2EEE7` | inactive/read-only status |
+
+Semantic colors retain meaning everywhere.
+
+No important state may rely on color alone. Add text, icon, border, shape, or position.
+
+---
+
+## 3.7 Learning evidence label colors
+
+Diagnosis label colors should be visibly distinct but not fluorescent.
+
+| Diagnosis label | Hex |
+|---|---|
+| `keyword` | `#D3A83E` |
+| `known_not_heard` | `#E08A3E` |
+| `connected_reduced_speech` | `#5F9A69` |
+| `misheard` | `#D96A76` |
+| `unknown_word_or_chunk` | `#4F86D9` |
+
+If the domain currently exposes additional labels, map them into the same muted-study palette and verify contrast.
+
+User-customized label colors remain supported; previews must show the actual chosen color.
+
+---
+
+# 4. Typography contract
+
+## 4.1 Font families
+
+### Functional UI and learning text
+
+Canonical stack:
 
 ```text
-Global Navigation
-├─ Material Library
-├─ Player / Practice entry points
-├─ Quiz
-├─ Learning History
-└─ Settings / Data / other global destinations
-
-Guided Session
-└─ Stage 1 → Stage 2 → Stage 3 → Stage 4 → Stage 5
+"Segoe UI Variable Text",
+"Segoe UI Variable",
+"Segoe UI",
+"Microsoft YaHei UI",
+"Microsoft YaHei",
+"PingFang SC",
+sans-serif
 ```
 
-The current stage, completed stages, available stages, and progression state should be visible inside the Guided Session experience.
+Use this for:
 
-Global information architecture and session workflow state must not be conflated.
+- transcript;
+- cue text;
+- questions;
+- forms;
+- lists;
+- history;
+- settings;
+- buttons;
+- metadata;
+- diagnosis evidence;
+- tables;
+- errors;
+- instructions.
 
----
+### Handwritten personality font
 
-## 3.7 Paper-Like Study Surfaces
+For **short Latin-script decorative text only**:
 
-**Frozen:** Contextual intensity by page.
+```text
+"Segoe Print",
+"Segoe Script",
+"Segoe UI"
+```
 
-Paper is a learning-surface language, not the global product theme.
+Allowed for:
 
-### Low paper intensity
+- tape labels;
+- tiny notebook chapter tags;
+- short decorative helper notes;
+- optional hand-drawn title accent;
+- noncritical margin annotations.
 
-Suitable for:
+Do **not** force CJK text into a Latin handwriting font.  
+Chinese/Japanese/Korean decorative labels fall back to `Microsoft YaHei UI` / the functional stack and gain personality through color, weight, tape/paper treatment, and spacing instead.
 
-- Transcript Diagnosis;
-- comparison;
-- evidence inspection;
-- structured analysis.
+### Monospace
 
-Use:
+```text
+"Cascadia Mono",
+"Consolas",
+"Courier New",
+monospace
+```
 
-- calm off-white / matte surface;
-- readable line spacing;
-- reduced chrome;
-- modern sans-serif typography.
+Use only for:
 
-### Medium paper intensity
-
-Suitable for:
-
-- Quiz;
-- guided written responses;
-- structured reflection.
-
-Use:
-
-- calm study surface;
-- stronger reading hierarchy;
-- modestly increased whitespace;
-- limited card depth.
-
-### High paper intensity
-
-Suitable for:
-
-- Final Recall;
-- extended learner writing;
-- synthesis / reconstruction.
-
-High paper intensity may use more editorial typography if visual validation shows that it improves reading and writing rather than becoming decorative.
-
-Paper styling must never reduce accessibility, text contrast, or control discoverability.
-
-### 3.7.1 Lined Spiral Notebook & Ruled Paper Refinement (HG-1 Closeout)
-
-Certain text-heavy, record-like, and context-like surfaces adopt a **lined spiral notebook / ruled paper** visual language:
-
-- **Sidebar Directory**: Narrower Acrobat-style bookmark directory with left-aligned navigation items and clean vertical rhythm.
-- **Study Archive / Material List**: Ruled list presentation with horizontal row dividing lines and study-record spacing.
-- **Selected Material Context / Dossier**: Spiral notebook page appearance with top wire-binding visual cues, horizontal ruled metadata rows, and subtle, low-opacity corner study stamps.
-- **History & Attempt Dialogs**: Ruled-record list styling for historical sessions and quiz attempts.
-
-This language remains disciplined, line-based, and functional—enhancing study readability and archival order without turning into a cluttered scrapbook.
+- playback time;
+- exact timestamps where alignment matters;
+- file/schema technical values where monospacing improves scanning.
 
 ---
 
-## 3.8 Player Focus Mode
+## 4.2 Type scale
 
-**Frozen:** Full-workspace Dark Focus Mode.
+All sizes are logical pixels at 100% scale.
 
-When the user enters the primary listening workspace, the experience should feel intentionally different from management screens.
-
-The dark listening mode should cover the **whole listening workspace**, not only the video rectangle.
-
-The purpose is attentional:
-
-- media becomes the visual stage;
-- current cue remains unmistakable;
-- transcript remains highly readable;
-- transport and loop controls remain accessible;
-- irrelevant global chrome becomes quieter;
-- nonessential badges disappear.
-
-Focus Mode is not a separate brand.
-
-It must remain visibly part of ListenTrace.
-
----
-
-## 3.9 Cue-as-Card
-
-**Frozen:** Cue-as-Card is an approved core interaction pattern.
-
-A cue is one of ListenTrace’s primary learning objects.
-
-Where appropriate, an individual cue may be represented as a reusable visual unit containing:
-
-- timestamp / cue identity;
-- transcript text;
-- playing state;
-- selected state;
-- bounded cue-level actions;
-- limited status/evidence information.
-
-Cue cards should not become oversized dashboard cards.
-
-The pattern should support rapid scanning and preserve transcript continuity.
+| Role | Family | Size | Weight | Target line height | Letter spacing | Color |
+|---|---|---:|---:|---:|---:|---|
+| Product / material hero title | Functional | 22px | 650 | 30px | 0 | `#1F1D1A` |
+| Page title | Functional | 20px | 700 | 28px | 0 | `#1F1D1A` |
+| Major notebook/page title | Functional | 16px | 700 | 23px | 0.1px | `#1F1D1A` |
+| Decorative notebook tag | Handwriting | 15px | 600 | 22px | 0.2px | `#2458B8` |
+| Section header | Functional | 13px | 700 | 20px | 0.6px | `#2458B8` |
+| Subsection title | Functional | 14px | 650 | 21px | 0 | `#1F1D1A` |
+| Standard body | Functional | 14px | 400 | 21px | 0 | `#1F1D1A` |
+| Reading body / study instruction | Functional | 15px | 400 | 23px | 0 | `#1F1D1A` |
+| Transcript / cue text | Functional | 16px | 500 | 26px | 0 | `#1F1D1A` |
+| Dominant transcript / current cue | Functional | 17px | 600 | 27px | 0 | `#1F1D1A` |
+| Final Recall writing | Functional | 17px | 400 | 28px | 0 | `#1F1D1A` |
+| Quiz question stem | Functional | 16px | 650 | 24px | 0 | `#1F1D1A` |
+| Form label | Functional | 13px | 600 | 19px | 0 | `#5A5147` |
+| Input text | Functional | 14px | 400 | 20px | 0 | `#1F1D1A` |
+| Regular button | Functional | 13px | 600 | 18px | 0 | role-specific |
+| Hero button | Functional | 14px | 650 | 20px | 0.1px | role-specific |
+| Caption | Functional | 12px | 600 | 18px | 0.4px | `#7B7165` |
+| Helper text | Functional | 12px | 400 | 18px | 0 | `#6F665C` |
+| Metadata | Functional | 12px | 400 | 18px | 0 | `#6F665C` |
+| Timecode | Monospace | 11px | 500 | 17px | 0 | `#6F665C` |
+| Error / warning | Functional | 12px | 600 | 18px | 0 | semantic |
+| Sticky-note annotation | Handwriting | 12px | 500 | 18px | 0.1px | `#5A5147` |
 
 ---
 
-## 3.10 Contextual State Language
+## 4.3 Typography emphasis rules
 
-**Frozen:** State communication intensity changes by scene.
+### Bold
 
-### Library / History — Rich Scan
+Use 600–700 weight for:
 
-Purpose: fast global scanning.
+- active page title;
+- current cue;
+- question stem;
+- stage title;
+- selected major section;
+- score/result headline;
+- primary metric value.
 
-May show relatively rich state information:
+Do not use bold for every label.
 
-- current / resumable session;
-- progress;
-- completed;
-- needs attention;
-- archived / inactive;
-- relevant evidence counts.
+### Italic
 
-Badges / chips are appropriate when they improve scanning.
+Use sparingly for:
 
-### Player / Focus — Quiet Focus
+- quoted learner reflection;
+- helper/example text;
+- a very short handwritten-like note when it improves voice.
 
-Purpose: protect listening attention.
+Do not italicize transcript, question stems, form labels, or history rows.
 
-Keep only states required to understand the active listening interaction:
+### Underline
 
-- playing cue;
-- selected cue / cue selection;
-- loop state;
-- transcript-follow state where relevant;
-- essential playback state.
+Do not use underline as ordinary emphasis. Reserve it for:
 
-Avoid badge clouds.
+- true link-like actions where applicable;
+- rare notebook annotation effect that is noninteractive and clearly decorative.
+
+### Highlight
+
+Use background highlight rather than text color alone.
+
+Canonical learning highlights:
+
+```text
+Current/selected:      #EFF6FF
+Stronger selection:    #DBEAFE
+Active cue:            #FFF3CD
+Correct:               #EDF8F1
+Incorrect:             #FEF2F2
+Warning/skipped:       #FFF4D6
+```
+
+### All caps
+
+Allowed only for short functional section stamps such as:
+
+```text
+TRANSCRIPT & CUES
+STUDY ARCHIVE
+RECORDING NOTEBOOK
+```
+
+Use actual uppercase strings rather than relying on unsupported QSS text transforms.
+
+Max recommended length: **28 characters**.
+
+---
+
+## 4.4 Typography spacing
+
+Default vertical distances:
+
+| Relationship | Gap |
+|---|---:|
+| Page title → subtitle | 4px |
+| Page title block → first major region | 16px |
+| Section header → section content | 8px |
+| Form label → field | 4px |
+| Paragraph → related helper text | 4px |
+| Paragraph → unrelated next group | 12px |
+| Notebook title → first content row | 8px |
+| Error text → recovery action | 8px |
+| Transcript row vertical padding | 8px top + 8px bottom |
+
+For multi-line reading text, never fake line-height by inserting blank lines. Prefer widget/document margin/paragraph spacing.
+
+---
+
+# 5. Spacing, density, and geometry
+
+## 5.1 Canonical spacing scale
+
+```text
+SPACE_XXS = 4px
+SPACE_XS  = 6px
+SPACE_S   = 8px
+SPACE_M   = 12px
+SPACE_L   = 16px
+SPACE_XL  = 24px
+SPACE_XXL = 32px
+```
+
+The codebase may keep existing symbolic names, but values should converge on this scale.
+
+---
+
+## 5.2 Layout geometry
+
+| Element | Required value |
+|---|---:|
+| Main workspace outer margin | 24px |
+| Compact dialog outer margin | 16px |
+| Major section gap | 16px |
+| Related control gap | 8px |
+| Tight inline gap | 6px |
+| Card/notebook internal padding | 16px |
+| Dense history/export internal padding | 12px |
+| Mini notebook internal padding | 12px |
+| Splitter visual gutter | 8px |
+| Open-book spiral binding strip | 28px |
+| Sidebar default width | 190px |
+| Sidebar practical minimum | 150px |
+| Section directory practical maximum | 210px |
+
+Responsive layouts may reduce a 16px gap to **12px**, but never below 8px without a documented compact-mode reason.
+
+---
+
+## 5.3 Control sizes
+
+| Control | Minimum height |
+|---|---:|
+| Hero primary button | 40px |
+| Standard button | 34px |
+| Compact utility button | 30px |
+| Line edit / combo box | 34px |
+| Checkbox / radio interactive row | 30px |
+| Tab / chapter selector | 34px |
+| Standard list row | 36px |
+| Dense evidence/history row | 32px |
+| Transcript/cue row | 44px |
+| Stage stepper item | 44px |
+| Error/warning banner | 38px plus wrapping |
+
+Recommended horizontal button padding:
+
+```text
+Hero:      16px
+Standard:  12px
+Compact:   10px
+```
+
+Icon-text gap: **6px**.
+
+---
+
+## 5.4 Radii and borders
+
+```text
+Control radius:       6px
+Paper/card radius:   10px
+Small tag radius:     4px
+Pill radius:         only for true badge/chip semantics
+Standard border:      1px
+Strong focus border:  2px
+```
+
+Do not use 16–24px rounded SaaS cards.
+
+Do not make navigation, primary buttons, or ordinary form controls into pills.
+
+---
+
+# 6. Paper, notebook, and physical-layer rendering
+
+## 6.1 Ruled paper
+
+Canonical ruled paper:
+
+```text
+Paper:          #FFFDF8
+Rule color:     #BFDBFE at 52% opacity
+Rule spacing:   28px
+Rule thickness: 1px
+Margin line:    #E6A7AD at 46% opacity
+Margin width:   1px
+```
+
+Ruled lines should remain anchored to document coordinates when text areas scroll.
+
+They belong **under** text, never over it.
+
+---
+
+## 6.2 Spiral binding
+
+Canonical open-book / notebook binding:
+
+```text
+Binding strip width:     28px
+Ring visual pitch:       32px target
+Ring pitch tolerance:    28–36px when height adapts
+Metal:                   #7D8794
+Metal shadow:            #4D5660 at 25%
+Paper hole:              #E9E1D5
+```
+
+The binding is a structural separator.
+
+Do not place a spiral strip between two regions merely to decorate them.
+
+---
+
+## 6.3 Paper shadows
+
+Qt Style Sheets do not provide a reliable cross-platform box-shadow. Use `QGraphicsDropShadowEffect` only where the physical-paper layer benefits from it.
+
+Canonical paper shadow:
+
+```text
+Color:   #5B4935
+Opacity: 14%
+X:       0px
+Y:       3px
+Blur:    10px
+```
+
+Mini-paper shadow:
+
+```text
+Color:   #5B4935
+Opacity: 10%
+X:       0px
+Y:       2px
+Blur:    6px
+```
+
+Do not shadow every container.
+
+Hierarchy:
+
+```text
+spacing
+→ paper tone
+→ border
+→ physical shadow when it clarifies layering
+```
+
+---
+
+## 6.4 Paper edges and layering
+
+Use `paper_edge #CFC3B2` only where the eye should perceive a separate sheet.
+
+A ruled list inside a larger dossier does **not** need a second heavy card edge.
+
+Avoid:
+
+```text
+card
+  └ card
+      └ card
+          └ card
+```
+
+---
+
+# 7. Button and interaction language
+
+## 7.1 Core rule
+
+> **One region, one visual hero.**
+
+The primary progression/action button must be instantly identifiable.
+
+Supporting playback, utility, and exit actions must not compete with it.
+
+---
+
+## 7.2 Primary / Hero
+
+Use for the current major next action:
+
+- Open Player;
+- Start Practice;
+- Reveal & Continue;
+- Save & Continue;
+- Submit Quiz;
+- Import;
+- other equivalent major progression actions.
+
+Canonical rendering:
+
+```text
+Background normal:   #2563EB
+Background hover:    #1D4ED8
+Background pressed:  #1E40AF
+Text/icon:           #FFFDF8
+Border:              #2563EB
+Focus ring:          #60A5FA, 2px
+Height:              40px hero / 34px ordinary primary
+Radius:              6px
+Font:                14px / 650 hero; 13px / 600 ordinary
+```
+
+Disabled:
+
+```text
+Background: #DDD7CE
+Border:     #D1CAC0
+Text:       #91897E
+```
+
+Never use a primary-blue fill merely because an action is clickable.
+
+---
+
+## 7.3 Secondary
+
+Use for valid alternate actions:
+
+- Replay;
+- Loop;
+- Quick Practice;
+- Save Diagnosis;
+- Apply;
+- history/open alternatives.
+
+```text
+Background normal:   #FFFDF8
+Background hover:    #EFF6FF
+Background pressed:  #DBEAFE
+Text:                #2A2723
+Border normal:       #CFC3B2
+Border hover:        #93C5FD
+Focus ring:          #60A5FA, 2px
+Height:              34px
+Radius:              6px
+Font:                13px / 600
+```
+
+---
+
+## 7.4 Quiet / Utility
+
+Use for:
+
+- Close;
+- Refresh;
+- settings links;
+- Hide Transcript;
+- minor navigation;
+- low-frequency helpers.
+
+```text
+Background normal:   transparent
+Background hover:    #F3EEE6
+Background pressed:  #EAE3D8
+Text normal:         #5A5147
+Text hover:          #1F1D1A
+Border:              transparent
+Optional border:     #D8CFC1 when spatial affordance is needed
+Height:              30–34px
+```
+
+Quiet does not mean invisible.
+
+---
+
+## 7.5 Danger
+
+Use for:
+
+- Delete;
+- Remove Material;
+- Abandon Session;
+- destructive history removal.
+
+```text
+Background normal:   #FFFDF8
+Background hover:    #FDF2F2
+Background pressed:  #FBE8E8
+Text:                #D9383A
+Border:              #D9383A
+Focus ring:          #EF9A9B
+Height:              34px
+Radius:              6px
+Font:                13px / 600
+```
+
+Danger actions must be spatially separated from normal progression whenever practical.
+
+Do not use a filled red button unless the destructive action is itself a confirmation dialog’s unambiguous final destructive commit.
+
+---
+
+## 7.6 Selected / Active controls
+
+Selected rows, modes, stages, and active choices:
+
+```text
+Background:  #EFF6FF
+Strong bg:   #DBEAFE
+Border:      #2563EB
+Text:        #1F1D1A
+Indicator:   #2563EB
+```
+
+The selected state must remain visible without relying only on blue.
+
+Use at least one:
+
+- filled indicator;
+- border;
+- check;
+- active marker;
+- bold label.
+
+---
+
+## 7.7 Tabs vs executable buttons
+
+A tab/chapter selector should look like a **paper index tab**:
+
+- flatter;
+- connected to its page;
+- no hero-button fill;
+- selected state indicated by blue ink underline/border/background.
+
+An executable action should retain a button shape and press state.
+
+The user should be able to distinguish “switch surface” from “perform action” before reading the label.
+
+---
+
+## 7.8 Playback-action restraint
+
+Playback controls are tools, not progression.
+
+`Play`, `Replay Cue`, `Loop Cue`, `Previous Cue`, `Next Cue`, and `Loop Settings` should normally be Secondary or Quiet.
+
+They must not visually outrank:
+
+- Continue;
+- Submit;
+- Complete;
+- Start Recording when recording is the current central task.
+
+---
+
+# 8. Native control rendering
+
+## 8.1 Inputs
+
+LineEdit / ComboBox:
+
+```text
+Background:      #FFFDF8
+Border:          #CFC3B2
+Text:            #1F1D1A
+Placeholder:     #948A7D
+Hover border:    #B7AA98
+Focus border:    #2563EB
+Focus ring:      #93C5FD
+Height:          34px
+Radius:          6px
+Horizontal pad:  10px
+Font:            14px / 400
+```
+
+Read-only:
+
+```text
+Background: #F4EFE7
+Border:     #D8CFC1
+Text:       #5A5147
+```
+
+Invalid:
+
+```text
+Border:     #D9383A
+Background: #FDF2F2
+```
+
+---
+
+## 8.2 Checkboxes and radios
+
+- Interactive row minimum: 30px.
+- Indicator target: 16px.
+- Label gap: 8px.
+- Selected check/fill: `#2563EB`.
+- Focus ring: `#60A5FA`.
+- Disabled text: `#9B9388`.
+- Never replace a real checkbox/radio with a decorative doodle that loses keyboard semantics.
+
+---
+
+## 8.3 Lists
+
+Standard ruled-list row:
+
+```text
+Background normal:    transparent
+Divider:              #BFDBFE at 35%
+Hover:                #F7F4ED
+Selected background:  #EFF6FF
+Selected border:      #2563EB
+Text:                 #1F1D1A
+Secondary text:       #6F665C
+```
+
+Rows should not look like isolated pill cards.
+
+---
+
+## 8.4 Scrollbars
+
+Scrollbars should be quiet and desktop-readable.
+
+```text
+Track:       transparent / #F3EEE6 when needed
+Thumb:       #B9B0A4
+Thumb hover: #91877B
+Width:       10px
+Minimum thumb length: 28px
+```
+
+Do not use oversized web-style overlay scrollbars.
+
+---
+
+## 8.5 Sliders
+
+```text
+Groove:        #D8CFC1
+Active groove: #2563EB
+Handle:        #2563EB
+Handle hover:  #1D4ED8
+Handle size:   14px
+Groove height: 4px
+```
+
+Media volume and Interface Sound Volume use the same visual component but separate data/state.
+
+---
+
+## 8.6 Stepper states
+
+Guided Stage Stepper:
+
+### Current
+
+```text
+Background: #EFF6FF
+Border:     #2563EB
+Badge:      #2563EB
+Badge text: #FFFDF8
+Label:      #1F1D1A, 700
+```
+
+### Completed
+
+```text
+Background: #FFFDF8
+Border:     #168247
+Badge:      #168247 with ✓
+Label:      #1F1D1A
+```
+
+### Skipped
+
+```text
+Background: #FFFDF8
+Border:     #C87508
+Badge:      #C87508 with –
+Label:      #6F665C
+```
+
+### Future / unavailable
+
+```text
+Background: #FAF6ED
+Border:     #D8CFC1
+Badge:      #E3DDD4
+Label:      #91897E
+```
+
+Minimum height: **44px**.
+
+---
+
+# 9. Information hierarchy and desktop composition
+
+ListenTrace is a desktop workspace, not a vertically scrolling website.
 
 Prefer:
 
-- spatial emphasis;
-- selected surface;
-- clear edge / indicator;
-- icon + concise text;
-- restrained color.
+```text
+master → detail
+directory → workspace
+archive → dossier
+reference → action surface
+left page → right page
+persistent shell → changing stage content
+```
 
-### Guided Learning — Balanced Guidance
-
-Purpose: guide learning without overwhelming content.
-
-Clearly expose:
-
-- current stage;
-- completed stages;
-- ready / not-ready progression;
-- read-only evidence;
-- needs-attention state where relevant.
-
-State presentation must support the learning task, not become the primary content.
-
-### Accessibility rule
-
-No important state may rely on color alone.
-
-Use an appropriate combination of:
-
-- text;
-- icon;
-- shape / border;
-- position;
-- weight;
-- color.
+Avoid turning major screens into one long stacked web page when a stable desktop split communicates the workflow more clearly.
 
 ---
 
-## 3.11 Action Hierarchy
+## 9.1 Scroll ownership
 
-**Frozen default:** one visually dominant Primary action per major work area.
-
-Action roles:
-
-### Primary
-The most important next-step action.
+Scrolling should belong to the content region that owns the overflow.
 
 Examples:
 
-- Continue Session
-- Save Diagnosis and Continue
-- Complete Session
-- Submit Quiz
+- Transcript sheet scrolls internally.
+- Annotation/evidence list scrolls internally.
+- Recording takes list scrolls internally.
+- History workspace scrolls internally where necessary.
+- Player should not acquire a giant whole-window scrollbar merely because Annotation grows.
 
-### Secondary
-Valid alternate actions that should not compete with the current next step.
-
-### Quiet / Utility
-Playback, filtering, refresh, settings, minor navigation, reveal, and other supporting operations.
-
-### Danger
-Destructive or abandoning actions.
-
-Danger actions must be visually separated from normal progression.
-
-### Disabled
-Disabled controls must be understandable.
-
-Where practical, explain why the action is unavailable rather than presenting unexplained gray controls.
-
-### Exception rule
-
-A genuinely complex workspace may contain two visually strong actions when they represent two equally legitimate product paths.
-
-This is an exception requiring a clear interaction rationale, not the default composition strategy.
+A stable shell should remain stable while its intended evidence/content region scrolls.
 
 ---
 
-## 3.12 Card / Panel Depth
+# 10. Decorative motif grammar
 
-**Frozen:** Prototype A depth level is accepted.
+Decorative motifs must feel **discovered, not repeated**.
 
-Use:
+## 10.1 Allowed motifs
 
-- subtle borders;
-- restrained shadow;
-- moderate rounding;
-- tonal surface differences;
-- whitespace as the primary grouping tool.
+### Star
 
-Do not recreate the old “box inside box inside box” Qt appearance.
+Use for:
 
-Do not turn the application into a SaaS card wall.
+- optional hero/learning identity accent;
+- completion flourish;
+- notebook personality.
 
-A useful hierarchy is:
+Canonical size: **18–22px**.  
+Color: `#D2A43A` or handwritten blue outline.
+
+### Botanical doodle / flower
+
+Use to soften a genuinely empty paper corner.
+
+Canonical size: **16–24px**.
+
+Colors:
 
 ```text
-Spacing first
-→ tonal surface second
-→ border third
-→ elevation only when useful
+Leaf:   #4F7A58
+Flower: #D78EA2
 ```
 
----
+Do not place decorative botanicals next to errors, dangerous actions, or dense data.
 
-# 4. Core Design Principles
+### Paperclip
 
-## 4.1 One Primary Task Per Screen
+Use as an attachment/material/paper-layer accent.
 
-Within seconds, the user should understand:
+Canonical size: **18–22px**.  
+Color: `#7C858D`.
 
-1. Where am I?
-2. What am I doing?
-3. What is the most important next action?
+### Tape
 
-Every major screen should make those answers visually clear.
+Use for:
 
----
+- notebook title tag;
+- chapter label;
+- small attached-note illusion.
 
-## 4.2 Learning Content Is Louder Than Software Chrome
-
-The product should reduce interface competition during cognitively demanding tasks.
-
-General rule:
-
-> software chrome quiet; learning content loud.
-
-The denser the learning task, the less decorative or administrative UI should compete with it.
-
----
-
-## 4.3 Task Flow Before Widget Placement
-
-A screen is not a collection of controls.
-
-Each workflow screen should be designed around:
+Canonical dimensions:
 
 ```text
-Context
-→ Primary Task
-→ Working Surface
-→ Supporting Tools
-→ Evidence / State
-→ Next Action
+Height: 14–20px
+Width:  44–90px depending on label
 ```
 
-Controls exist inside that hierarchy.
+Cream: `#E8D6A8`  
+Blue: `#91B4E4`
 
----
+### Sticky note
 
-## 4.4 Resize Is Part of the Design
-
-Desktop layout must remain useful across realistic window sizes.
-
-Resizing should improve or reorganize content, not merely create:
-
-- giant blank regions;
-- compressed button rows;
-- clipped text;
-- unreachable primary actions.
-
-Each major workspace needs explicit resize behavior.
-
----
-
-## 4.5 Stable Object Language
-
-The same domain object should feel like the same object everywhere.
-
-Important reusable visual objects include:
-
-- Material
-- Cue
-- Playing Cue
-- Selected Cue / Cue Selection
-- Guided Stage
-- Evidence
-- Recording Take
-- Session
-
-Do not invent a different visual grammar for the same object in every window.
-
----
-
-# 5. Surface Modes
-
-ListenTrace uses three related surface modes.
-
-## 5.1 Professional Workspace
-
-Primary use:
-
-- Material Library;
-- Learning History;
-- settings / data;
-- export;
-- management-heavy views.
-
-Visual behavior:
-
-- light professional shell;
-- Professional Blue accent;
-- clear tables/lists;
-- restrained card depth;
-- higher state-information density;
-- efficient desktop navigation.
-
----
-
-## 5.2 Dark Listening Focus
-
-Primary use:
-
-- Player;
-- continuous listening;
-- cue replay / looping;
-- playback-centered Quick Practice surfaces.
-
-Visual behavior:
-
-- full-workspace dark background;
-- high-readability transcript;
-- minimal state noise;
-- blue interaction focus;
-- clear cue selection / playing distinction;
-- transport controls grouped close to playback context.
-
-Dark Focus Mode must not turn into decorative “cinematic” styling that reduces usability.
-
----
-
-## 5.3 Paper Study Surface
-
-Primary use:
-
-- diagnosis;
-- recall;
-- written learning work;
-- selected guided-practice stages.
-
-Visual behavior:
-
-- calm matte surface;
-- lower chrome;
-- increased reading comfort;
-- limited visual interruption;
-- contextual paper intensity.
-
----
-
-# 6. Color System
-
-## 6.1 Accent vs Semantic Color
-
-Professional Blue is the **interaction accent**.
-
-Semantic colors remain semantically independent.
-
-Do not turn every state into a blue state.
-
-Recommended semantic roles:
-
-- Success / completed
-- Warning / needs attention
-- Danger / destructive / error
-- Info
-- Correct
-- Wrong
-- Neutral / read-only
-
-Semantic colors should not change meaning between Light and Dark themes.
-
----
-
-## 6.2 Color Restraint
-
-Avoid:
-
-- rainbow status systems;
-- a different color for every diagnosis category unless meaning truly requires it;
-- decorative gradients in ordinary learning views;
-- multiple competing brand accents.
-
-Color should primarily communicate:
-
-- interaction;
-- selection;
-- state;
-- attention;
-- semantic meaning.
-
----
-
-## 6.3 Light / Dark Relationship
-
-Light and Dark themes should remain the same product.
-
-Do not redesign component hierarchy between themes.
-
-Dark theme may adjust:
-
-- contrast;
-- surface luminance;
-- focus-ring brightness;
-- shadow behavior;
-- text emphasis.
-
-It must preserve object and state semantics.
-
----
-
-# 7. Typography
-
-Typography should prioritize long-duration readability.
-
-Default direction:
-
-- modern system / UI sans-serif for shell, navigation, controls, labels;
-- readable sans-serif for transcript and most study content;
-- optional editorial / serif treatment only where high-intensity Paper mode genuinely improves extended recall writing.
-
-Typography hierarchy should communicate role before color does.
-
-Expected roles:
-
-- Window / View title
-- Section heading
-- Primary learning text
-- Standard body
-- Control label
-- State label
-- Metadata / timestamp
-- Caption / helper text
-
-Avoid extremely small metadata text.
-
-Avoid using bold everywhere as a substitute for hierarchy.
-
----
-
-# 8. Spacing, Alignment, and Geometry
-
-Use a consistent spacing scale.
-
-A practical starting scale:
+Use only for short helper/caution/context text.
 
 ```text
-4 / 8 / 12 / 16 / 24 / 32 px
+Background: #F2E2B4
+Text:       #5A5147
+Padding:    10px
+Radius:     2–4px
 ```
 
-Use larger gaps between unrelated groups and smaller gaps inside a functional group.
-
-Rounded corners should remain moderate.
-
-Do not make every button pill-shaped.
-
-Cards, fields, dialogs, and panels should feel related but not identical.
-
-Alignment should make scanning easier:
-
-- timestamps align predictably;
-- action groups align consistently;
-- stage progression retains a stable location;
-- primary next action remains easy to reach.
+A sticky note is **not** a substitute for an error banner or required instruction.
 
 ---
 
-# 9. Navigation Architecture
+## 10.2 Decoration budget
 
-## 9.1 Global Navigation
+Default maximum visible decorative motifs in one major viewport:
 
-Global navigation is for product destinations, not every transient workflow state.
+- Player / Guided: **3** small motifs, excluding structural spiral/tape.
+- Quick / Shadowing / Quiz: **2**.
+- Main / History / Review: **2**.
+- Settings: **1**.
+- Import: **0–1**.
+- Export: **1**.
 
-Candidate global destinations include:
+Structural notebook features do not count as decorative motifs.
 
-- Material Library
-- Player / Practice entry point
-- Quiz
-- Learning History
-- Settings / Data
-- Export / evidence tools where appropriate
-
-Final exact global navigation entries must reflect the existing product, not prototype-invented scope.
+The explanatory sticky notes seen around design-board mockups are **not product UI**.
 
 ---
 
-## 9.2 Session Navigation
+# 11. Sound and Acoustic Study Desk system
 
-Guided Session owns Stage navigation.
+## 11.1 Principle
 
-Preferred pattern:
+The sound system should extend the physical-study metaphor:
 
-- clear stage stepper / session navigator;
-- current stage emphasized;
-- completed stages identifiable;
-- unavailable stages understandable;
-- navigation does not crowd out the current learning task.
+```text
+paper
+pencil
+desk
+folder
+recorder
+soft completion stamp
+```
+
+It must not sound like:
+
+- a game;
+- a phone notification pack;
+- Windows system beeps;
+- arcade success/failure;
+- synthetic UI blips on every click.
 
 ---
 
-## 9.3 Contextual Navigation
+## 11.2 Absolute learning-audio rule
 
-Use contextual controls close to the object they affect.
+> **UI sounds must never contaminate learning audio.**
+
+Do not play an interface click immediately before or over:
+
+- Play;
+- Replay Cue;
+- Loop Cue;
+- Compare Source playback;
+- any navigation action that automatically triggers source audio.
+
+The learner must hear the real onset of the target audio without a synthetic auditory cue.
+
+---
+
+## 11.3 Canonical sound asset set
+
+Recommended bundled WAV assets:
+
+```text
+ui_paper_tap_soft.wav
+ui_page_turn_soft.wav
+ui_paper_slide_soft.wav
+ui_pencil_tick.wav
+ui_pencil_save.wav
+ui_stamp_complete_soft.wav
+ui_folder_open_soft.wav
+ui_folder_close_soft.wav
+ui_recorder_start_click.wav
+ui_recorder_stop_click.wav
+ui_error_wood_knock_soft.wav
+```
+
+Use original, properly licensed, or CC0 assets.  
+Do not depend on web-hosted audio at runtime.
+
+---
+
+## 11.4 Sound mapping
+
+| Action | Sound | Notes |
+|---|---|---|
+| Ordinary non-media Primary commit | `ui_paper_tap_soft.wav` | very quiet |
+| Stage transition | `ui_page_turn_soft.wav` | only when no media starts immediately |
+| Reveal & Continue | `ui_paper_slide_soft.wav` | Quick Practice reveal |
+| Save annotation / diagnosis / note | `ui_pencil_save.wav` | short |
+| Checkbox / answer selection | `ui_pencil_tick.wav` | optional; very quiet |
+| Complete Stage / Session / Run | `ui_stamp_complete_soft.wav` | restrained, not celebratory arcade sound |
+| Open dossier/history | `ui_folder_open_soft.wav` | optional |
+| Close dossier/history | `ui_folder_close_soft.wav` | optional |
+| Recording Start | `ui_recorder_start_click.wav` | useful tactile confirmation |
+| Recording Stop | `ui_recorder_stop_click.wav` | paired response |
+| Invalid action / blocking validation | `ui_error_wood_knock_soft.wav` | never sharp/alarming |
+
+No sound for ordinary hover.
+
+No sound for every scroll, list selection, or keyboard focus move.
+
+---
+
+## 11.5 Sound technical limits
+
+Interface master volume:
+
+```text
+Default: 22%
+User range: 0–50%
+```
+
+Media volume and Interface Sound Volume are fully independent.
+
+Target asset characteristics:
+
+```text
+Sample rate:       44.1kHz or 48kHz
+Bit depth:         16-bit or 24-bit PCM WAV
+Peak target:       approximately -14 dBFS
+Typical RMS/LUFS:  restrained; perceived well below learning media
+Ordinary duration: 60–220ms
+Page-turn duration: up to 420ms
+Completion stamp:  up to 300ms
+```
+
+Do not normalize UI sounds to commercial music loudness.
+
+Prevent repeated triggering of the same UI sound within **120ms** unless it represents separate explicit user actions.
+
+---
+
+## 11.6 Sound settings
+
+Add a small **Sound & Feedback** preference group:
+
+```text
+Interface Sounds        [On / Off]
+Interface Sound Volume  [slider]
+```
+
+Defaults:
+
+```text
+Interface Sounds: ON
+Interface Volume: 22%
+```
+
+Every sound-supported action must still provide complete visual feedback.
+
+Turning sounds off must never remove information.
+
+---
+
+# 12. Accessibility and cognitive clarity
+
+## 12.1 Contrast
+
+Targets:
+
+- normal text: WCAG AA 4.5:1 minimum;
+- large text: 3:1 minimum;
+- focus indicator: clearly distinguishable from surrounding border;
+- interactive state must never be color-only.
+
+`ink_caption #7B7165` is the lightest canonical active text color intended for 12px+ captions on `paper_primary`.
+
+Do not use `ink_placeholder` for active instructions.
+
+---
+
+## 12.2 Focus
+
+Keyboard focus:
+
+```text
+Color: #60A5FA
+Width: 2px
+Offset: 1px where implementation permits
+```
+
+Do not remove native focus semantics solely for aesthetics.
+
+---
+
+## 12.3 Learning psychology
+
+The visual system must protect the learning sequence.
 
 Examples:
 
-- cue actions near the cue;
-- material actions in selected-material context;
-- take actions beside the recording take;
-- quiz progression inside the quiz workspace.
+- Quick Practice Step 1 keeps transcript hidden.
+- Transcript reveal becomes visually meaningful only after recall commitment.
+- Diagnosis appears after listening/recall rather than competing with it.
+- Recording becomes visually dominant when shadowing is the current task.
+- Final Recall provides a large, quiet writing surface.
+- Danger actions remain separated from progression.
+- Dense evidence browsers prioritize scanning over decoration.
 
-Avoid forcing every action into global navigation.
-
----
-
-# 10. Object Patterns
-
-## 10.1 Material
-
-A Material should expose:
-
-- identity;
-- type / useful metadata;
-- current learning status;
-- current resumable action where relevant;
-- access to material-level actions.
-
-The primary material action should be obvious.
-
-Avoid presenting every possible practice action with identical emphasis.
+The interface should reduce extraneous cognitive load, not merely look handcrafted.
 
 ---
 
-## 10.2 Cue
+# 13. Surface-specific rendering notes
 
-Cue visual treatment must support:
+These notes do **not** redefine architecture.
 
-- rapid reading;
-- timestamp scanning;
-- playing state;
-- selection state;
-- actionable context;
-- transcript continuity.
-
-### Playing Cue
-
-Playing cue and selected cue are not automatically the same concept.
-
-Their visual states must remain distinguishable.
-
-### Selected Cue
-
-Selection may represent the user’s editing / practice target even when another cue is currently playing.
-
-Do not collapse these two states into one color treatment.
+They describe how the already-approved architecture should be rendered.
 
 ---
 
-## 10.3 Stage
+## 13.1 Player / Learning Session
 
-A Stage is workflow state, not a global application destination.
+Visual intensity: **5 / 5**.
 
-The visual language should answer:
-
-- current?
-- completed?
-- available?
-- blocked / not ready?
-- read-only?
-
----
-
-## 10.4 Evidence
-
-Evidence should generally be quieter than the current task.
-
-Read-only evidence must look different from editable learner input.
-
-Evidence may be surfaced in:
-
-- secondary panel;
-- drawer;
-- supporting card;
-- contextual history area.
-
-Avoid presenting evidence as another equally dominant editor.
+- Warm open-book / Notebook Study Desk is the visual North Star.
+- Media viewport remains black/dark inside the warm desk.
+- Transcript & Cues is a ruled study sheet.
+- Annotation is a lined notebook page.
+- Playback / Loop & Practice / Utility are mini notebooks.
+- Strong central spiral binding is allowed.
+- Decorative motifs may be slightly richer here than elsewhere.
+- The whole application must not become dark merely because the media rectangle is dark.
 
 ---
 
-## 10.5 Recording Take
+## 13.2 Quick Practice Setup
 
-Recording Takes should feel like repeatable versions of the same practice object.
+Visual intensity: **3 / 5**.
 
-A Take presentation may contain:
-
-- take number / identity;
-- duration;
-- timestamp where useful;
-- selected / preferred state if the existing product supports it;
-- bounded playback / deletion actions.
-
-Do not add recording semantics merely because a prototype displayed them.
+- Practice Setup / Selection Sheet.
+- Recommended vs Selected is the major decision.
+- Transparent recommendation reasons remain readable.
+- No Playback/Diagnosis/Recording notebooks at setup.
+- Start Practice is the single hero.
 
 ---
 
-## 10.6 Session
+## 13.3 Quick Practice Run
 
-Active, resumable, completed, and read-only Session states should be visibly distinct.
+Visual intensity: **4 / 5**.
 
-Session state belongs primarily in:
-
-- Material context;
-- Guided Session shell;
-- History.
+- Persistent compact context shell.
+- Step-specific notebook/sheet modules swap rather than accumulating.
+- Step 1: Playback + Recall.
+- Step 2: Diagnosis.
+- Step 3: Playback + Recording.
+- Step 4: Summary sheet.
+- Progression action is visually dominant.
 
 ---
 
-# 11. Screen Pattern Guidance
+## 13.4 Shadowing
 
-These are design patterns, not new feature specifications.
+Visual intensity: **4 / 5**.
 
-## 11.1 Material Library
+- Cue/Playback support above.
+- Recording Notebook is the visual center.
+- Takes remain a scan-friendly list.
+- Recording Start/Stop receives the strongest interaction emphasis.
+- Delete controls remain isolated.
 
-Design goals:
+---
 
-- professional management workspace;
-- high scanability;
-- Rich Scan state language;
-- selected material context;
-- one obvious next action.
+## 13.5 Guided Session
 
-Recommended structure:
+Visual intensity: **5 / 5**.
+
+- Persistent shell and 5-stage chapter stepper.
+- The center page changes by stage.
+- Stage 1–2 are quiet and low-stimulus.
+- Stage 3 is the densest evidence workspace.
+- Stage 4 centers Recording.
+- Stage 5 is a large ruled Final Recall Journal.
+- Stage transitions may use a restrained page-turn sound.
+
+---
+
+## 13.6 Quiz
+
+Visual intensity: **4 / 5**.
+
+- Focused Question Canvas.
+- Question/media region + answer region + Learning Flow Action Bar.
+- Do not turn each answer into an oversized card.
+- Submit remains hero when eligible.
+- Answer-selection pencil sound is optional and subtle.
+
+---
+
+## 13.7 Quiz Review
+
+Visual intensity: **3 / 5**.
+
+- Post-submission evidence surface.
+- Question Directory + Answer Analysis/Feedback.
+- Correct/incorrect semantics are clear but restrained.
+- Learner answer, correct answer, and feedback must remain typographically distinct.
+
+---
+
+## 13.8 Learning History
+
+Visual intensity: **3 / 5**.
+
+- Dossier / evidence-browser language.
+- Left directory remains stable.
+- Right workspace is scan-oriented.
+- Charts/lists stay modern and readable; do not spiral-notebook every table.
+- “Needs Attention” remains transparent reasons, never a ranking.
+
+---
+
+## 13.9 Main Library / Dossier
+
+Visual intensity: **3 / 5**.
+
+- App Directory → Study Archive → Material Study Dossier.
+- Open Player is the hero action.
+- Practice, Quiz, Utility, and Danger action groups remain visibly hierarchical.
+- Archive list is ruled and scan-friendly.
+- Dossier gets more physical-paper identity than the archive list.
+
+---
+
+## 13.10 Session History / Quiz History
+
+Visual intensity: **2 / 5**.
+
+- Sibling dialog family.
+- Header + ruled history list + bottom action bar.
+- Active rows cannot be deleted.
+- Open is primary; Delete is danger; Close is quiet.
+- No extra charts or dashboard panels.
+
+---
+
+## 13.11 Settings family
+
+Visual intensity: **2 / 5**.
+
+- Global Playback Settings, Material Loop Settings, and Label Colors share visual chrome.
+- Global scope vs per-material override must be immediately legible.
+- Inherit / Custom / Reset-to-Global semantics must not be visually collapsed.
+- Label Colors is lighter and more visual; include a real preview.
+
+---
+
+## 13.12 Import
+
+Visual intensity: **2 / 5**.
+
+- Compact Material Intake Sheet.
+- File sources → metadata → validation → actions.
+- Inline validation.
+- Duplicate confirmation is a second dialog state, not an expanded wizard.
+- Keep the interface small and focused.
+
+---
+
+## 13.13 Export
+
+Visual intensity: **3 / 5**.
+
+- Large Learning Evidence Export Workspace.
+- Scope and date define the export boundary.
+- Evidence categories remain structured and selectable.
+- Privacy Review is prominent.
+- Preview is read-only.
+- Save / Copy / Evaluation actions remain distinct.
+- Complexity is handled through hierarchy, not decoration.
+
+---
+
+# 14. Implementation rules for CC / AG2.0
+
+## 14.1 Centralize tokens
+
+Prefer:
 
 ```text
-Global Shell
-├─ Material List / Table
-└─ Selected Material Inspector / Context Area
+theme.py
+shared notebook primitives
+shared button/control roles
+shared sound-feedback service
 ```
 
 Avoid:
 
-- equal-weight action stacks;
-- excessive nested boxes;
-- tiny metadata;
-- inactive space that does not help scanning.
-
----
-
-## 11.2 Player
-
-Design goals:
-
-- full-workspace Dark Focus Mode;
-- strong media / transcript relationship;
-- playing cue immediately visible;
-- selected cue separately visible;
-- playback controls close to playback context;
-- Quiet Focus state language.
-
-The transcript should remain usable while media is playing.
-
-Manual transcript navigation and auto-follow must remain understandable.
-
-Do not visually imply changed playback semantics.
-
----
-
-## 11.3 Guided Session
-
-Design goals:
-
-- task-first structure;
-- persistent session-local stage context;
-- resize resilience;
-- clear completion requirements;
-- low ambiguity around Save / Skip / Complete / Resume actions.
-
-Recommended conceptual hierarchy:
-
 ```text
-Session Context
-Stage Progress
-Current Stage Goal
-Primary Working Surface
-Supporting Tools / Evidence
-Progression Actions
+window-local magic hex
+window-local arbitrary font sizes
+window-local one-off radii
+window-local duplicated notebook painters
+window-local sound playback plumbing
 ```
 
-Avoid unused blank regions and undifferentiated button rows.
+---
+
+## 14.2 Shared primitives before local styling
+
+When an approved visual object exists in multiple surfaces, improve/reuse the shared primitive.
+
+Examples:
+
+- Playback Notebook;
+- Diagnosis Notebook;
+- RecordingPanel / Recording Notebook;
+- Transcript & Cues Sheet;
+- Learning Flow Action grammar;
+- ruled paper;
+- spiral binding;
+- notebook page;
+- history ruled list;
+- settings section;
+- sound feedback service.
+
+Do not create a universal mega-widget with dozens of configuration flags merely to claim reuse.
+
+Reuse the proven semantic seam.
 
 ---
 
-## 11.4 Transcript Comparison / Diagnosis
+## 14.3 Qt implementation notes
 
-Design goals:
+Some visual requirements are not reliable QSS properties.
 
-- calm analytical study surface;
-- readable comparison;
-- current cue context;
-- evidence secondary to active diagnosis;
-- Balanced Guidance state language.
+Use the correct Qt mechanism:
 
-Use paper styling at low-to-medium intensity.
+- letter spacing → `QFont.setLetterSpacing`;
+- drop shadow → `QGraphicsDropShadowEffect`;
+- ruled paper / spiral rings → `QPainter`;
+- uppercase labels → uppercase source string;
+- text document paragraph spacing → `QTextDocument` / block formatting;
+- real focus / keyboard semantics → native QWidget/QAbstractButton behavior;
+- sound playback → a centralized service suitable for short local WAV assets.
 
----
-
-## 11.5 Shadowing / Recording
-
-Design goals:
-
-- current cue remains dominant;
-- source playback and recording actions are grouped clearly;
-- recording state unmistakable;
-- Takes scan easily;
-- destructive Take actions visually isolated.
-
-Do not let microphone controls, playback controls, Take history, and notes all compete as equal primary regions.
+Do not fake unsupported QSS behavior and assume it works because the stylesheet parses.
 
 ---
 
-## 11.6 Final Recall
+## 14.4 No visual feature may reopen domain behavior
 
-Design goals:
+Rendering work must preserve:
 
-- strongest Paper Study mode;
-- writing surface visually dominant;
-- supporting evidence available without dominating;
-- completion action clear;
-- minimal chrome.
-
-This should feel like a learning synthesis activity, not a generic multiline form.
-
----
-
-## 11.7 Quiz
-
-Design goals:
-
-- focused single-question interaction;
-- long text wraps naturally;
-- answer choices have generous hit targets;
-- progress visible but quiet;
-- Submit / Next hierarchy obvious;
-- playback controls demoted to supporting tools.
-
----
-
-## 11.8 Learning History
-
-Design goals:
-
-- evidence density may be higher than learning screens;
-- Rich Scan state system;
-- filters / history controls remain utilities;
-- detail drill-down should not overwhelm the list.
-
----
-
-## 11.9 Dialogs and Settings
-
-Design goals:
-
-- consistent title / body / footer structure;
-- Primary action visually obvious;
-- Cancel / Close secondary;
-- destructive actions semantic red and separated;
-- disabled settings explain why when needed;
-- global vs material-specific settings clearly distinguished.
-
-Existing Loop End Grace behavior is frozen product behavior and may be re-presented, but M13 must not silently alter its semantics.
-
----
-
-# 12. Resize and Desktop Responsiveness
-
-Each major screen should define behavior across:
-
-- comfortable desktop width;
-- narrower but still supported desktop width;
-- user-resized panels.
-
-Principles:
-
-- the primary task must remain reachable;
-- text should wrap rather than truncate wherever learning meaning would be lost;
-- side panels should shrink, collapse, or move before the main learning content becomes unusable;
-- accidental empty space should be redistributed;
-- action rows should wrap or reorganize instead of clipping.
-
-Avoid relying only on hard minimum window sizes to solve layout problems.
-
----
-
-# 13. Accessibility
-
-Accessibility is a baseline design requirement.
-
-M13 should preserve or improve:
-
-- readable font sizes;
-- strong text contrast;
-- visible keyboard focus;
-- keyboard navigation for major interactive surfaces;
-- understandable disabled states;
-- sufficient click targets;
-- non-color-only state communication;
-- reduced dependence on hover-only disclosure;
-- long-text wrapping;
-- predictable tab order.
-
-Where Qt-native controls create unacceptable text truncation or interaction problems, a composite custom control may be appropriate.
-
----
-
-# 14. PySide6 / Qt Widgets Implementation Mapping
-
-M13 remains a PySide6 / Qt Widgets redesign.
-
-A framework rewrite is out of scope.
-
-Recommended implementation direction:
-
-## 14.1 Theme tokens
-
-Continue centralizing design tokens in the existing theme infrastructure where practical:
-
-- colors;
-- semantic colors;
-- spacing;
-- typography roles;
-- radii;
-- component roles;
-- focus / selected / disabled states.
-
-## 14.2 Widget roles
-
-Prefer semantic widget properties over one-off per-window styling.
-
-Conceptual examples:
-
-```text
-role=primary
-role=secondary
-role=quiet
-role=danger
-
-surface=workspace
-surface=paper
-surface=focus
-
-state=playing
-state=selected
-state=read-only
-```
-
-Exact property names remain an implementation choice.
-
-## 14.3 Shared components
-
-Where M13 naturally reveals stable reusable components, prefer shared implementation.
-
-High-value candidates may include:
-
-- Cue Card;
-- Stage Stepper;
-- action footer;
-- Paper Study Surface;
-- state badge / status label;
-- resizable / collapsible navigation shell;
-- long-text quiz option card.
-
-Do not turn M13 into a broad architecture-cleanup campaign.
-
----
-
-# 15. Behavioral Fidelity / Feature-Freeze Boundary
-
-M13 may redesign presentation and interaction architecture.
-
-M13 must not silently change settled product semantics involving:
-
-- playback behavior;
-- loop behavior;
-- Loop End Grace contract;
-- transcript-follow behavior;
-- persisted learning evidence;
-- session lifecycle;
+- persistence;
+- workflow state machines;
+- history ownership;
 - quiz scoring;
-- recording semantics;
-- deletion ownership;
-- export semantics;
-- database semantics.
+- diagnosis range semantics;
+- recording ownership;
+- loop-grace inherit/custom policy;
+- active/completed/abandoned semantics;
+- accessibility and keyboard behavior.
 
-A prototype is visual evidence, not a source of new domain behavior.
-
-If an attractive prototype invents product semantics that were never approved, those semantics are not inherited by implementation.
-
----
-
-# 16. M13 UI Acceptance Criteria
-
-M13 should not be considered visually complete merely because the application has consistent colors.
-
-The reconstructed product should satisfy:
-
-## Cognitive clarity
-The current task and next action are obvious.
-
-## Interaction economy
-Primary workflows do not require unnecessary searching or repeated navigation.
-
-## Hierarchy
-Primary, secondary, utility, destructive, state, evidence, and learning content are visually distinct.
-
-## Resize resilience
-Core screens remain usable through realistic desktop resizing.
-
-## Readability
-Transcript, quiz, recall, history, and diagnostic content remain readable without truncation or unnecessary visual noise.
-
-## Cross-window consistency
-The same object and state behave visually like the same object and state across the product.
-
-## Behavioral fidelity
-Frozen product behavior remains unchanged unless explicitly approved through a Product / Scope Gate.
-
-## Human acceptance
-Representative real user journeys must be reviewed after reconstruction.
-
-M13 visual acceptance is not the same as final release acceptance; full final hardening remains in M12 Phase 12-B after M13.
+If a rendering requirement appears to require a domain change, stop and surface it as a Product/Scope Gate.
 
 ---
 
-# 17. Change-Control Rule
+## 14.5 Reference-image usage
 
-The Frozen UI/UX Design Contract is not a suggestion list.
+Approved design boards are **final appearance references**, not literal pixel maps.
 
-During M13 implementation:
+Use them for:
 
-- ordinary component-level choices may be made autonomously inside the contract;
-- exact spacing / dimensions / token values may be tuned through implementation evidence;
-- a design choice that contradicts a frozen item must be surfaced as a Product Design Gate;
-- visual polish must not become feature expansion.
+- hierarchy;
+- palette;
+- paper/notebook language;
+- action emphasis;
+- density;
+- decoration restraint;
+- typography personality;
+- spatial composition.
 
-Use prototypes only where seeing alternatives would materially improve a still-unresolved decision.
-
-Do not reopen already-resolved design axes for aesthetic experimentation alone.
+Do not copy explanatory annotations, arrows, board titles, or external design notes into the actual application.
 
 ---
 
-# 18. Evidence and Provenance
+# 15. Rendering acceptance checklist
 
-This design authority was derived from:
+A surface is not visually complete until all applicable checks pass.
 
-- real ListenTrace UI screenshots and human-use observations;
-- M12 Human QA findings;
-- M13 UI DNA Prototype A;
-- ListenTrace M13 UI Design Grill · Round 1;
-- ListenTrace M13 Round 2 Prototype Comparison;
-- explicit final human selection of Professional Blue;
-- prior Quiz Studio UI design work used as a product-family reference.
+## 15.1 Color
 
-The prototype artifacts are evidence and references.
+- [ ] No arbitrary local hex values without a documented token.
+- [ ] Root background is warm desk, not cold gray/white.
+- [ ] Paper surfaces use the canonical paper family.
+- [ ] Academic Blue is reserved for interaction/focus/ink emphasis.
+- [ ] Danger, warning, success, incorrect colors keep stable semantics.
+- [ ] Disabled/read-only states are recognizable.
+- [ ] Small active text meets contrast requirements.
 
-`DESIGN.md` is the long-lived design authority.
+## 15.2 Typography
+
+- [ ] Functional text uses the canonical UI/CJK stack.
+- [ ] Handwritten font appears only in short decorative Latin labels.
+- [ ] Transcript/cue text is 16–17px and comfortable for long study.
+- [ ] Final Recall writing is 17px with generous line spacing.
+- [ ] Buttons use 13–14px semibold text.
+- [ ] Captions are not microscopically small.
+- [ ] Bold is used for hierarchy, not everywhere.
+- [ ] CJK fallback has been visually checked.
+
+## 15.3 Geometry
+
+- [ ] Outer margins and group spacing follow the canonical scale.
+- [ ] Hero buttons are visually stronger without being oversized.
+- [ ] Standard controls meet minimum heights.
+- [ ] Cards use 10px radius; controls use 6px.
+- [ ] Ordinary controls are not pills.
+- [ ] Dense surfaces remain scan-friendly.
+
+## 15.4 Paper/notebook language
+
+- [ ] Paper is structural, not wallpaper.
+- [ ] Ruled lines use 28px spacing and pale blue.
+- [ ] Spiral binding appears only where semantically justified.
+- [ ] Paper shadows are restrained.
+- [ ] No box-inside-box-inside-box card wall.
+
+## 15.5 Buttons and states
+
+- [ ] One visual hero per region.
+- [ ] Secondary/Quiet actions do not compete with progression.
+- [ ] Danger actions are isolated.
+- [ ] Tabs look different from executable buttons.
+- [ ] Hover, pressed, focus, selected, disabled, read-only states all exist.
+- [ ] Focus remains keyboard-visible.
+
+## 15.6 Decoration
+
+- [ ] Decoration budget is respected.
+- [ ] Design-board explanatory sticky notes are not present in production.
+- [ ] Flowers/stars/tape/paperclips are sparse and purposeful.
+- [ ] Dense data and error zones remain decoration-free.
+
+## 15.7 Sound
+
+- [ ] Interface Sounds can be disabled.
+- [ ] Interface volume is independent from Media volume.
+- [ ] Playback/replay/loop audio onset is not contaminated by UI sounds.
+- [ ] Recording start/stop has clear tactile feedback if sounds are enabled.
+- [ ] No arcade success/error sounds.
+- [ ] Every sound has equivalent visual feedback.
+- [ ] Rapid repeated sounds are throttled.
+
+## 15.8 Platform verification
+
+Human-check on Windows:
+
+- [ ] 100% scale.
+- [ ] 125% scale.
+- [ ] 150% scale.
+- [ ] Chinese/CJK material title.
+- [ ] Long English title.
+- [ ] Long button labels.
+- [ ] Keyboard-only navigation.
+- [ ] Hover/focus/disabled/read-only states.
+- [ ] Real video / QVideoWidget composition.
+- [ ] Recording device list.
+- [ ] Long transcript and long history evidence.
+- [ ] Smallest supported practical window.
+- [ ] Maximized window.
+
+---
+
+# 16. Final visual test
+
+Before accepting a rendered surface, ask:
+
+1. Does it look like part of the same **Notebook Study Desk** as the approved Player/Learning Session?
+2. Is the learning content louder than the software chrome?
+3. Is the most important next action immediately obvious?
+4. Does paper explain structure, or is it merely decoration?
+5. Are colors and fonts exact tokens rather than “close enough” approximations?
+6. Is the surface appropriately restrained for its visual-intensity class?
+7. Does it still behave like a precise modern desktop application?
+8. Would removing the decorative motifs leave a coherent, usable information architecture?
+9. If sound is enabled, does it reinforce the study-desk metaphor without touching learning-audio fidelity?
+10. Does the result feel like **ListenTrace**, not a generic SaaS dashboard wearing a notebook skin?
+
+The intended final impression is:
+
+> **A warm, personal, tactile study desk where listening, diagnosis, shadowing, quizzes, and learning evidence live in one coherent journal system — with modern desktop clarity underneath every paper, notebook, and sound cue.**
