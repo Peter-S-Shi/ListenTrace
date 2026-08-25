@@ -265,7 +265,11 @@ def css(token: str, theme_mode: str = "light") -> str:
 # contradict that semantic, not reinforce it.
 _INK_OUTLINE_BUTTON_ROLES = {"primary", "secondary", "danger", "success"}
 _INK_OUTLINE_BUTTON_TOKENS = {
-    "primary": "accent_pressed",
+    # "primary" is only ever painted for its non-hero (outline) variant --
+    # see the hero skip below -- so this is the same accent-blue its own
+    # QSS border already uses, not the old filled-button's darker
+    # accent_pressed accent.
+    "primary": "accent",
     "secondary": "handwritten_blue",
     "danger": "danger_hover",
     "success": "success",
@@ -292,6 +296,13 @@ def _install_ink_outline_button_paint(widget: QPushButton, role: str) -> None:
             return
         current_role = self.property("role")
         if current_role not in _INK_OUTLINE_BUTTON_TOKENS:
+            return
+        # A `hero="true"` primary button is the one genuinely solid-filled
+        # tier the due frame evidences (Open Player, Submit Quiz, Start
+        # Recording, ...) -- those boards show it as a clean filled
+        # rectangle with no separate sketchy outline layered on top, so
+        # the ink outline is scoped to the non-filled roles only.
+        if current_role == "primary" and self.property("hero") == "true":
             return
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
@@ -1506,26 +1517,44 @@ QPushButton[role="notebook_action"], QPushButton[role="notebook_destructive_acti
     font-weight: 600;
 }}
 
+/* M13 Due-Frame Polish, Axis 1 continuation: the due-frame boards' own
+   close-ups show a genuine two-tier button hierarchy, not "every primary
+   action is filled" -- an ordinary (non-hero) `role="primary"` action
+   (e.g. Player's Play, Quiz's Next Question) reads as paper/no-fill with
+   a blue ink outline, exactly like secondary/danger/success. Only the
+   `hero="true"` tier (a screen's single genuine launch/commit action --
+   Main Library's Open Player, Quiz's final Submit, Quick Practice's
+   Start/Reveal-and-Continue, Shadowing's Start Recording) is evidenced as
+   solid-filled. Keeping the old "every primary is filled" grammar here
+   would have painted the new ink outline on top of a contradiction
+   instead of resolving it. */
 QPushButton[role="primary"] {{
-    background-color: {css('accent', m)};
-    color: {css('ink_on_accent', m)};
+    background-color: {css('surface_paper', m)};
+    color: {css('accent', m)};
     border: {BORDER_WIDTH}px solid {css('accent', m)};
     border-top-left-radius: {RADIUS_BUTTON_TL}px;
     border-top-right-radius: {RADIUS_BUTTON_TR}px;
     border-bottom-right-radius: {RADIUS_BUTTON_BR}px;
     border-bottom-left-radius: {RADIUS_BUTTON_BL}px;
-    padding: {SPACE_NORMAL}px {SPACE_MEDIUM}px;
-    /* Qt's QSS box model adds padding/border on top of min-height (it
-       constrains the content box, not the padding/border box): vertical
-       padding 2*SPACE_NORMAL=16px + border 2*1px=2px -> 34-16-2=16 to
-       converge the *rendered* height on the DESIGN.md §5.3 34px
-       ordinary-primary contract. */
-    min-height: 16px;
+    padding: {SPACE_COMPACT}px {SPACE_MEDIUM}px;
+    /* 2*SPACE_COMPACT=8px vertical padding + 2*1px border -> 34-8-2=24,
+       matching secondary's box model -- fill/border color changed, not
+       the 34px ordinary-button height contract. */
+    min-height: 24px;
 }}
+QPushButton[role="primary"]:hover {{
+    background-color: {css('accent_subtle', m)};
+    border-color: {css('accent_hover', m)};
+}}
+QPushButton[role="primary"]:pressed {{ background-color: {css('accent_selected', m)}; }}
 /* Hero tier (DESIGN.md §5.3/§7.2, 40px): the single most prominent
    progression action on a surface -- opted in via
-   `widget.setProperty("hero", "true")`. */
+   `widget.setProperty("hero", "true")`. This is the ONLY `role="primary"`
+   variant that is solid-filled, per the due-frame evidence above. */
 QPushButton[role="primary"][hero="true"] {{
+    background-color: {css('accent', m)};
+    color: {css('ink_on_accent', m)};
+    border: {BORDER_WIDTH}px solid {css('accent', m)};
     font-size: 14px;
     font-weight: 650;
     letter-spacing: 0.1px;
@@ -1533,8 +1562,14 @@ QPushButton[role="primary"][hero="true"] {{
     /* vertical padding 16px + border 2px -> 40-16-2=22. */
     min-height: 22px;
 }}
-QPushButton[role="primary"]:hover {{ background-color: {css('accent_hover', m)}; border-color: {css('accent_hover', m)}; }}
-QPushButton[role="primary"]:pressed {{ background-color: {css('accent_pressed', m)}; border-color: {css('accent_pressed', m)}; }}
+QPushButton[role="primary"][hero="true"]:hover {{
+    background-color: {css('accent_hover', m)};
+    border-color: {css('accent_hover', m)};
+}}
+QPushButton[role="primary"][hero="true"]:pressed {{
+    background-color: {css('accent_pressed', m)};
+    border-color: {css('accent_pressed', m)};
+}}
 QPushButton[role="primary"]:disabled {{
     background-color: {css('disabled_surface', m)};
     border-color: {css('disabled_border', m)};
@@ -1610,9 +1645,14 @@ QPushButton[role="danger"]:focus {{
     border: 2px solid {css('danger_focus_ring', m)};
 }}
 
+/* M13 Due-Frame Polish, Axis 1 continuation: the due frame's only
+   `success`-role consumer (Guided Session's "Complete Session") reads as
+   paper/no-fill with a green ink outline, not a filled green button --
+   no due-frame evidence anywhere supports a filled-success tier, so
+   (unlike `primary`) this role has no hero-filled variant at all. */
 QPushButton[role="success"] {{
-    background-color: {css('success', m)};
-    color: {css('ink_on_accent', m)};
+    background-color: {css('surface_paper', m)};
+    color: {css('success', m)};
     border: {BORDER_WIDTH}px solid {css('success', m)};
     border-top-left-radius: {RADIUS_BUTTON_TL}px;
     border-top-right-radius: {RADIUS_BUTTON_TR}px;
@@ -1622,6 +1662,8 @@ QPushButton[role="success"] {{
     /* 2*SPACE_COMPACT=8px vertical padding + 2*1px border -> 34-8-2=24. */
     min-height: 24px;
 }}
+QPushButton[role="success"]:hover {{ background-color: {css('quiet_hover', m)}; }}
+QPushButton[role="success"]:pressed {{ background-color: {css('quiet_pressed', m)}; }}
 QPushButton[role="success"]:disabled {{
     background-color: {css('disabled_surface', m)};
     color: {css('disabled_text', m)};

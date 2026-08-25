@@ -118,6 +118,11 @@ class RecordingPanel(QWidget):
         record_row = QHBoxLayout()
         self._start_recording_button = QPushButton("Start Recording")
         self._start_recording_button.clicked.connect(self._on_start_recording_clicked)
+        # M13 Due-Frame Polish, Axis 1: the due-frame boards show Start
+        # Recording as the one solid-filled action on this surface -- the
+        # genuine "launch a real-world capture" commit, not an ordinary
+        # in-flow action.
+        self._start_recording_button.setProperty("hero", "true")
         theme.apply_role(self._start_recording_button, "primary")
         theme.set_button_icon(self._start_recording_button, "record", color_token="ink_on_accent")
         self._stop_recording_button = QPushButton("Stop Recording")

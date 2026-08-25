@@ -580,7 +580,10 @@ class QuizWindow(QMainWindow):
             apply_role(self._next_button, "primary")
             self._submit_button.setProperty("hero", None)
             apply_role(self._submit_button, "quiet")
-            theme.set_button_icon(self._next_button, "forward", color_token="ink_on_accent")
+            # M13 Due-Frame Polish, Axis 1: non-hero "primary" is now the
+            # paper/outline treatment, not filled -- an ink_on_accent
+            # (white) icon would be invisible on it.
+            theme.set_button_icon(self._next_button, "forward", color_token="accent")
             theme.set_button_icon(self._submit_button, "motif_star", color_token="secondary")
 
     # ---- shared playback plumbing ----

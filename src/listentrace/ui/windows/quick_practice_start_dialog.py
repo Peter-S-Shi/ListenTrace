@@ -143,6 +143,10 @@ class QuickPracticeStartDialog(QDialog):
         button_row.addStretch(1)
         self._start_button = QPushButton("Start Quick Practice")
         self._start_button.clicked.connect(self._on_start_clicked)
+        # M13 Due-Frame Polish, Axis 1: the due-frame board shows this
+        # dialog's single "Start Quick Practice" action solid-filled -- the
+        # genuine one-time launch commit, not an ordinary in-flow action.
+        self._start_button.setProperty("hero", "true")
         theme.apply_role(self._start_button, "primary")
         cancel_button = QPushButton("Cancel")
         cancel_button.clicked.connect(self.reject)

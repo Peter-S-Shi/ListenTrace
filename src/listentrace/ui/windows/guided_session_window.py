@@ -353,13 +353,20 @@ class GuidedSessionWindow(QMainWindow):
         apply_role(self._back_button, "quiet")
         theme.set_button_icon(self._back_button, "back", color_token="secondary")
         apply_role(self._skip_button, "quiet")
-        self._continue_button.setProperty("hero", "true")
+        # M13 Due-Frame Polish, Axis 1: the due-frame board shows "Save &
+        # Continue" as an ordinary paper/no-fill blue-outline action, not
+        # the screen's one filled hero commit -- Guided Session has no
+        # solid-filled action evidenced anywhere on that board (removed
+        # the hero tag that had wrongly promoted this to look filled).
         apply_role(self._continue_button, "primary")
-        theme.set_button_icon(self._continue_button, "save", color_token="ink_on_accent")
+        theme.set_button_icon(self._continue_button, "save", color_token="accent")
         apply_role(self._close_button, "quiet")
         apply_role(self._abandon_button, "danger")
         apply_role(self._complete_button, "success")
-        theme.set_button_icon(self._complete_button, "motif_star", color_token="ink_on_accent")
+        # M13 Due-Frame Polish, Axis 1: `success` has no filled variant --
+        # see its QSS rule -- so its icon must match the outline's own
+        # green text/border color, not a white on-fill tint.
+        theme.set_button_icon(self._complete_button, "motif_star", color_token="success")
 
     # ---- read-only / status helpers ----
 
