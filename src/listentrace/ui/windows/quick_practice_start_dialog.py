@@ -43,7 +43,8 @@ class QuickPracticeStartDialog(QDialog):
     """Milestone 10: choose how to start a Quick Practice run — Recommended
     Practice (a deterministic, reason-based cue list; see `domain/services/
     quick_practice_recommendation.py`) or Selected Cues (one cue, a
-    continuous range, or an explicit subset, in the order picked)."""
+    continuous range, or an explicit subset, with the material's own
+    timeline order preserved regardless of click order)."""
 
     def __init__(
         self,
@@ -104,7 +105,9 @@ class QuickPracticeStartDialog(QDialog):
         preview_column.addWidget(self._recommended_preview, 1)
         selection_column.addWidget(preview_card, 1)
 
-        cues_card, cues_column = theme.make_card("Cues (select one, a range, or several — order picked is preserved)")
+        cues_card, cues_column = theme.make_card(
+            "Cues (select one, a range, or several — material timeline order is preserved)"
+        )
         self._cue_list = QListWidget()
         theme.configure_long_text_list(self._cue_list)
         self._cue_list.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
@@ -134,6 +137,7 @@ class QuickPracticeStartDialog(QDialog):
         layout.addWidget(self._status_label)
 
         button_row = QHBoxLayout()
+        button_row.addStretch(1)
         self._start_button = QPushButton("Start Quick Practice")
         self._start_button.clicked.connect(self._on_start_clicked)
         theme.apply_role(self._start_button, "primary")
