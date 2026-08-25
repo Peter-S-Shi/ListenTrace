@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import pytest
+from PySide6.QtCore import QSize
 from PySide6.QtGui import QColor, QIcon
 from PySide6.QtWidgets import QFrame, QLabel, QLineEdit, QPushButton
 
@@ -277,6 +278,9 @@ def test_status_dot_icon_uses_the_frozen_color_per_status(qapp, status, token):
         "mic",
         "waveform",
         "warning",
+        "settings",
+        "video",
+        "subtitle",
     ],
 )
 def test_get_icon_finds_every_sanctioned_inventory_icon(qapp, name):
@@ -340,6 +344,14 @@ def test_make_metric_tile_renders_the_requested_icon(qapp):
 
     icon_labels = [child for child in tile.findChildren(QLabel) if child.pixmap() is not None and not child.pixmap().isNull()]
     assert len(icon_labels) == 1
+
+
+def test_make_icon_label_renders_a_static_icon_at_the_requested_size(qapp):
+    label = theme.make_icon_label("clock", size=theme.ICON_SIZE_NORMAL)
+
+    assert isinstance(label, QLabel)
+    assert not label.pixmap().isNull()
+    assert label.size() == QSize(theme.ICON_SIZE_NORMAL, theme.ICON_SIZE_NORMAL)
 
 
 def test_make_surface_header_default_title_role(qapp):

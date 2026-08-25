@@ -2259,3 +2259,15 @@ def get_icon(name: str, color_token: str = "secondary", size: int = ICON_SIZE_NO
     icon.addPixmap(_tinted_pixmap(color_token), QIcon.Mode.Normal)
     icon.addPixmap(_tinted_pixmap("disabled_text"), QIcon.Mode.Disabled)
     return icon
+
+
+def make_icon_label(icon_name: str, color_token: str = "secondary", size: int = ICON_SIZE_NORMAL) -> QLabel:
+    """A static informational icon rendered as a plain `QLabel` (not a
+    button) -- M13 Axis 5, for identifying a recurring information object
+    (a field's type, a category, a section) next to its text, distinct from
+    `set_button_icon()` which decorates a clickable action.
+    """
+    label = QLabel()
+    label.setPixmap(get_icon(icon_name, color_token=color_token, size=size).pixmap(size, size))
+    label.setFixedSize(size, size)
+    return label

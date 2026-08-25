@@ -36,11 +36,11 @@ class ImportDialog(QDialog):
         form_card, form_column = theme.make_card(decorated=False)
 
         self._media_edit = QLineEdit()
-        form_column.addLayout(self._path_row("Media file:", self._media_edit, self._browse_media))
+        form_column.addLayout(self._path_row("Media file:", self._media_edit, self._browse_media, "video"))
 
         self._subtitle_edit = QLineEdit()
         form_column.addLayout(
-            self._path_row("Subtitle file (SRT/WebVTT):", self._subtitle_edit, self._browse_subtitle)
+            self._path_row("Subtitle file (SRT/WebVTT):", self._subtitle_edit, self._browse_subtitle, "subtitle")
         )
 
         self._title_edit = QLineEdit()
@@ -73,8 +73,10 @@ class ImportDialog(QDialog):
         button_row.addWidget(cancel_button)
         layout.addLayout(button_row)
 
-    def _path_row(self, label_text: str, line_edit: QLineEdit, on_browse) -> QHBoxLayout:
+    def _path_row(self, label_text: str, line_edit: QLineEdit, on_browse, icon_name: str) -> QHBoxLayout:
         row = QHBoxLayout()
+        row.setSpacing(theme.SPACE_COMPACT)
+        row.addWidget(theme.make_icon_label(icon_name))
         row.addWidget(QLabel(label_text))
         row.addWidget(line_edit)
         browse_button = QPushButton("Browse...")

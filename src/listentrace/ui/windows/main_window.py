@@ -161,16 +161,24 @@ class MainWindow(QMainWindow):
         self._nav_library_button = QPushButton("Material Library")
         apply_role(self._nav_library_button, "nav_item")
         self._nav_library_button.setProperty("active", "true")
+        # M13 Axis 5: due-frame evidence (Main Library board's DIRECTORY
+        # sidebar) shows one icon per nav item -- book/clock/gear. `active`
+        # is set once here and never toggled elsewhere in this window, so a
+        # static "accent" tint (matching the active-state text color) is
+        # correct with no re-tinting needed on click.
+        set_button_icon(self._nav_library_button, "material", color_token="accent")
         self._nav_library_button.clicked.connect(self._on_nav_library_clicked)
         sidebar_layout.addWidget(self._nav_library_button)
 
         self._learning_history_button = QPushButton("Learning History")
         apply_role(self._learning_history_button, "nav_item")
+        set_button_icon(self._learning_history_button, "clock", color_token="secondary")
         self._learning_history_button.clicked.connect(self._on_learning_history_clicked)
         sidebar_layout.addWidget(self._learning_history_button)
 
         self._playback_settings_button = QPushButton("Playback Settings...")
         apply_role(self._playback_settings_button, "nav_item")
+        set_button_icon(self._playback_settings_button, "settings", color_token="secondary")
         self._playback_settings_button.clicked.connect(self._on_open_playback_settings)
         sidebar_layout.addWidget(self._playback_settings_button)
 
