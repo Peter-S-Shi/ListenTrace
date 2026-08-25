@@ -95,7 +95,8 @@ def test_save_single_label_annotation_via_ui(qapp, conn, tmp_path):
 
     assert window._workspace_status_label.text() == ""
     assert window._annotation_list.count() == 1
-    assert window._annotation_list.item(0).text().startswith("[keyword]")
+    row = window._annotation_list.itemWidget(window._annotation_list.item(0))
+    assert row._label.text().startswith("[keyword]")
 
     window.close()
 
@@ -330,8 +331,7 @@ def test_label_color_update_changes_presentation_not_semantics(qapp, conn, tmp_p
     window.close()
 
 
-def test_annotation_list_shows_a_color_badge_matching_the_label_color(qapp, conn, tmp_path):
-    from PySide6.QtCore import QSize
+def test_annotation_list_shows_a_paper_slip_note_matching_the_label_color(qapp, conn, tmp_path):
     from PySide6.QtGui import QColor
 
     window, _ = _open_window(conn, tmp_path)
@@ -340,30 +340,26 @@ def test_annotation_list_shows_a_color_badge_matching_the_label_color(qapp, conn
     window._label_checkboxes["keyword"].setChecked(True)
     window._on_save_annotation_clicked()
 
-    item = window._annotation_list.item(0)
-    assert not item.icon().isNull()
+    row = window._annotation_list.itemWidget(window._annotation_list.item(0))
     # The label text itself must still be visible — color is not the only cue.
-    assert item.text().startswith("[keyword]")
+    assert row._label.text().startswith("[keyword]")
 
     default_color = label_preference_service.get_label_preferences(conn)["keyword"]
-    badge_pixel = item.icon().pixmap(QSize(12, 12)).toImage().pixelColor(0, 0)
-    assert badge_pixel == QColor(default_color)
+    assert QColor(row.color_hex).name() == QColor(default_color).name()
 
-    # Changing the global color must refresh the badge (and the transcript
+    # Changing the global color must refresh the note (and the transcript
     # highlight) without changing which annotation/label exists.
     label_preference_service.update_label_color(conn, "keyword", "#00FF00")
     window._refresh_editing_cue_panels()
 
-    updated_item = window._annotation_list.item(0)
-    updated_pixel = updated_item.icon().pixmap(QSize(12, 12)).toImage().pixelColor(0, 0)
-    assert updated_pixel == QColor("#00FF00")
-    assert updated_item.text().startswith("[keyword]")
+    updated_row = window._annotation_list.itemWidget(window._annotation_list.item(0))
+    assert QColor(updated_row.color_hex).name() == QColor("#00FF00").name()
+    assert updated_row._label.text().startswith("[keyword]")
 
     window.close()
 
 
-def test_overlapping_annotations_each_show_their_own_badge_and_stay_selectable(qapp, conn, tmp_path):
-    from PySide6.QtCore import QSize
+def test_overlapping_annotations_each_show_their_own_note_color_and_stay_selectable(qapp, conn, tmp_path):
     from PySide6.QtGui import QColor
 
     window, _ = _open_window(conn, tmp_path)
@@ -376,9 +372,9 @@ def test_overlapping_annotations_each_show_their_own_badge_and_stay_selectable(q
     assert window._annotation_list.count() == 2
     colors = label_preference_service.get_label_preferences(conn)
 
-    row0_pixel = window._annotation_list.item(0).icon().pixmap(QSize(12, 12)).toImage().pixelColor(0, 0)
-    row1_pixel = window._annotation_list.item(1).icon().pixmap(QSize(12, 12)).toImage().pixelColor(0, 0)
-    row_colors = {row0_pixel.name(), row1_pixel.name()}
+    row0 = window._annotation_list.itemWidget(window._annotation_list.item(0))
+    row1 = window._annotation_list.itemWidget(window._annotation_list.item(1))
+    row_colors = {QColor(row0.color_hex).name(), QColor(row1.color_hex).name()}
     expected_colors = {QColor(colors["keyword"]).name(), QColor(colors["unknown_word_or_chunk"]).name()}
     assert row_colors == expected_colors
 
@@ -502,9 +498,9 @@ def test_open_label_colors_refreshes_highlight_and_badge_without_full_reload(qap
     highlight_color = cursor.charFormat().background().color()
     assert highlight_color.name() == QColor("#00FF00").name()
 
-    # The existing list-row badge changed in place, without list rebuild.
-    updated_pixel = window._annotation_list.item(0).icon().pixmap(QSize(12, 12)).toImage().pixelColor(0, 0)
-    assert updated_pixel.name() == QColor("#00FF00").name()
+    # The existing list-row note color changed in place, without list rebuild.
+    updated_row = window._annotation_list.itemWidget(window._annotation_list.item(0))
+    assert QColor(updated_row.color_hex).name() == QColor("#00FF00").name()
 
     # Editing cue, selected annotation, and unsaved form contents are preserved —
     # none of this would survive a full `_refresh_editing_cue_panels()` reload.

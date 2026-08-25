@@ -70,7 +70,7 @@ from listentrace.ui.widgets.loop_grace_change_bus import loop_grace_change_bus
 from listentrace.ui.widgets.notebook_paper import GrainedDeskWidget, RuledTextEdit
 from listentrace.ui.widgets.recording_panel import RecordingPanel
 from listentrace.ui.windows.material_loop_settings_dialog import MaterialLoopSettingsDialog
-from listentrace.ui.windows.player_window import _OVERLAP_HIGHLIGHT, _color_badge_icon, _format_time
+from listentrace.ui.windows.player_window import _OVERLAP_HIGHLIGHT, _format_time
 
 _STAGE_TITLES: dict[str, str] = {
     StageKey.GLOBAL_COMPREHENSION.value: "Global Comprehension",
@@ -1138,9 +1138,15 @@ class GuidedSessionWindow(QMainWindow):
         self._diagnosis_list.clear()
         for item_evidence in evidence:
             heard_as_suffix = f" (heard as: {item_evidence.heard_as})" if item_evidence.heard_as else ""
-            list_item = QListWidgetItem(f"[{item_evidence.label_key}] {item_evidence.selected_text}{heard_as_suffix}")
-            list_item.setIcon(_color_badge_icon(colors.get(item_evidence.label_key, UNKNOWN_LABEL_COLOR)))
+            list_item = QListWidgetItem()
             list_item.setData(Qt.ItemDataRole.UserRole, item_evidence.id)
+            self._diagnosis_list.addItem(list_item)
+            row = theme.DiagnosisNoteRow(
+                f"[{item_evidence.label_key}] {item_evidence.selected_text}{heard_as_suffix}",
+                colors.get(item_evidence.label_key, UNKNOWN_LABEL_COLOR),
+            )
+            list_item.setSizeHint(theme.ruled_list_row_size_hint(row))
+            self._diagnosis_list.setItemWidget(list_item, row)
             self._diagnosis_list.addItem(list_item)
         self._diagnosis_list.blockSignals(False)
 

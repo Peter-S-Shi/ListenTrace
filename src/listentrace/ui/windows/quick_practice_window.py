@@ -55,7 +55,7 @@ from listentrace.ui.theme import SPACE_COMPACT, SPACE_NORMAL, SPACE_PAGE, SPACE_
 from listentrace.ui.widgets.loop_grace_change_bus import loop_grace_change_bus
 from listentrace.ui.widgets.recording_panel import RecordingPanel
 from listentrace.ui.windows.material_loop_settings_dialog import MaterialLoopSettingsDialog
-from listentrace.ui.windows.player_window import _OVERLAP_HIGHLIGHT, _color_badge_icon, _format_time
+from listentrace.ui.windows.player_window import _OVERLAP_HIGHLIGHT, _format_time
 
 _STEP_LISTEN_RECALL = 0
 _STEP_DIAGNOSE = 1
@@ -630,10 +630,15 @@ class QuickPracticeWindow(QMainWindow):
         self._diagnosis_list.clear()
         for diag in item_state.diagnosis:
             heard_as_suffix = f" (heard as: {diag.heard_as})" if diag.heard_as else ""
-            item = QListWidgetItem(f"[{diag.label_key}] {diag.selected_text}{heard_as_suffix}")
-            item.setIcon(_color_badge_icon(colors.get(diag.label_key, UNKNOWN_LABEL_COLOR)))
+            item = QListWidgetItem()
             item.setData(Qt.ItemDataRole.UserRole, diag.id)
             self._diagnosis_list.addItem(item)
+            row = theme.DiagnosisNoteRow(
+                f"[{diag.label_key}] {diag.selected_text}{heard_as_suffix}",
+                colors.get(diag.label_key, UNKNOWN_LABEL_COLOR),
+            )
+            item.setSizeHint(theme.ruled_list_row_size_hint(row))
+            self._diagnosis_list.setItemWidget(item, row)
         self._diagnosis_list.blockSignals(False)
 
         self._clear_diagnosis_form()

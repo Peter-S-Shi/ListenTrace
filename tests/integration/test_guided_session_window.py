@@ -291,11 +291,11 @@ def test_m4_annotation_semantics_reused_misheard_requires_heard_as(qapp, conn, t
     window._diagnosis_heard_as_edit.setText("Bonjoor")
     window._on_save_diagnosis_clicked()
     assert window._diagnosis_list.count() == 1
-    badge_color = window._diagnosis_list.item(0).icon().pixmap(12, 12).toImage().pixelColor(0, 0)
+    row = window._diagnosis_list.itemWidget(window._diagnosis_list.item(0))
     from listentrace.application.services import label_preference_service
 
     expected = label_preference_service.get_label_preferences(conn)["misheard"]
-    assert badge_color.name() == QColor(expected).name()
+    assert QColor(row.color_hex).name() == QColor(expected).name()
     window.close()
 
 

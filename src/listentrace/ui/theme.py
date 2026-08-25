@@ -465,16 +465,18 @@ def ruled_list_row_size_hint(row_widget: QWidget) -> QSize:
 
 def apply_paper_shadow(widget: QWidget, tier: str = "full") -> None:
     """Attach the frozen paper-shadow treatment (M13 Stage B; DESIGN.md §6,
-    Gap Register G10) to `widget`. Two tiers only:
+    Gap Register G10) to `widget`. Three tiers:
 
     - "full": an independent page-level dossier/paper sheet layered against
       the desk -- #5B4935 @ 14%, offset (0, 3), blur 10.
     - "mini": a mini-notebook module -- #5B4935 @ 10%, offset (0, 2), blur 6.
+    - "chip": a small paper-slip note object (M13 Axis 4, `DiagnosisNoteRow`)
+      -- barely-lifted, #5B4935 @ 10%, offset (0, 1), blur 4.
 
     Per the frozen coverage rule, nested ruled lists/inset panels/rows/tabs/
     controls *inside* an already-shadowed sheet get no shadow of their own
-    -- do not call this on anything but a top-level page sheet or a
-    mini-notebook card.
+    -- do not call this on anything but a top-level page sheet, a
+    mini-notebook card, or a discrete "chip"-tier note object.
     """
     effect = QGraphicsDropShadowEffect(widget)
     if tier == "mini":
@@ -482,12 +484,87 @@ def apply_paper_shadow(widget: QWidget, tier: str = "full") -> None:
         effect.setXOffset(0)
         effect.setYOffset(2)
         effect.setBlurRadius(6)
+    elif tier == "chip":
+        effect.setColor(qcolor("shadow_mini"))
+        effect.setXOffset(0)
+        effect.setYOffset(1)
+        effect.setBlurRadius(4)
     else:
         effect.setColor(qcolor("shadow_full"))
         effect.setXOffset(0)
         effect.setYOffset(3)
         effect.setBlurRadius(10)
     widget.setGraphicsEffect(effect)
+
+
+# M13 Axis 4 -- the discrete cue/diagnosis/evidence note object (due-frame
+# evidence: Quick Practice's recommendation-reason tags render as small pale
+# paper-colored labels with a soft lift, never as saturated opaque GUI
+# chips). Blend ratios, not the raw stored diagnosis color, produce the
+# note's fill/edge -- muted paper tint that still carries the label's color
+# identity, per the Product Owner's explicit "not paperized color" rejection
+# criterion for the axis.
+_NOTE_FILL_BLEND = 0.16
+_NOTE_EDGE_BLEND = 0.40
+RADIUS_NOTE = 6
+RADIUS_NOTE_TL = RADIUS_NOTE
+RADIUS_NOTE_TR = RADIUS_NOTE - 2
+RADIUS_NOTE_BR = RADIUS_NOTE + 2
+RADIUS_NOTE_BL = RADIUS_NOTE - 1
+
+
+def _blend_color(base: QColor, tint: QColor, ratio: float) -> QColor:
+    return QColor(
+        round(base.red() * (1 - ratio) + tint.red() * ratio),
+        round(base.green() * (1 - ratio) + tint.green() * ratio),
+        round(base.blue() * (1 - ratio) + tint.blue() * ratio),
+    )
+
+
+class DiagnosisNoteRow(QFrame):
+    """A single cue/diagnosis/evidence label rendered as a small colored
+    paper slip -- the Axis 4 shared seam for the three real consumers
+    (Player's annotation list, Guided Session Stage 3's diagnosis list,
+    Quick Practice Diagnose's diagnosis list), replacing the plain
+    `QListWidgetItem` text + tiny color-dot icon each previously used.
+
+    Usage mirrors `make_status_row()`: `row = DiagnosisNoteRow(text, color);
+    item.setSizeHint(ruled_list_row_size_hint(row));
+    list_widget.setItemWidget(item, row)`. Call `row.set_color(new_hex)` /
+    `row.set_text(new_text)` to refresh an existing row in place (e.g. when
+    label-color preferences change) instead of replacing the item widget.
+    """
+
+    def __init__(self, text: str, color_hex: str, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        row_layout = QHBoxLayout(self)
+        row_layout.setContentsMargins(SPACE_TIGHT, SPACE_COMPACT, SPACE_TIGHT, SPACE_COMPACT)
+        self._label = QLabel(text)
+        self._label.setWordWrap(True)
+        self._label.setStyleSheet(f"color: {css('ink')}; background: transparent; font-size: 13px;")
+        row_layout.addWidget(self._label)
+        apply_paper_shadow(self, "chip")
+        self.set_color(color_hex)
+
+    def set_text(self, text: str) -> None:
+        self._label.setText(text)
+
+    def set_color(self, color_hex: str) -> None:
+        self.color_hex = color_hex
+        base = qcolor("surface_paper")
+        tint = QColor(color_hex)
+        fill = _blend_color(base, tint, _NOTE_FILL_BLEND)
+        edge = _blend_color(base, tint, _NOTE_EDGE_BLEND)
+        self.setStyleSheet(
+            "DiagnosisNoteRow {"
+            f"background-color: {fill.name()};"
+            f"border: {BORDER_WIDTH}px solid {edge.name()};"
+            f"border-top-left-radius: {RADIUS_NOTE_TL}px;"
+            f"border-top-right-radius: {RADIUS_NOTE_TR}px;"
+            f"border-bottom-right-radius: {RADIUS_NOTE_BR}px;"
+            f"border-bottom-left-radius: {RADIUS_NOTE_BL}px;"
+            "}"
+        )
 
 
 def make_card(title: str | None = None, decorated: bool = True) -> tuple[QFrame, QVBoxLayout]:

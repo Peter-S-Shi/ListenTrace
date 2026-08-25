@@ -1126,10 +1126,15 @@ class PlayerWindow(QMainWindow):
         self._annotation_list.clear()
         for annotation in workspace.annotations:
             heard_as_suffix = f" (heard as: {annotation.heard_as})" if annotation.heard_as else ""
-            item = QListWidgetItem(f"[{annotation.label_key}] {annotation.selected_text}{heard_as_suffix}")
-            item.setIcon(_color_badge_icon(label_colors.get(annotation.label_key, UNKNOWN_LABEL_COLOR)))
+            item = QListWidgetItem()
             item.setData(Qt.ItemDataRole.UserRole, annotation.id)
             self._annotation_list.addItem(item)
+            row = theme.DiagnosisNoteRow(
+                f"[{annotation.label_key}] {annotation.selected_text}{heard_as_suffix}",
+                label_colors.get(annotation.label_key, UNKNOWN_LABEL_COLOR),
+            )
+            item.setSizeHint(theme.ruled_list_row_size_hint(row))
+            self._annotation_list.setItemWidget(item, row)
         self._annotation_list.blockSignals(False)
 
         self._cue_note_edit.blockSignals(True)
@@ -1463,5 +1468,6 @@ class PlayerWindow(QMainWindow):
                 continue
             annotation_id = item.data(Qt.ItemDataRole.UserRole)
             annotation = next((a for a in annotations if a.id == annotation_id), None)
-            if annotation is not None:
-                item.setIcon(_color_badge_icon(colors.get(annotation.label_key, UNKNOWN_LABEL_COLOR)))
+            row = self._annotation_list.itemWidget(item)
+            if annotation is not None and isinstance(row, theme.DiagnosisNoteRow):
+                row.set_color(colors.get(annotation.label_key, UNKNOWN_LABEL_COLOR))
