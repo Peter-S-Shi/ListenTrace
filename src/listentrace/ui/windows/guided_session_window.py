@@ -51,7 +51,7 @@ from listentrace.domain.services.text_range import whole_cue_range
 from listentrace.infrastructure.db.learning_repository import list_annotations_for_cue
 from listentrace.infrastructure.media.playback import PlaybackController
 from listentrace.ui import theme
-from listentrace.ui.annotation_highlighting import apply_range_highlighting
+from listentrace.ui.annotation_highlighting import UNKNOWN_LABEL_COLOR, apply_range_highlighting
 from listentrace.ui.text_offset_conversion import (
     SurrogatePairOffsetError,
     codepoint_index_to_qt_offset,
@@ -62,12 +62,7 @@ from listentrace.ui.widgets.loop_grace_change_bus import loop_grace_change_bus
 from listentrace.ui.widgets.notebook_paper import RuledTextEdit
 from listentrace.ui.widgets.recording_panel import RecordingPanel
 from listentrace.ui.windows.material_loop_settings_dialog import MaterialLoopSettingsDialog
-from listentrace.ui.windows.player_window import (
-    _OVERLAP_HIGHLIGHT,
-    _UNKNOWN_LABEL_COLOR,
-    _color_badge_icon,
-    _format_time,
-)
+from listentrace.ui.windows.player_window import _OVERLAP_HIGHLIGHT, _color_badge_icon, _format_time
 
 _STAGE_TITLES: dict[str, str] = {
     StageKey.GLOBAL_COMPREHENSION.value: "Global Comprehension",
@@ -1151,7 +1146,7 @@ class GuidedSessionWindow(QMainWindow):
         for item_evidence in evidence:
             heard_as_suffix = f" (heard as: {item_evidence.heard_as})" if item_evidence.heard_as else ""
             list_item = QListWidgetItem(f"[{item_evidence.label_key}] {item_evidence.selected_text}{heard_as_suffix}")
-            list_item.setIcon(_color_badge_icon(colors.get(item_evidence.label_key, _UNKNOWN_LABEL_COLOR)))
+            list_item.setIcon(_color_badge_icon(colors.get(item_evidence.label_key, UNKNOWN_LABEL_COLOR)))
             list_item.setData(Qt.ItemDataRole.UserRole, item_evidence.id)
             self._diagnosis_list.addItem(list_item)
         self._diagnosis_list.blockSignals(False)

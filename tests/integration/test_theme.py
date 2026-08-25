@@ -1,9 +1,20 @@
 from __future__ import annotations
 
+import pytest
 from PySide6.QtGui import QColor, QIcon
-from PySide6.QtWidgets import QFrame, QLabel, QPushButton
+from PySide6.QtWidgets import QFrame, QLabel, QLineEdit, QPushButton
 
 from listentrace.ui import theme
+
+
+def _rendered_height(widget) -> int:
+    """The widget's real, QSS-stylesheet-driven height (content + padding +
+    border), not the raw min-height CSS property -- Qt's box model adds
+    padding/border on top of min-height, so string-matching the QSS for
+    "min-height: 34px" would not actually verify the rendered contract."""
+    widget.setStyleSheet(theme.build_stylesheet("light"))
+    widget.ensurePolished()
+    return widget.sizeHint().height()
 
 
 def test_build_stylesheet_is_non_empty_and_contains_m13_tokens():
@@ -178,6 +189,49 @@ def test_spiral_binding_widget_ring_count_scales_with_available_height(qapp):
 
     assert tall_count > short_count
     assert short_count >= 0
+
+
+@pytest.mark.parametrize(
+    "role,expected_height",
+    [
+        ("primary", 34),
+        ("secondary", 34),
+        ("danger", 34),
+        ("success", 34),
+        ("quiet", 30),
+        ("notebook_primary_action", 34),
+        ("notebook_action", 34),
+        ("notebook_destructive_action", 34),
+    ],
+)
+def test_button_role_renders_at_the_contract_height(qapp, role, expected_height):
+    """DESIGN.md §2.8/§5: 34px standard button, 30px quiet -- verified against
+    the widget's real stylesheet-driven sizeHint (content + padding +
+    border), so the QSS's min-height plus its own padding/border actually
+    converges on the contract instead of merely declaring it."""
+    button = QPushButton("Label")
+    theme.apply_role(button, role)
+
+    assert _rendered_height(button) == expected_height
+
+
+def test_hero_primary_button_renders_40px_tall(qapp):
+    """A `hero="true"` primary button (DESIGN.md's 40px Hero tier, e.g. a
+    workspace's single most prominent progression action) is a distinct,
+    additive QSS variant from the 34px ordinary primary button."""
+    button = QPushButton("Start Practice")
+    theme.apply_role(button, "primary")
+    button.setProperty("hero", "true")
+
+    assert _rendered_height(button) == 40
+
+
+def test_single_line_inputs_render_at_the_34px_contract_height(qapp):
+    """DESIGN.md §5: QLineEdit/QComboBox have a 34px height floor -- verified
+    against real stylesheet-driven sizeHint, not the QSS source text."""
+    line_edit = QLineEdit()
+
+    assert _rendered_height(line_edit) == 34
 
 
 def test_icon_search_paths_include_the_frozen_locations_when_frozen(monkeypatch, tmp_path):

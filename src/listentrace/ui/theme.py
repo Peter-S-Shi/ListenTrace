@@ -354,8 +354,11 @@ def make_inset_panel(dense: bool = False) -> tuple[QFrame, QVBoxLayout]:
     frame = QFrame()
     apply_role(frame, "inset_panel")
     layout = QVBoxLayout(frame)
-    pad = SPACE_NORMAL if dense else SPACE_SECTION
-    layout.setContentsMargins(pad, SPACE_COMPACT, pad, SPACE_COMPACT)
+    # DESIGN.md contract: 8-12px internal padding, by density -- uniform on
+    # all sides (not the old asymmetric SPACE_SECTION=16px horizontal /
+    # SPACE_COMPACT=4px vertical split, which exceeded the 12px ceiling).
+    pad = 8 if dense else 12
+    layout.setContentsMargins(pad, pad, pad, pad)
     layout.setSpacing(SPACE_COMPACT)
     return frame, layout
 
@@ -468,9 +471,13 @@ QLineEdit, QComboBox, QTextEdit, QPlainTextEdit, QListWidget, QTableWidget {{
 /* DESIGN.md §5 control-size contract: single-line inputs have a 34px height
    floor. Scoped to QLineEdit/QComboBox only -- QTextEdit/QPlainTextEdit are
    multi-line surfaces and QListWidget/QTableWidget are multi-row containers,
-   neither governed by this single-line floor. */
+   neither governed by this single-line floor. The shared base rule above
+   gives both a 2*SPACE_COMPACT=8px vertical padding and a 2*1px border, so
+   (per Qt's QSS box model, which adds padding/border on top of min-height)
+   min-height is set to (34 - 8 - 2) to converge the *rendered* height on
+   the contract. */
 QLineEdit, QComboBox {{
-    min-height: 34px;
+    min-height: 24px;
 }}
 QListWidget::item:selected, QListWidget::item:selected:active {{
     background-color: {css('accent', m)};
@@ -833,7 +840,8 @@ QPushButton[role="notebook_primary_action"] {{
     border: {BORDER_WIDTH}px solid {css('accent', m)};
     border-radius: {RADIUS_CONTROL}px;
     padding: {SPACE_COMPACT}px {SPACE_NORMAL}px;
-    min-height: 34px;
+    /* 2*SPACE_COMPACT=8px vertical padding + 2*1px border -> 34-8-2=24. */
+    min-height: 24px;
 }}
 QPushButton[role="notebook_primary_action"]:hover {{
     background-color: {css('accent', m)};
@@ -850,7 +858,8 @@ QPushButton[role="notebook_action"] {{
     border: {BORDER_WIDTH}px solid {css('line', m)};
     border-radius: {RADIUS_CONTROL}px;
     padding: {SPACE_COMPACT}px {SPACE_NORMAL}px;
-    min-height: 34px;
+    /* 2*SPACE_COMPACT=8px vertical padding + 2*1px border -> 34-8-2=24. */
+    min-height: 24px;
 }}
 QPushButton[role="notebook_action"]:hover {{
     background-color: {css('surface_soft', m)};
@@ -865,7 +874,8 @@ QPushButton[role="notebook_destructive_action"] {{
     border: {BORDER_WIDTH}px solid {css('danger', m)};
     border-radius: {RADIUS_CONTROL}px;
     padding: {SPACE_COMPACT}px {SPACE_NORMAL}px;
-    min-height: 34px;
+    /* 2*SPACE_COMPACT=8px vertical padding + 2*1px border -> 34-8-2=24. */
+    min-height: 24px;
 }}
 QPushButton[role="notebook_destructive_action"]:hover {{
     background-color: {css('danger', m)};
@@ -982,7 +992,20 @@ QPushButton[role="primary"] {{
     border: none;
     border-radius: {RADIUS_CONTROL}px;
     padding: {SPACE_NORMAL}px {SPACE_SECTION}px;
-    min-height: 34px;
+    /* Qt's QSS box model adds padding/border on top of min-height (it
+       constrains the content box, not the padding/border box) -- this
+       control has 2*SPACE_NORMAL=16px vertical padding and no border, so
+       min-height is set to (34 - 16) to converge the *rendered* height on
+       the DESIGN.md §2.8 34px standard-button contract, not just the
+       min-height property's raw value. */
+    min-height: 18px;
+}}
+/* Hero tier (DESIGN.md §2.8, 40px): an opt-in variant for the single most
+   prominent progression action on a surface -- additive infrastructure,
+   not yet wired to any window (later Stage B batches opt specific buttons
+   in via `widget.setProperty("hero", "true")`). */
+QPushButton[role="primary"][hero="true"] {{
+    min-height: 24px;
 }}
 QPushButton[role="primary"]:hover {{ background-color: {css('accent_hover', m)}; }}
 QPushButton[role="primary"]:pressed {{ background-color: {css('accent_pressed', m)}; }}
@@ -998,7 +1021,8 @@ QPushButton[role="secondary"] {{
     border: {BORDER_WIDTH}px solid {css('line', m)};
     border-radius: {RADIUS_CONTROL}px;
     padding: {SPACE_COMPACT}px {SPACE_NORMAL + 2}px;
-    min-height: 34px;
+    /* 2*SPACE_COMPACT=8px vertical padding + 2*1px border -> 34-8-2=24. */
+    min-height: 24px;
 }}
 QPushButton[role="secondary"]:hover {{ background-color: {css('surface_soft', m)}; }}
 QPushButton[role="secondary"]:disabled {{
@@ -1012,7 +1036,8 @@ QPushButton[role="quiet"] {{
     color: {css('muted', m)};
     border: none;
     padding: {SPACE_COMPACT}px {SPACE_NORMAL}px;
-    min-height: 30px;
+    /* 2*SPACE_COMPACT=8px vertical padding, no border -> 30-8=22. */
+    min-height: 22px;
 }}
 QPushButton[role="quiet"]:hover {{ color: {css('ink', m)}; }}
 QPushButton[role="quiet"]:disabled {{ color: {css('disabled_text', m)}; }}
@@ -1023,7 +1048,8 @@ QPushButton[role="danger"] {{
     border: {BORDER_WIDTH}px solid {css('danger', m)};
     border-radius: {RADIUS_CONTROL}px;
     padding: {SPACE_COMPACT}px {SPACE_NORMAL}px;
-    min-height: 34px;
+    /* 2*SPACE_COMPACT=8px vertical padding + 2*1px border -> 34-8-2=24. */
+    min-height: 24px;
 }}
 QPushButton[role="danger"]:hover {{ background-color: {css('danger', m)}; color: #FFFFFF; }}
 QPushButton[role="danger"]:pressed {{ background-color: {css('danger_hover', m)}; color: #FFFFFF; }}
@@ -1039,7 +1065,8 @@ QPushButton[role="success"] {{
     border: none;
     border-radius: {RADIUS_CONTROL}px;
     padding: {SPACE_COMPACT}px {SPACE_NORMAL}px;
-    min-height: 34px;
+    /* 2*SPACE_COMPACT=8px vertical padding, no border -> 34-8=26. */
+    min-height: 26px;
 }}
 QPushButton[role="success"]:disabled {{
     background-color: {css('disabled_surface', m)};

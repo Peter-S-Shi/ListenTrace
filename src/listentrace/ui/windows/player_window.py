@@ -54,7 +54,7 @@ from listentrace.domain.services.text_range import whole_cue_range
 from listentrace.infrastructure.appdata import get_recordings_dir
 from listentrace.infrastructure.media.playback import PlaybackController
 from listentrace.ui import theme
-from listentrace.ui.annotation_highlighting import apply_range_highlighting
+from listentrace.ui.annotation_highlighting import UNKNOWN_LABEL_COLOR, apply_range_highlighting
 from listentrace.ui.text_offset_conversion import (
     SurrogatePairOffsetError,
     codepoint_index_to_qt_offset,
@@ -75,11 +75,6 @@ _SEEK_STEP_MS = 5000
 _ACTIVE_CUE_HIGHLIGHT = theme.qcolor("cue_active")
 _OVERLAP_HIGHLIGHT = theme.qcolor("text_overlap")
 _BADGE_SIZE = 12
-# M13 Stage B: the color shown when a diagnosis label has no stored color
-# (should be rare/never in practice) -- sourced from the `neutral_state`
-# token instead of a bare "#CCCCCC" literal repeated at every call site.
-# Re-exported for the same reason as _OVERLAP_HIGHLIGHT/_color_badge_icon above.
-_UNKNOWN_LABEL_COLOR = theme.css("neutral_state")
 
 
 def _is_text_entry_widget(widget: object) -> bool:
@@ -1142,7 +1137,7 @@ class PlayerWindow(QMainWindow):
         for annotation in workspace.annotations:
             heard_as_suffix = f" (heard as: {annotation.heard_as})" if annotation.heard_as else ""
             item = QListWidgetItem(f"[{annotation.label_key}] {annotation.selected_text}{heard_as_suffix}")
-            item.setIcon(_color_badge_icon(label_colors.get(annotation.label_key, _UNKNOWN_LABEL_COLOR)))
+            item.setIcon(_color_badge_icon(label_colors.get(annotation.label_key, UNKNOWN_LABEL_COLOR)))
             item.setData(Qt.ItemDataRole.UserRole, annotation.id)
             self._annotation_list.addItem(item)
         self._annotation_list.blockSignals(False)
@@ -1479,4 +1474,4 @@ class PlayerWindow(QMainWindow):
             annotation_id = item.data(Qt.ItemDataRole.UserRole)
             annotation = next((a for a in annotations if a.id == annotation_id), None)
             if annotation is not None:
-                item.setIcon(_color_badge_icon(colors.get(annotation.label_key, _UNKNOWN_LABEL_COLOR)))
+                item.setIcon(_color_badge_icon(colors.get(annotation.label_key, UNKNOWN_LABEL_COLOR)))

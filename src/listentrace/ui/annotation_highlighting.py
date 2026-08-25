@@ -13,9 +13,14 @@ from listentrace.ui.text_offset_conversion import codepoint_index_to_qt_offset
 # swatch (`_color_badge_icon`), which is unaffected by this rule. Applies
 # uniformly to canonical-default and user-chosen label colors alike.
 _TRANSCRIPT_HIGHLIGHT_ALPHA = 0.4
-# Same "no stored color" fallback as the badge-icon call sites, sourced from
-# the `neutral_state` token rather than a bare literal.
-_UNKNOWN_LABEL_COLOR = theme.css("neutral_state")
+
+# The color shown wherever a diagnosis label has no stored color (should be
+# rare/never in practice), sourced from the `neutral_state` token rather
+# than a bare "#CCCCCC" literal. This module is the single canonical source
+# -- every window that needs the fallback (player_window.py,
+# guided_session_window.py, quick_practice_window.py) imports it from here
+# rather than each defining/re-exporting its own copy.
+UNKNOWN_LABEL_COLOR = theme.css("neutral_state")
 
 
 class _LabeledRange(Protocol):
@@ -69,7 +74,7 @@ def apply_range_highlighting(
 
         fmt = QTextCharFormat()
         if len(labels_here) == 1:
-            highlight_color = QColor(colors.get(labels_here[0], _UNKNOWN_LABEL_COLOR))
+            highlight_color = QColor(colors.get(labels_here[0], UNKNOWN_LABEL_COLOR))
             highlight_color.setAlphaF(_TRANSCRIPT_HIGHLIGHT_ALPHA)
             fmt.setBackground(highlight_color)
         else:

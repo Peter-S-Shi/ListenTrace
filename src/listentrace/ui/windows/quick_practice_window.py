@@ -44,7 +44,7 @@ from listentrace.domain.enums.recall_result import RecallResult
 from listentrace.domain.services.text_range import whole_cue_range
 from listentrace.infrastructure.media.playback import PlaybackController
 from listentrace.ui import theme
-from listentrace.ui.annotation_highlighting import apply_range_highlighting
+from listentrace.ui.annotation_highlighting import UNKNOWN_LABEL_COLOR, apply_range_highlighting
 from listentrace.ui.text_offset_conversion import (
     SurrogatePairOffsetError,
     codepoint_index_to_qt_offset,
@@ -54,12 +54,7 @@ from listentrace.ui.theme import SPACE_COMPACT, SPACE_NORMAL, apply_role, apply_
 from listentrace.ui.widgets.loop_grace_change_bus import loop_grace_change_bus
 from listentrace.ui.widgets.recording_panel import RecordingPanel
 from listentrace.ui.windows.material_loop_settings_dialog import MaterialLoopSettingsDialog
-from listentrace.ui.windows.player_window import (
-    _OVERLAP_HIGHLIGHT,
-    _UNKNOWN_LABEL_COLOR,
-    _color_badge_icon,
-    _format_time,
-)
+from listentrace.ui.windows.player_window import _OVERLAP_HIGHLIGHT, _color_badge_icon, _format_time
 
 _STEP_LISTEN_RECALL = 0
 _STEP_DIAGNOSE = 1
@@ -634,7 +629,7 @@ class QuickPracticeWindow(QMainWindow):
         for diag in item_state.diagnosis:
             heard_as_suffix = f" (heard as: {diag.heard_as})" if diag.heard_as else ""
             item = QListWidgetItem(f"[{diag.label_key}] {diag.selected_text}{heard_as_suffix}")
-            item.setIcon(_color_badge_icon(colors.get(diag.label_key, _UNKNOWN_LABEL_COLOR)))
+            item.setIcon(_color_badge_icon(colors.get(diag.label_key, UNKNOWN_LABEL_COLOR)))
             item.setData(Qt.ItemDataRole.UserRole, diag.id)
             self._diagnosis_list.addItem(item)
         self._diagnosis_list.blockSignals(False)
