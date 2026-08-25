@@ -116,14 +116,14 @@ def test_qcolor_and_css_agree_on_the_same_token():
 
 
 def test_qcolor_handles_a_token_with_alpha():
-    color = theme.qcolor("line")
+    color = theme.qcolor("rule_blue")
 
-    r, g, b, a = theme._TOKENS["line"]
+    r, g, b, a = theme._TOKENS["rule_blue"]
     assert color.red() == r
     assert color.green() == g
     assert color.blue() == b
     assert color.alpha() == a
-    assert "rgba(" in theme.css("line")
+    assert "rgba(" in theme.css("rule_blue")
 
 
 def test_accent_is_professional_blue():
@@ -135,12 +135,16 @@ def test_accent_is_professional_blue():
 
 
 def test_product_semantic_tokens_preserve_their_values():
+    # M13 Stage B migration: `quiz_correct`/`chart_axis`/`chart_text` moved to
+    # DESIGN.md's canonical values (aligned to `success`/`warm_divider`/
+    # `ink_primary` respectively); `cue_active`/`text_overlap`/`quiz_incorrect`
+    # are not part of the DESIGN.md palette and are genuinely unchanged.
     assert theme.css("cue_active").upper() == "#FFF3CD"
     assert theme.css("text_overlap").upper() == "#D0D0D0"
-    assert theme.css("quiz_correct").upper() == "#16A34A"
+    assert theme.css("quiz_correct").upper() == "#168247"
     assert theme.css("quiz_incorrect").upper() == "#DC2626"
-    assert theme.css("chart_axis").upper() == "#9CA3AF"
-    assert theme.css("chart_text").upper() == "#374151"
+    assert theme.css("chart_axis").upper() == "#E6DED2"
+    assert theme.css("chart_text").upper() == "#1F1D1A"
 
 
 def test_get_app_icon_returns_a_real_icon_when_the_packaging_asset_exists():

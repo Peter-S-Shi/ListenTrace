@@ -2,7 +2,8 @@
 
 Milestone 13 (Advanced UI/UX Reconstruction) Theme System:
 - Professional Blue primary accent (#2563EB / #3B82F6 family)
-- Warm Professional Learning Desk personality
+- Notebook Study Desk personality (DESIGN.md §3 canonical palette, migrated
+  in Stage B; token keys are stable across the migration, only values moved)
 - Lined Spiral Notebook & Ruled Study Paper contextual surfaces
 - Spacious Learning density (4 / 8 / 16 / 24 / 32 px scale)
 - Contextual Surface Modes (Workspace, Paper Study, Ruled Notebook, Dark Focus)
@@ -46,49 +47,78 @@ from listentrace.ui.widgets.notebook_paper import RuledPaperFrame, SpiralBinding
 # ---------------------------------------------------------------------------
 
 _TOKENS_LIGHT: dict[str, tuple[int, int, int, int]] = {
-    # Brand: Warm Professional Learning Desk + Professional Blue Accent
-    "page": (246, 244, 238, 255),          # #F6F4EE warm desk page
-    "surface": (255, 255, 255, 255),       # #FFFFFF pure white card
-    "surface_soft": (250, 247, 240, 255),  # #FAF7F0 soft panel
-    "surface_sidebar": (240, 236, 227, 255), # #F0ECE3 directory sidebar
-    "surface_paper": (253, 251, 247, 255), # #FDFBF7 matte ruled paper
-    "surface_cinema": (15, 17, 21, 255),   # #0F1115 dark listening stage
-    "ink": (31, 29, 26, 255),              # #1F1D1A dark ink
-    "muted": (140, 132, 119, 255),         # #8C8477 muted text
-    "line": (60, 50, 40, 36),              # subtle border ~14% alpha
-    "line_ruled": (60, 50, 40, 25),        # subtle ruled horizontal line ~10% alpha
-    "accent": (37, 99, 235, 255),          # #2563EB Professional Blue
-    "accent_hover": (29, 78, 216, 255),    # #1D4ED8
-    "accent_pressed": (30, 64, 175, 255),  # #1E40AF
-    "accent_subtle": (239, 246, 255, 255), # #EFF6FF
-    "secondary": (90, 84, 74, 255),        # #5A544A
+    # Brand: Notebook Study Desk + Professional Blue Accent (DESIGN.md §3
+    # canonical values -- M13 Stage B whole-product migration, per
+    # M13_RENDERING_IMPLEMENTATION_MAP.md §2). Keys are stable across the
+    # migration; only values changed.
+    "page": (246, 241, 231, 255),           # #F6F1E7 desk_bg
+    "surface": (255, 254, 251, 255),        # #FFFEFB surface_plain
+    "surface_soft": (250, 246, 237, 255),   # #FAF6ED paper_secondary
+    "surface_sidebar": (240, 232, 220, 255), # #F0E8DC sidebar_bg
+    "surface_paper": (255, 253, 248, 255),  # #FFFDF8 paper_primary
+    "surface_cinema": (15, 17, 21, 255),    # #0F1115 media_black
+    "ink": (31, 29, 26, 255),               # #1F1D1A ink_primary
+    "muted": (111, 102, 92, 255),           # #6F665C ink_muted
+    "line": (216, 207, 193, 255),           # #D8CFC1 warm_border
+    "line_ruled": (230, 222, 210, 255),     # #E6DED2 warm_divider
+    "accent": (37, 99, 235, 255),           # #2563EB Professional Blue
+    "accent_hover": (29, 78, 216, 255),     # #1D4ED8
+    "accent_pressed": (30, 64, 175, 255),   # #1E40AF
+    "accent_subtle": (239, 246, 255, 255),  # #EFF6FF accent_soft
+    "secondary": (90, 81, 71, 255),         # #5A5147 ink_secondary
     # Semantic
-    "success": (22, 163, 74, 255),         # #16A34A
-    "danger": (217, 56, 58, 255),          # #D9383A
-    "danger_hover": (191, 38, 40, 255),    # #BF2628
-    "danger_subtle": (253, 242, 242, 255), # #FDF2F2
-    "warning": (217, 119, 6, 255),         # #D97706
-    "warning_subtle": (254, 243, 199, 255),# #FEF3C7
-    "info": (37, 99, 235, 255),            # #2563EB
-    "focus": (37, 99, 235, 255),           # #2563EB
-    "disabled_text": (140, 132, 122, 255),
-    "disabled_surface": (232, 226, 216, 255),
-    # Dedicated Product-Semantic Tokens
+    "success": (22, 130, 71, 255),          # #168247
+    "danger": (217, 56, 58, 255),           # #D9383A
+    "danger_hover": (191, 38, 40, 255),     # #BF2628
+    "danger_subtle": (253, 242, 242, 255),  # #FDF2F2
+    "warning": (200, 117, 8, 255),          # #C87508
+    "warning_subtle": (255, 244, 214, 255), # #FFF4D6
+    "info": (37, 99, 235, 255),             # #2563EB
+    "focus": (96, 165, 250, 255),           # #60A5FA focus_ring
+    "disabled_text": (145, 137, 126, 255),  # #91897E universal disabled text
+    "disabled_border": (209, 202, 192, 255), # #D1CAC0 universal disabled border
+    "disabled_surface": (221, 215, 206, 255), # #DDD7CE universal disabled bg
+    # Dedicated Product-Semantic Tokens (not part of the DESIGN.md palette;
+    # unchanged by this migration)
     "cue_active": (255, 243, 205, 255),    # #FFF3CD active cue highlight
     "text_overlap": (208, 208, 208, 255),  # #D0D0D0
-    "quiz_correct": (22, 163, 74, 255),    # #16A34A
-    "quiz_incorrect": (220, 38, 38, 255),  # #DC2626
-    "chart_background": (255, 255, 255, 255),
+    "quiz_correct": (22, 130, 71, 255),    # aligned to `success` #168247
+    "quiz_incorrect": (220, 38, 38, 255),  # aligned to `incorrect` #DC2626
+    "chart_background": (255, 253, 248, 255), # paper_primary #FFFDF8
     "chart_bar": (37, 99, 235, 255),       # #2563EB aligned with Professional Blue
-    "chart_axis": (156, 163, 175, 255),    # #9CA3AF
-    "chart_text": (55, 65, 81, 255),       # #374151
+    "chart_axis": (230, 222, 210, 255),    # warm_divider #E6DED2
+    "chart_text": (31, 29, 26, 255),       # ink_primary #1F1D1A
+    # Notebook/paper detail palette (DESIGN.md §3/§6) -- additive, new keys.
+    "paper_deep": (243, 235, 221, 255),        # #F3EBDD directory backing / paper-edge contrast
+    "paper_edge": (207, 195, 178, 255),        # #CFC3B2 visible paper/card edge
+    "rule_blue": (191, 219, 254, 133),         # #BFDBFE @ 52%
+    "margin_line": (230, 167, 173, 117),       # #E6A7AD @ 46%
+    "handwritten_blue": (36, 88, 184, 255),    # #2458B8
+    "accent_selected": (219, 234, 254, 255),   # #DBEAFE
+    "accent_border_soft": (147, 197, 253, 255), # #93C5FD
+    "spiral_shadow": (77, 86, 96, 64),         # #4D5660 @ 25%
+    "paper_hole": (233, 225, 213, 255),        # #E9E1D5
+    "tape_cream": (232, 214, 168, 255),        # #E8D6A8
+    "tape_blue": (145, 180, 228, 255),         # #91B4E4
+    "sticky_note": (242, 226, 180, 255),       # #F2E2B4
+    "paperclip_metal": (124, 133, 141, 255),   # #7C858D
+    "leaf_green": (79, 122, 88, 255),          # #4F7A58
+    "flower_pink": (215, 142, 162, 255),       # #D78EA2
+    "star_gold": (210, 164, 58, 255),          # #D2A43A
+    "incorrect": (220, 38, 38, 255),           # #DC2626
+    "neutral_state": (119, 110, 100, 255),     # #776E64
+    "ink_caption": (123, 113, 101, 255),       # #7B7165
+    "ink_placeholder": (148, 138, 125, 255),   # #948A7D
+    "ink_on_accent": (255, 253, 248, 255),     # #FFFDF8
+    "ink_on_dark": (247, 244, 238, 255),       # #F7F4EE
+    "shadow_full": (91, 73, 53, 36),           # #5B4935 @ 14%, page-level paper sheet shadow
+    "shadow_mini": (91, 73, 53, 26),           # #5B4935 @ 10%, mini-notebook shadow
     # Player Notebook Study Desk (M13 Player Reconstruction) -- scoped, additive tokens.
-    # `line_ruled` above is a translucent dark-ink line and does not read as the mockup's
-    # pale-blue ruled paper; these two tokens exist so the Player's notebook surfaces can use a
-    # genuinely pale blue without altering the shared `line_ruled`/`ruled_list` look already
-    # accepted elsewhere (MainWindow dossier, Guided Session Stage 5).
-    "notebook_rule_blue": (191, 219, 254, 200),  # #BFDBFE pale-blue ruled line
-    "notebook_binding": (125, 152, 191, 255),    # #7D98BF muted spiral-binding blue
+    # `line_ruled` above is the shared quiet-divider color (MainWindow dossier, Guided
+    # Session Stage 5); these two tokens exist so the Player's notebook surfaces can use
+    # the canonical ruled-paper pale blue without altering that shared look.
+    "notebook_rule_blue": (191, 219, 254, 133),  # #BFDBFE @ 52% pale-blue ruled line
+    "notebook_binding": (125, 135, 148, 255),    # #7D8794 spiral_metal
 }
 
 _TOKENS_DARK: dict[str, tuple[int, int, int, int]] = {
@@ -148,7 +178,15 @@ RADIUS_CARD = 10
 RADIUS_PILL = 9999
 BORDER_WIDTH = 1
 
-FONT_FAMILY = '"Segoe UI Variable", "Segoe UI", "PingFang SC", "Microsoft YaHei UI", sans-serif'
+FONT_FAMILY = (
+    '"Segoe UI Variable Text", "Segoe UI Variable", "Segoe UI", '
+    '"Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC", sans-serif'
+)
+# Latin-only decorative face for short handwritten stamps/tags; CJK text must
+# never be forced into this stack and should fall back to `FONT_FAMILY` at the
+# call site instead (DESIGN.md §4.2).
+HANDWRITING_FONT_FAMILY = '"Segoe Print", "Segoe Script", "Segoe UI"'
+MONOSPACE_FONT_FAMILY = '"Cascadia Mono", "Consolas", "Courier New", monospace'
 
 
 def qcolor(token: str, theme_mode: str = "light") -> QColor:
@@ -474,7 +512,7 @@ QLabel[role="muted"] {{ color: {css('muted', m)}; }}
 QLabel[role="error"] {{ color: {css('danger', m)}; }}
 QLabel[role="warning"] {{ color: {css('warning', m)}; }}
 QLabel[role="success"] {{ color: {css('success', m)}; }}
-QLabel[role="monospace"] {{ font-family: monospace; }}
+QLabel[role="monospace"] {{ font-family: {MONOSPACE_FONT_FAMILY}; color: {css('muted', m)}; }}
 
 /* Notebook & Lined Paper Elements */
 QFrame[role="notebook_page"] {{
@@ -743,7 +781,7 @@ QPushButton[role="notebook_action"]:hover {{
 }}
 QPushButton[role="notebook_action"]:disabled {{
     color: {css('disabled_text', m)};
-    border-color: {css('line', m)};
+    border-color: {css('disabled_border', m)};
 }}
 QPushButton[role="notebook_destructive_action"] {{
     background-color: transparent;
@@ -758,7 +796,7 @@ QPushButton[role="notebook_destructive_action"]:hover {{
 }}
 QPushButton[role="notebook_destructive_action"]:disabled {{
     color: {css('disabled_text', m)};
-    border-color: {css('line', m)};
+    border-color: {css('disabled_border', m)};
 }}
 
 /* Surfaces & Containers */
@@ -877,7 +915,7 @@ QPushButton[role="secondary"]:hover {{ background-color: {css('surface_soft', m)
 QPushButton[role="secondary"]:disabled {{
     background-color: {css('disabled_surface', m)};
     color: {css('disabled_text', m)};
-    border-color: {css('line', m)};
+    border-color: {css('disabled_border', m)};
 }}
 
 QPushButton[role="quiet"] {{
@@ -901,7 +939,7 @@ QPushButton[role="danger"]:pressed {{ background-color: {css('danger_hover', m)}
 QPushButton[role="danger"]:disabled {{
     background-color: {css('disabled_surface', m)};
     color: {css('disabled_text', m)};
-    border-color: {css('line', m)};
+    border-color: {css('disabled_border', m)};
 }}
 
 QPushButton[role="success"] {{
