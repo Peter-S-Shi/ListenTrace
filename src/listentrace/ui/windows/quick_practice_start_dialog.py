@@ -75,7 +75,7 @@ class QuickPracticeStartDialog(QDialog):
         regions_row.setSpacing(theme.SPACE_SECTION)
 
         # LEFT: PRACTICE SOURCE
-        source_card, source_column = theme.make_card("Practice Source")
+        source_card, source_column = theme.make_card("Practice Source", decorated=False)
         self._source_group = QButtonGroup(self)
         self._recommended_radio = QRadioButton("Recommended Practice")
         self._selected_radio = QRadioButton("Selected Cues")
@@ -101,14 +101,15 @@ class QuickPracticeStartDialog(QDialog):
         selection_column = QVBoxLayout()
         selection_column.setSpacing(theme.SPACE_SECTION)
 
-        preview_card, preview_column = theme.make_card("Preview (transparent reasons — never a hidden score)")
+        preview_card, preview_column = theme.make_card("Preview (transparent reasons — never a hidden score)", decorated=False)
         self._recommended_preview = QListWidget()
         theme.configure_long_text_list(self._recommended_preview)
         preview_column.addWidget(self._recommended_preview, 1)
         selection_column.addWidget(preview_card, 1)
 
         cues_card, cues_column = theme.make_card(
-            "Cues (select one, a range, or several — material timeline order is preserved)"
+            "Cues (select one, a range, or several — material timeline order is preserved)",
+            decorated=False,
         )
         self._cue_list = QListWidget()
         theme.configure_long_text_list(self._cue_list)

@@ -148,7 +148,7 @@ class ExportDialog(QDialog):
         scroll.setWidget(content)
 
         # ---- scope ----
-        scope_card, scope_column = theme.make_card("Scope")
+        scope_card, scope_column = theme.make_card("Scope", decorated=False)
         scope_row = QHBoxLayout()
         scope_row.addWidget(QLabel("Scope:"))
         self._scope_combo = QComboBox()
@@ -212,7 +212,7 @@ class ExportDialog(QDialog):
         # questions and answers (raw text)") still dictated the dialog's
         # minimum width on their own -- each row now pairs a bare checkbox
         # with a separately word-wrapped QLabel instead.
-        categories_card, categories_column = theme.make_card("Evidence categories")
+        categories_card, categories_column = theme.make_card("Evidence categories", decorated=False)
         categories_grid = QGridLayout()
         self._category_checkboxes: dict[str, QCheckBox] = {}
         for index, category in enumerate(export_privacy.EVIDENCE_CATEGORIES):
@@ -230,7 +230,7 @@ class ExportDialog(QDialog):
         # matching the wireframe's own composition, the explanatory
         # sentence is a separate word-wrapped body line under a short
         # "Privacy Review" title instead.
-        privacy_card, privacy_column = theme.make_card("Privacy Review")
+        privacy_card, privacy_column = theme.make_card("Privacy Review", decorated=False)
         privacy_explanation = QLabel("Include these fields (unchecked fields are redacted, not omitted):")
         privacy_explanation.setWordWrap(True)
         theme.apply_role(privacy_explanation, "caption")

@@ -9,8 +9,8 @@ from __future__ import annotations
 
 import random
 
-from PySide6.QtCore import QPointF, Qt
-from PySide6.QtGui import QColor, QImage, QPainter, QPen, QPixmap, QPolygonF
+from PySide6.QtCore import QPointF, QRectF, Qt
+from PySide6.QtGui import QColor, QImage, QPainter, QPainterPath, QPen, QPixmap, QPolygonF
 from PySide6.QtWidgets import QFrame, QTextEdit, QWidget
 
 RULED_LINE_SPACING_PX = 28  # matches comfortable line height at 10pt font
@@ -120,6 +120,66 @@ class GrainedPaperFrame(QFrame):
         _paint_dog_ear(self)
 
 
+def _seeded_offset(seed_key: tuple, index: int, amplitude: float) -> float:
+    """A fixed, deterministic offset in `[-amplitude, amplitude]`, stable for
+    a given `(seed_key, index)` -- never per-frame/per-paint randomness."""
+    rng = random.Random(str((*seed_key, index)))
+    return (rng.random() * 2 - 1) * amplitude
+
+
+def paint_ink_outline(painter: QPainter, width: float, height: float, color: QColor, radius: float = 9.0) -> None:
+    """Paint a deterministic, gently irregular rounded-rect outline in a
+    doubled sketchy stroke -- the ink/pencil line character the approved
+    due-frame boards show on every button and card edge (a hand-drawn line
+    is very slightly retraced, not a mathematically single, perfectly
+    uniform machine stroke). M13 Due-Frame Polish, Axis 1 continuation.
+
+    Deterministic from `(width, height)` only: one control at one size
+    always renders identically, and a resize recomputes to a new but still
+    fixed shape -- never flickering per-frame noise.
+    """
+    if width <= 3 or height <= 3:
+        return
+    inset = 1.4
+    rect = QRectF(inset, inset, width - 2 * inset, height - 2 * inset)
+    r = min(radius, rect.width() / 2, rect.height() / 2)
+    base_path = QPainterPath()
+    base_path.addRoundedRect(rect, r, r)
+
+    seed = (round(width), round(height))
+    # Two passes: a crisp main stroke, and a second, faint, very slightly
+    # offset/rotated retrace -- the classic "hand went over the line twice"
+    # sketch technique, cheap and reliable compared to perturbing the path
+    # itself point-by-point.
+    passes = (
+        (0.0, 0.0, 0.0, 1.0, 1.15),
+        (
+            _seeded_offset(seed, 0, 0.9),
+            _seeded_offset(seed, 1, 0.9),
+            _seeded_offset(seed, 2, 0.6),
+            0.5,
+            1.05,
+        ),
+    )
+    center = rect.center()
+    for dx, dy, rotation_deg, alpha, width_px in passes:
+        painter.save()
+        painter.translate(center)
+        painter.rotate(rotation_deg)
+        painter.translate(-center)
+        painter.translate(dx, dy)
+        stroke_color = QColor(color)
+        stroke_color.setAlphaF(stroke_color.alphaF() * alpha)
+        pen = QPen(stroke_color)
+        pen.setWidthF(width_px)
+        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+        pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+        painter.setPen(pen)
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.drawPath(base_path)
+        painter.restore()
+
+
 _DOG_EAR_SIZE_PX = 15
 _DOG_EAR_INSET_PX = 9  # keeps the fold clear of a rounded card's own corner radius
 
@@ -153,15 +213,22 @@ def _paint_dog_ear(widget: QWidget) -> None:
 
 
 class LayeredPaperFrame(QFrame):
-    """A page/card frame with one small lifted paper corner at its
-    bottom-right, instead of a perfectly flat single machine-drawn
-    rectangle (M13 Due-Frame-First Visual Polish, Axis 1). Renders its own
-    normal QSS-styled rect first (fill/border/radius unchanged), then
-    overlays the fixed dog-ear fold on top.
+    """A page/card frame with a painted ink-outline edge and one small
+    lifted paper corner at its bottom-right, instead of a perfectly flat
+    single machine-drawn rectangle (M13 Due-Frame Polish, Axis 1). Its own
+    QSS supplies the fill/radius only (border is transparent -- the QSS
+    role rule is responsible for that); this class paints the edge line
+    itself, then overlays the fixed dog-ear fold.
     """
 
     def paintEvent(self, event) -> None:  # type: ignore[override]
         super().paintEvent(event)
+        from listentrace.ui import theme
+
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        paint_ink_outline(painter, self.width(), self.height(), theme.qcolor("paper_edge"), radius=9.0)
+        painter.end()
         _paint_dog_ear(self)
 
 

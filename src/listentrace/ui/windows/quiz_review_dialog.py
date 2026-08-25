@@ -53,7 +53,7 @@ class QuizReviewDialog(QDialog):
         layout.setSpacing(SPACE_NORMAL)
 
         # Score Dossier Header
-        score_card, score_layout = theme.make_card()
+        score_card, score_layout = theme.make_card(decorated=False)
         apply_surface(score_card, "paper")
 
         attempt = self._review.attempt
@@ -74,7 +74,7 @@ class QuizReviewDialog(QDialog):
         layout.addWidget(score_card)
 
         # Main Splitter (Left: Question List | Right: Detail Canvas)
-        list_frame, list_column = theme.make_card()
+        list_frame, list_column = theme.make_card(decorated=False)
         apply_surface(list_frame, "paper")
 
         list_hdr = QLabel("QUESTIONS REVIEW:")
@@ -88,7 +88,7 @@ class QuizReviewDialog(QDialog):
         self._list.currentItemChanged.connect(self._on_selection_changed)
         list_column.addWidget(self._list, 1)
 
-        detail_frame, detail_column = theme.make_card()
+        detail_frame, detail_column = theme.make_card(decorated=False)
         apply_surface(detail_frame, "paper")
 
         detail_hdr = QLabel("QUESTION ANALYSIS & FEEDBACK:")

@@ -37,6 +37,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QListWidget,
+    QPushButton,
     QSizePolicy,
     QVBoxLayout,
     QWidget,
@@ -47,6 +48,7 @@ from listentrace.ui.widgets.notebook_paper import (
     LayeredPaperFrame,
     RuledPaperFrame,
     SpiralBindingWidget,
+    paint_ink_outline,
 )
 
 # ---------------------------------------------------------------------------
@@ -254,6 +256,59 @@ def css(token: str, theme_mode: str = "light") -> str:
     return f"rgba({r}, {g}, {b}, {a / 255:.3f})"
 
 
+# M13 Due-Frame Polish, Axis 1 continuation: the roles whose ordinary
+# (non-hero) rendering gets a painted ink-outline edge instead of a flat
+# QSS 1px border -- the due-frame boards' clearest remaining "still looks
+# like Qt" signal was button/frame line character, not radius alone.
+# "quiet" is deliberately excluded: it is a borderless/flat action by
+# product design (DESIGN.md's action grammar), and an ink outline would
+# contradict that semantic, not reinforce it.
+_INK_OUTLINE_BUTTON_ROLES = {"primary", "secondary", "danger", "success"}
+_INK_OUTLINE_BUTTON_TOKENS = {
+    "primary": "accent_pressed",
+    "secondary": "handwritten_blue",
+    "danger": "danger_hover",
+    "success": "success",
+}
+
+
+def _install_ink_outline_button_paint(widget: QPushButton, role: str) -> None:
+    """Monkeypatch one `QPushButton` instance's `paintEvent` to run Qt's own
+    QSS-driven paint first (fill/text/hover/pressed/disabled all unchanged),
+    then overlay a deterministic sketchy ink-outline edge -- one shared
+    primitive installed from the single `apply_role()` chokepoint every
+    button already goes through, not a per-window custom widget. Guarded so
+    a widget already carrying the override is never double-patched (this
+    function can run more than once on the same widget across a role
+    change or a later `apply_role()` re-call)."""
+    if widget.property("_ink_outline_installed"):
+        return
+    widget.setProperty("_ink_outline_installed", True)
+    base_paint_event = QPushButton.paintEvent
+
+    def _paint_event(self: QPushButton, event) -> None:  # noqa: ANN001
+        base_paint_event(self, event)
+        if not self.isEnabled():
+            return
+        current_role = self.property("role")
+        if current_role not in _INK_OUTLINE_BUTTON_TOKENS:
+            return
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        paint_ink_outline(
+            painter,
+            self.width(),
+            self.height(),
+            qcolor(_INK_OUTLINE_BUTTON_TOKENS[current_role]),
+            radius=float(RADIUS_CONTROL) + 1.0,
+        )
+        painter.end()
+
+    import types
+
+    widget.paintEvent = types.MethodType(_paint_event, widget)
+
+
 def apply_role(widget: QWidget, role: str) -> None:
     """Tag `widget` with a presentation role consumed by the component-layer QSS."""
     widget.setProperty("role", role)
@@ -261,6 +316,8 @@ def apply_role(widget: QWidget, role: str) -> None:
     if style is not None:
         style.unpolish(widget)
         style.polish(widget)
+    if isinstance(widget, QPushButton) and role in _INK_OUTLINE_BUTTON_ROLES:
+        _install_ink_outline_button_paint(widget, role)
 
 
 def apply_surface(widget: QWidget, surface: str) -> None:
@@ -408,12 +465,22 @@ def apply_paper_shadow(widget: QWidget, tier: str = "full") -> None:
     widget.setGraphicsEffect(effect)
 
 
-def make_card(title: str | None = None) -> tuple[QFrame, QVBoxLayout]:
-    """A light `QFrame[role="card"]` surface with spacious padding, and a
-    small lifted paper corner (M13 Due-Frame-First Visual Polish, Axis 1)
-    instead of a perfectly flat machine rectangle."""
-    frame = LayeredPaperFrame()
-    apply_role(frame, "card")
+def make_card(title: str | None = None, decorated: bool = True) -> tuple[QFrame, QVBoxLayout]:
+    """A light card surface with spacious padding.
+
+    `decorated=True` (default) is the M13 Due-Frame Polish, Axis 1 paper
+    treatment -- a painted ink-outline edge and a small lifted paper corner
+    instead of a perfectly flat machine rectangle -- scoped to the
+    rendering map's 7 rich workspace surfaces (Player, Guided Session,
+    Quick Practice Run, Shadowing, Quiz, Main Library, Learning History).
+    Pass `decorated=False` for a plain flat card: the compact-dialog
+    surfaces (Export/Import/Quick Practice Start/Quiz Review) keep today's
+    plain rectangle convention, matching the due-frame boards' own
+    restraint there (no paper/ink treatment shown on those boards) rather
+    than decorating every card indiscriminately.
+    """
+    frame = LayeredPaperFrame() if decorated else QFrame()
+    apply_role(frame, "card" if decorated else "card_plain")
     layout = QVBoxLayout(frame)
     layout.setContentsMargins(SPACE_SECTION, SPACE_SECTION, SPACE_SECTION, SPACE_SECTION)
     layout.setSpacing(SPACE_NORMAL)
@@ -1136,7 +1203,7 @@ QSplitter[role="player_split"]::handle:horizontal:hover {{
 }}
 QFrame[role="media_frame"] {{
     background-color: {css('surface_paper', m)};
-    border: {BORDER_WIDTH}px solid {css('line', m)};
+    border: {BORDER_WIDTH}px solid transparent;
     border-top-left-radius: {RADIUS_CARD_TL}px;
     border-top-right-radius: {RADIUS_CARD_TR}px;
     border-bottom-right-radius: {RADIUS_CARD_BR}px;
@@ -1314,13 +1381,26 @@ QPushButton[role="notebook_destructive_action"]:disabled {{
 }}
 
 /* Surfaces & Containers */
+/* M13 Due-Frame Polish, Axis 1 continuation: the edge line is now painted
+   by LayeredPaperFrame.paintEvent() (a deterministic ink-outline stroke),
+   not this QSS border -- kept as `solid transparent` (not `none`) so Qt's
+   background-clip still respects the per-corner radius below. */
 QFrame[role="card"] {{
     background-color: {css('surface', m)};
-    border: {BORDER_WIDTH}px solid {css('line', m)};
+    border: {BORDER_WIDTH}px solid transparent;
     border-top-left-radius: {RADIUS_CARD_TL}px;
     border-top-right-radius: {RADIUS_CARD_TR}px;
     border-bottom-right-radius: {RADIUS_CARD_BR}px;
     border-bottom-left-radius: {RADIUS_CARD_BL}px;
+}}
+
+/* Plain flat card (M13 Due-Frame Polish, Axis 1 scoping) -- the
+   pre-Axis-1 rectangle, for compact dialogs the due-frame boards show
+   with no paper/ink treatment. */
+QFrame[role="card_plain"] {{
+    background-color: {css('surface', m)};
+    border: {BORDER_WIDTH}px solid {css('line', m)};
+    border-radius: {RADIUS_CARD}px;
 }}
 
 /* Metric tile (M13 Due-Frame-First Visual Polish, Axis 5): a small

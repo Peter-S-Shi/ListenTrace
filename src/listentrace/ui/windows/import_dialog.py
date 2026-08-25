@@ -33,7 +33,7 @@ class ImportDialog(QDialog):
         layout.setContentsMargins(theme.SPACE_SECTION, theme.SPACE_SECTION, theme.SPACE_SECTION, theme.SPACE_SECTION)
         layout.setSpacing(theme.SPACE_NORMAL)
 
-        form_card, form_column = theme.make_card()
+        form_card, form_column = theme.make_card(decorated=False)
 
         self._media_edit = QLineEdit()
         form_column.addLayout(self._path_row("Media file:", self._media_edit, self._browse_media))
