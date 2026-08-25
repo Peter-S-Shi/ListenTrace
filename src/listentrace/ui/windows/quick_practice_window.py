@@ -134,8 +134,9 @@ class QuickPracticeWindow(QMainWindow):
         apply_role(self._progress_label, "caption")
         header_row.addWidget(self._progress_label, 1)
 
-        close_top_btn = QPushButton("✕ Exit")
+        close_top_btn = QPushButton("Exit")
         apply_role(close_top_btn, "quiet")
+        theme.set_button_icon(close_top_btn, "close", color_token="muted")
         close_top_btn.clicked.connect(self.close)
         header_row.addWidget(close_top_btn)
         layout.addLayout(header_row)
@@ -798,9 +799,10 @@ class QuickPracticeWindow(QMainWindow):
         # Shadowed Action
         action_card, action_layout = theme.make_card()
         apply_surface(action_card, "paper")
-        self._mark_shadowed_button = QPushButton("✓ Mark Shadowed (Optional)")
+        self._mark_shadowed_button = QPushButton("Mark Shadowed (Optional)")
         self._mark_shadowed_button.clicked.connect(self._on_mark_shadowed_clicked)
         apply_role(self._mark_shadowed_button, "secondary")
+        theme.set_button_icon(self._mark_shadowed_button, "check", color_token="ink")
         action_layout.addWidget(self._mark_shadowed_button)
         layout.addWidget(action_card)
 

@@ -39,6 +39,33 @@ def test_spiral_ring_pitch_matches_the_corrected_32px_target():
     assert notebook_paper._RING_SPACING_PX == 32
 
 
+def test_grain_tile_opacity_is_within_the_frozen_2_to_3_percent_band(qapp):
+    tile = notebook_paper._grain_tile()
+
+    # Sample the alpha channel directly -- the tile is a fixed-seed
+    # deterministic luminance-noise pattern, so every pixel shares the same
+    # alpha regardless of its (random) luminance value.
+    alpha_fraction = tile.toImage().pixelColor(0, 0).alphaF()
+    assert 0.02 <= alpha_fraction <= 0.03
+
+
+def test_grain_tile_is_deterministic_across_calls(qapp):
+    """Fixed seed, not per-frame flicker -- repeated calls return the cached
+    tile, and rebuilding it from scratch reproduces the same pixels."""
+    first = notebook_paper._build_grain_tile()
+    second = notebook_paper._build_grain_tile()
+
+    assert first.toImage() == second.toImage()
+
+
+def test_make_notebook_surface_uses_the_grained_paper_frame(qapp):
+    from listentrace.ui import theme
+
+    frame, _layout = theme.make_notebook_surface("Title")
+
+    assert isinstance(frame, notebook_paper.GrainedPaperFrame)
+
+
 def test_ruled_text_edit_viewport_does_not_autofill_over_the_custom_paint_layer(qapp):
     """The rendering contract requires ruled/margin lines to sit *under*
     readable text. QAbstractScrollArea's default viewport autofill erases

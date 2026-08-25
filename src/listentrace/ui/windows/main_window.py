@@ -45,6 +45,7 @@ from listentrace.ui.theme import (
     configure_long_text_list,
     make_card,
     make_notebook_surface,
+    set_button_icon,
 )
 from listentrace.ui.widgets.recording_panel import recording_change_bus
 from listentrace.ui.windows.guided_session_window import GuidedSessionWindow
@@ -262,8 +263,9 @@ class MainWindow(QMainWindow):
         action_suite_box.setSpacing(SPACE_NORMAL)
 
         # Dominant Hero Action: Open Player
-        self._open_player_button = QPushButton("▶ Open Player (Listening Focus)")
+        self._open_player_button = QPushButton("Open Player (Listening Focus)")
         apply_role(self._open_player_button, "primary")
+        set_button_icon(self._open_player_button, "play", color_token="ink_on_accent")
         self._open_player_button.clicked.connect(self._on_open_player_clicked)
         action_suite_box.addWidget(self._open_player_button)
 

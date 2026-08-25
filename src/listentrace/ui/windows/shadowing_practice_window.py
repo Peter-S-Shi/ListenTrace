@@ -96,8 +96,9 @@ class ShadowingPracticeWindow(QMainWindow):
         apply_role(self._progress_label, "caption")
         header_row.addWidget(self._progress_label, 1)
 
-        close_top_btn = QPushButton("✕ Exit Studio")
+        close_top_btn = QPushButton("Exit Studio")
         apply_role(close_top_btn, "quiet")
+        theme.set_button_icon(close_top_btn, "close", color_token="muted")
         close_top_btn.clicked.connect(self.close)
         header_row.addWidget(close_top_btn)
         layout.addLayout(header_row)
@@ -123,9 +124,10 @@ class ShadowingPracticeWindow(QMainWindow):
         cue_layout.addWidget(self._cue_label)
 
         transport_row = QHBoxLayout()
-        self._previous_button = QPushButton("◀ Previous Cue")
+        self._previous_button = QPushButton("Previous Cue")
         self._previous_button.clicked.connect(self._on_previous_clicked)
         apply_role(self._previous_button, "secondary")
+        theme.set_button_icon(self._previous_button, "back", color_token="ink")
 
         self._play_button = QPushButton("Play")
         self._play_button.clicked.connect(self._on_play_clicked)
@@ -139,9 +141,10 @@ class ShadowingPracticeWindow(QMainWindow):
         self._loop_button.clicked.connect(self._on_loop_clicked)
         apply_role(self._loop_button, "secondary")
 
-        self._next_button = QPushButton("Next Cue ▶")
+        self._next_button = QPushButton("Next Cue")
         self._next_button.clicked.connect(self._on_next_clicked)
         apply_role(self._next_button, "secondary")
+        theme.set_button_icon(self._next_button, "forward", color_token="ink")
 
         self._loop_settings_button = QPushButton("Loop Settings...")
         self._loop_settings_button.clicked.connect(self._on_open_loop_settings)

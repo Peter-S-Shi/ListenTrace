@@ -96,6 +96,7 @@ class QuizHistoryDialog(QDialog):
             if attempt.status == "completed":
                 label += f", score {attempt.correct_count}/{attempt.actual_count}"
             item = QListWidgetItem(label)
+            item.setIcon(theme.status_dot_icon(attempt.status))
             item.setData(Qt.ItemDataRole.UserRole, attempt.id)
             self._list.addItem(item)
 

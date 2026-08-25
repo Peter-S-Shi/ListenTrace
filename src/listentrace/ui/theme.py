@@ -28,10 +28,11 @@ import sys
 from pathlib import Path
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QColor, QIcon
+from PySide6.QtGui import QColor, QIcon, QPainter, QPixmap
 from PySide6.QtWidgets import (
     QApplication,
     QFrame,
+    QGraphicsDropShadowEffect,
     QHBoxLayout,
     QLabel,
     QListWidget,
@@ -40,7 +41,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from listentrace.ui.widgets.notebook_paper import RuledPaperFrame, SpiralBindingWidget
+from listentrace.ui.widgets.notebook_paper import GrainedPaperFrame, RuledPaperFrame, SpiralBindingWidget
 
 # ---------------------------------------------------------------------------
 # Tokens: Light & Dark Palettes
@@ -241,6 +242,62 @@ def apply_variant(widget: QWidget, **properties: str) -> None:
         style.polish(widget)
 
 
+_STATUS_DOT_DIAMETER_PX = 10
+_STATUS_DOT_TOKENS = {
+    "active": "accent",
+    "completed": "success",
+    "abandoned": "warning",
+}
+
+
+def status_dot_icon(status: str) -> QIcon:
+    """A 10px filled-circle `QIcon` in the frozen status-marker color for
+    `status` ("active"/"completed"/"abandoned") -- DESIGN.md §3.6,
+    M13_RENDERING_IMPLEMENTATION_MAP.md `status_dot`. Always set alongside
+    the existing textual status label via `QListWidgetItem.setIcon()`, never
+    as a replacement for it -- color alone must never carry the state.
+    """
+    token = _STATUS_DOT_TOKENS.get(status, "neutral_state")
+    canvas = _STATUS_DOT_DIAMETER_PX + 4
+    pixmap = QPixmap(canvas, canvas)
+    pixmap.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(pixmap)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+    painter.setPen(Qt.PenStyle.NoPen)
+    painter.setBrush(qcolor(token))
+    offset = (canvas - _STATUS_DOT_DIAMETER_PX) / 2
+    painter.drawEllipse(offset, offset, _STATUS_DOT_DIAMETER_PX, _STATUS_DOT_DIAMETER_PX)
+    painter.end()
+    return QIcon(pixmap)
+
+
+def apply_paper_shadow(widget: QWidget, tier: str = "full") -> None:
+    """Attach the frozen paper-shadow treatment (M13 Stage B; DESIGN.md §6,
+    Gap Register G10) to `widget`. Two tiers only:
+
+    - "full": an independent page-level dossier/paper sheet layered against
+      the desk -- #5B4935 @ 14%, offset (0, 3), blur 10.
+    - "mini": a mini-notebook module -- #5B4935 @ 10%, offset (0, 2), blur 6.
+
+    Per the frozen coverage rule, nested ruled lists/inset panels/rows/tabs/
+    controls *inside* an already-shadowed sheet get no shadow of their own
+    -- do not call this on anything but a top-level page sheet or a
+    mini-notebook card.
+    """
+    effect = QGraphicsDropShadowEffect(widget)
+    if tier == "mini":
+        effect.setColor(qcolor("shadow_mini"))
+        effect.setXOffset(0)
+        effect.setYOffset(2)
+        effect.setBlurRadius(6)
+    else:
+        effect.setColor(qcolor("shadow_full"))
+        effect.setXOffset(0)
+        effect.setYOffset(3)
+        effect.setBlurRadius(10)
+    widget.setGraphicsEffect(effect)
+
+
 def make_card(title: str | None = None) -> tuple[QFrame, QVBoxLayout]:
     """A light `QFrame[role="card"]` surface with spacious padding."""
     frame = QFrame()
@@ -283,9 +340,10 @@ def make_notebook_surface(
             ``"Study Dossier"`` for backward compatibility with the MainWindow
             dossier panel.
     """
-    frame = QFrame()
+    frame = GrainedPaperFrame()
     apply_surface(frame, "paper")
     apply_role(frame, "notebook_page")
+    apply_paper_shadow(frame, "full")
     root_layout = QVBoxLayout(frame)
     root_layout.setContentsMargins(0, 0, 0, 0)
     root_layout.setSpacing(0)
@@ -381,6 +439,75 @@ def make_inset_panel(dense: bool = False) -> tuple[QFrame, QVBoxLayout]:
     return frame, layout
 
 
+def make_surface_header(
+    title: str,
+    subtitle: str | None = None,
+    chips: list[tuple[str, str]] | None = None,
+) -> QHBoxLayout:
+    """The shared workspace surface-header row (M13 Stage B, G6): a title
+    with optional inline metadata chips on one row, and an optional
+    subtitle/mode caption below. `chips` is a list of `(text, role)` pairs,
+    e.g. `[("VIDEO", "badge_primary"), ("12 CUES", "badge_secondary")]`.
+
+    Returns the outer `QHBoxLayout` with the title block already added at
+    stretch factor 1 -- the caller appends any trailing action (e.g. a
+    "Return to Library"/"Exit" button) via `top_bar.addWidget(...)`.
+
+    Scoped to the 7 rich workspace surfaces this rendering map names
+    (Player, Guided Session, Quick Practice Run, Shadowing, Quiz, Main
+    Library, Learning History). The lighter compact-dialog surfaces keep
+    today's native-titlebar-carries-identity convention and must not
+    receive this -- it is not a general-purpose header for every window.
+    """
+    top_bar = QHBoxLayout()
+    title_col = QVBoxLayout()
+    title_row = QHBoxLayout()
+    title_row.setSpacing(SPACE_NORMAL)
+
+    title_label = QLabel(title)
+    apply_role(title_label, "title")
+    title_row.addWidget(title_label)
+
+    for chip_text, chip_role in chips or ():
+        chip = QLabel(chip_text)
+        apply_role(chip, chip_role)
+        title_row.addWidget(chip)
+    title_row.addStretch(1)
+
+    title_col.addLayout(title_row)
+    if subtitle is not None:
+        subtitle_label = QLabel(subtitle)
+        apply_role(subtitle_label, "caption")
+        title_col.addWidget(subtitle_label)
+
+    top_bar.addLayout(title_col, 1)
+    return top_bar
+
+
+_DECORATIVE_MOTIFS = {
+    "star": ("★", "star_gold"),
+    "leaf": ("❧", "leaf_green"),
+    "flower": ("✿", "flower_pink"),
+}
+
+
+def make_decorative_motif(kind: str, size_px: int = 20) -> QLabel:
+    """A single decorative motif glyph (DESIGN.md §10.1) in its frozen
+    token color -- `kind` is one of "star"/"leaf"/"flower". Purely
+    ornamental; carries no interaction and must only be placed in a
+    genuinely empty paper corner or title/tape zone, never over learning
+    content, controls, dense evidence, or beside danger/error regions, and
+    never merely to fill empty space. Each surface's per-motif budget and
+    eligible zones are in M13_RENDERING_IMPLEMENTATION_MAP.md §7 --
+    placement is a per-surface visual-QA decision, not something this
+    helper decides.
+    """
+    glyph, token = _DECORATIVE_MOTIFS[kind]
+    label = QLabel(glyph)
+    label.setStyleSheet(f"color: {css(token)}; font-size: {size_px}px; background: transparent;")
+    return label
+
+
 def make_media_frame() -> tuple[QFrame, QVBoxLayout]:
     """A warm paper frame around a media viewport -- media placed on a study desk."""
     frame = QFrame()
@@ -404,6 +531,7 @@ def make_mini_notebook(title: str) -> tuple[QFrame, QVBoxLayout]:
     """
     frame = QFrame()
     apply_role(frame, "mini_notebook_card")
+    apply_paper_shadow(frame, "mini")
     root_layout = QHBoxLayout(frame)
     root_layout.setContentsMargins(0, 0, 0, 0)
     root_layout.setSpacing(0)
@@ -1285,3 +1413,88 @@ def get_app_icon() -> QIcon:
         if path.is_file():
             return QIcon(str(path))
     return QIcon()
+
+
+# ---------------------------------------------------------------------------
+# Functional icon system (M13 Stage B, G7/G21)
+#
+# One bundled, repo-local, permissively-licensed monochrome-outline SVG
+# family (this project's own hand-authored geometric glyphs -- no
+# third-party icon library, no runtime web dependency). 24x24 source
+# viewBox, ~2px stroke, round cap/join. `get_icon()` renders and tints an
+# SVG to the requested token color, since the source files use a neutral
+# stroke rather than baking in any one theme color. The sanctioned
+# inventory is derived only from real production actions currently
+# expressed as bare Unicode glyphs (see the migrated call sites in
+# player_window.py, guided_session_window.py, quick_practice_window.py,
+# quiz_window.py, shadowing_practice_window.py, main_window.py); the
+# decorative "*" completion flourish is explicitly NOT part of this system.
+# ---------------------------------------------------------------------------
+
+ICON_SIZE_NORMAL = 16
+ICON_SIZE_EMPHASIZED = 20
+ICON_TEXT_GAP_PX = 6
+
+
+def _icons_search_dirs() -> list[Path]:
+    """Candidate directories for bundled icon SVGs, covering every runtime
+    context -- mirrors `_icon_search_paths()`'s frozen/dev split above."""
+    candidates: list[Path] = []
+    if getattr(sys, "frozen", False):
+        candidates.append(Path(sys.executable).resolve().parent / "icons")
+        meipass = getattr(sys, "_MEIPASS", None)
+        if meipass:
+            candidates.append(Path(meipass) / "icons")
+    candidates.append(Path(__file__).resolve().parent / "icons")
+    return candidates
+
+
+def _find_icon_path(name: str) -> Path | None:
+    for directory in _icons_search_dirs():
+        candidate = directory / f"{name}.svg"
+        if candidate.is_file():
+            return candidate
+    return None
+
+
+def set_button_icon(
+    button: QWidget,
+    name: str,
+    color_token: str = "secondary",
+    emphasized: bool = False,
+) -> None:
+    """Set a sanctioned functional icon on `button` at the frozen normal
+    (16px) or emphasized (18-20px) size, alongside its existing text label
+    -- never as a replacement for it. Thin convenience wrapper around
+    `get_icon()` so call sites don't each re-derive `QSize(...)`."""
+    from PySide6.QtCore import QSize
+
+    size = ICON_SIZE_EMPHASIZED if emphasized else ICON_SIZE_NORMAL
+    button.setIcon(get_icon(name, color_token=color_token, size=size))
+    button.setIconSize(QSize(size, size))
+
+
+def get_icon(name: str, color_token: str = "secondary", size: int = ICON_SIZE_NORMAL) -> QIcon:
+    """A tinted `QIcon` rendered from the bundled `icons/{name}.svg`, or a
+    null `QIcon` if the file can't be found (degrades to no icon, never a
+    crash -- callers keep their existing text label either way).
+
+    `color_token` should track the icon's semantic state per DESIGN.md §7.6:
+    `secondary` (ink_secondary) normal, `accent` active/primary, `danger`
+    danger, `disabled_text` (ink_disabled) disabled.
+    """
+    from PySide6.QtSvg import QSvgRenderer
+
+    path = _find_icon_path(name)
+    if path is None:
+        return QIcon()
+
+    renderer = QSvgRenderer(str(path))
+    pixmap = QPixmap(size, size)
+    pixmap.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(pixmap)
+    renderer.render(painter)
+    painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceIn)
+    painter.fillRect(pixmap.rect(), qcolor(color_token))
+    painter.end()
+    return QIcon(pixmap)

@@ -269,8 +269,9 @@ class GuidedSessionWindow(QMainWindow):
         apply_role(self._stage_progress_label, "caption")
         header_row.addWidget(self._stage_progress_label, 1)
 
-        close_top_btn = QPushButton("✕ Exit Session")
+        close_top_btn = QPushButton("Exit Session")
         apply_role(close_top_btn, "quiet")
+        theme.set_button_icon(close_top_btn, "close", color_token="muted")
         close_top_btn.clicked.connect(self.close)
         header_row.addWidget(close_top_btn)
         layout.addLayout(header_row)
@@ -304,7 +305,7 @@ class GuidedSessionWindow(QMainWindow):
         layout.addWidget(self._completion_status_label)
 
         nav_row = QHBoxLayout()
-        self._back_button = QPushButton("◀ Back")
+        self._back_button = QPushButton("Back")
         self._back_button.clicked.connect(self._on_back_clicked)
         self._skip_button = QPushButton("Skip Stage")
         self._skip_button.clicked.connect(self._on_skip_stage_clicked)
@@ -345,6 +346,7 @@ class GuidedSessionWindow(QMainWindow):
     def _apply_presentation(self) -> None:
         """Milestone 11 button-role assignment."""
         apply_role(self._back_button, "quiet")
+        theme.set_button_icon(self._back_button, "back", color_token="muted")
         apply_role(self._skip_button, "quiet")
         apply_role(self._continue_button, "primary")
         apply_role(self._close_button, "quiet")
@@ -775,15 +777,17 @@ class GuidedSessionWindow(QMainWindow):
         self._capture_delete_button.setEnabled(False)
         apply_role(self._capture_delete_button, "danger")
 
-        self._capture_move_up_button = QPushButton("↑ Move Up")
+        self._capture_move_up_button = QPushButton("Move Up")
         self._capture_move_up_button.clicked.connect(self._on_move_capture_up_clicked)
         self._capture_move_up_button.setEnabled(False)
         apply_role(self._capture_move_up_button, "quiet")
+        theme.set_button_icon(self._capture_move_up_button, "up", color_token="muted")
 
-        self._capture_move_down_button = QPushButton("↓ Move Down")
+        self._capture_move_down_button = QPushButton("Move Down")
         self._capture_move_down_button.clicked.connect(self._on_move_capture_down_clicked)
         self._capture_move_down_button.setEnabled(False)
         apply_role(self._capture_move_down_button, "quiet")
+        theme.set_button_icon(self._capture_move_down_button, "down", color_token="muted")
 
         buttons_row.addWidget(self._capture_update_button)
         buttons_row.addWidget(self._capture_delete_button)
@@ -1024,9 +1028,10 @@ class GuidedSessionWindow(QMainWindow):
         self._delete_diagnosis_button.setEnabled(False)
         apply_role(self._delete_diagnosis_button, "danger")
 
-        self._no_difficulty_button = QPushButton("✓ No Notable Difficulty")
+        self._no_difficulty_button = QPushButton("No Notable Difficulty")
         self._no_difficulty_button.clicked.connect(self._on_no_difficulty_clicked)
         apply_role(self._no_difficulty_button, "secondary")
+        theme.set_button_icon(self._no_difficulty_button, "check", color_token="ink")
 
         diag_buttons_row.addWidget(self._save_diagnosis_button)
         diag_buttons_row.addWidget(self._delete_diagnosis_button)
@@ -1301,9 +1306,10 @@ class GuidedSessionWindow(QMainWindow):
         cue_layout.addWidget(self._shadowing_cue_label)
 
         transport_row = QHBoxLayout()
-        self._shadowing_previous_button = QPushButton("◀ Previous Cue")
+        self._shadowing_previous_button = QPushButton("Previous Cue")
         self._shadowing_previous_button.clicked.connect(self._on_shadowing_previous_clicked)
         apply_role(self._shadowing_previous_button, "secondary")
+        theme.set_button_icon(self._shadowing_previous_button, "back", color_token="ink")
 
         self._shadowing_play_button = QPushButton("Play")
         self._shadowing_play_button.clicked.connect(self._on_shadowing_play_clicked)
@@ -1317,9 +1323,10 @@ class GuidedSessionWindow(QMainWindow):
         self._shadowing_loop_button.clicked.connect(self._on_shadowing_loop_clicked)
         apply_role(self._shadowing_loop_button, "secondary")
 
-        self._shadowing_next_button = QPushButton("Next Cue ▶")
+        self._shadowing_next_button = QPushButton("Next Cue")
         self._shadowing_next_button.clicked.connect(self._on_shadowing_next_clicked)
         apply_role(self._shadowing_next_button, "secondary")
+        theme.set_button_icon(self._shadowing_next_button, "forward", color_token="ink")
 
         self._shadowing_loop_settings_button = QPushButton("Loop Settings...")
         self._shadowing_loop_settings_button.clicked.connect(self._on_open_loop_settings)
@@ -1351,9 +1358,10 @@ class GuidedSessionWindow(QMainWindow):
         action_layout.addWidget(self._shadowing_note_edit)
 
         action_row = QHBoxLayout()
-        self._mark_practiced_button = QPushButton("✓ Mark Practiced")
+        self._mark_practiced_button = QPushButton("Mark Practiced")
         self._mark_practiced_button.clicked.connect(self._on_mark_practiced_clicked)
         apply_role(self._mark_practiced_button, "secondary")
+        theme.set_button_icon(self._mark_practiced_button, "check", color_token="ink")
 
         self._skip_cue_button = QPushButton("Skip Cue")
         self._skip_cue_button.clicked.connect(self._on_skip_shadowing_cue_clicked)

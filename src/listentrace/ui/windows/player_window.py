@@ -154,30 +154,14 @@ class PlayerWindow(QMainWindow):
         # -------------------------------------------------------------------
         # 1. Top Bar (Context Header & Return Action)
         # -------------------------------------------------------------------
-        top_bar = QHBoxLayout()
-        title_col = QVBoxLayout()
-        title_row = QHBoxLayout()
-        title_row.setSpacing(SPACE_NORMAL)
-
-        title_label = QLabel(material.title)
-        apply_role(title_label, "title")
-        title_row.addWidget(title_label)
-
-        kind_tag = QLabel("VIDEO" if material.media_kind == "video" else "AUDIO")
-        apply_role(kind_tag, "badge_primary")
-        title_row.addWidget(kind_tag)
-
-        cue_count_tag = QLabel(f"{len(self._session.cues)} CUES")
-        apply_role(cue_count_tag, "badge_secondary")
-        title_row.addWidget(cue_count_tag)
-        title_row.addStretch(1)
-
-        subtitle_desc = QLabel("Study Desk — Synchronized playback & cue journal")
-        apply_role(subtitle_desc, "caption")
-
-        title_col.addLayout(title_row)
-        title_col.addWidget(subtitle_desc)
-        top_bar.addLayout(title_col, 1)
+        top_bar = theme.make_surface_header(
+            material.title,
+            subtitle="Study Desk — Synchronized playback & cue journal",
+            chips=[
+                ("VIDEO" if material.media_kind == "video" else "AUDIO", "badge_primary"),
+                (f"{len(self._session.cues)} CUES", "badge_secondary"),
+            ],
+        )
 
         return_button = QPushButton("Return to Library")
         apply_role(return_button, "quiet")

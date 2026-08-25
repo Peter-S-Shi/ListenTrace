@@ -96,6 +96,7 @@ class SessionHistoryDialog(QDialog):
             if session.abandoned_at:
                 label += f", abandoned {format_local_timestamp(session.abandoned_at)}"
             item = QListWidgetItem(label)
+            item.setIcon(theme.status_dot_icon(session.status))
             item.setData(Qt.ItemDataRole.UserRole, session.id)
             self._list.addItem(item)
 

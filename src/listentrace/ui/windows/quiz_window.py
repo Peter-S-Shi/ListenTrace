@@ -174,8 +174,9 @@ class QuizWindow(QMainWindow):
         apply_role(self._progress_label, "caption")
         header_row.addWidget(self._progress_label, 1)
 
-        close_top_btn = QPushButton("✕ Exit")
+        close_top_btn = QPushButton("Exit")
         apply_role(close_top_btn, "quiet")
+        theme.set_button_icon(close_top_btn, "close", color_token="muted")
         close_top_btn.clicked.connect(self.close)
         header_row.addWidget(close_top_btn)
         layout.addLayout(header_row)
@@ -261,7 +262,7 @@ class QuizWindow(QMainWindow):
         # 3. Action Footer
         # -------------------------------------------------------------------
         nav_row = QHBoxLayout()
-        self._previous_button = QPushButton("◀ Previous")
+        self._previous_button = QPushButton("Previous")
         self._previous_button.clicked.connect(self._on_previous_clicked)
         self._abandon_button = QPushButton("Abandon Quiz")
         self._abandon_button.clicked.connect(self._on_abandon_clicked)
@@ -272,7 +273,7 @@ class QuizWindow(QMainWindow):
 
         self._close_button = QPushButton("Close and Resume Later")
         self._close_button.clicked.connect(self.close)
-        self._next_button = QPushButton("Next Question ▶")
+        self._next_button = QPushButton("Next Question")
         self._next_button.clicked.connect(self._on_next_clicked)
         self._submit_button = QPushButton("★ Submit Quiz")
         self._submit_button.clicked.connect(self._on_submit_clicked)
@@ -300,6 +301,7 @@ class QuizWindow(QMainWindow):
     def _apply_presentation(self) -> None:
         """Milestone 11 button-role assignment."""
         apply_role(self._previous_button, "secondary")
+        theme.set_button_icon(self._previous_button, "back", color_token="ink")
         apply_role(self._close_button, "quiet")
         apply_role(self._abandon_button, "danger")
         apply_role(self._review_button, "secondary")
@@ -567,9 +569,11 @@ class QuizWindow(QMainWindow):
         if on_last_question:
             apply_role(self._next_button, "quiet")
             apply_role(self._submit_button, "primary")
+            theme.set_button_icon(self._next_button, "forward", color_token="muted")
         else:
             apply_role(self._next_button, "primary")
             apply_role(self._submit_button, "quiet")
+            theme.set_button_icon(self._next_button, "forward", color_token="ink_on_accent")
 
     # ---- shared playback plumbing ----
 

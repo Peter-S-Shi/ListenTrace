@@ -234,6 +234,92 @@ def test_single_line_inputs_render_at_the_34px_contract_height(qapp):
     assert _rendered_height(line_edit) == 34
 
 
+@pytest.mark.parametrize(
+    "status,token",
+    [("active", "accent"), ("completed", "success"), ("abandoned", "warning")],
+)
+def test_status_dot_icon_uses_the_frozen_color_per_status(qapp, status, token):
+    icon = theme.status_dot_icon(status)
+
+    assert isinstance(icon, QIcon)
+    assert not icon.isNull()
+    pixmap = icon.pixmap(icon.availableSizes()[0])
+    center = pixmap.toImage().pixelColor(pixmap.width() // 2, pixmap.height() // 2)
+    assert center.getRgb()[:3] == theme.qcolor(token).getRgb()[:3]
+
+
+@pytest.mark.parametrize("name", ["play", "forward", "back", "up", "down", "check", "close"])
+def test_get_icon_finds_every_sanctioned_inventory_icon(qapp, name):
+    icon = theme.get_icon(name)
+
+    assert isinstance(icon, QIcon)
+    assert not icon.isNull()
+
+
+def test_get_icon_tints_to_the_requested_color_token(qapp):
+    icon = theme.get_icon("close", color_token="danger")
+
+    pixmap = icon.pixmap(theme.ICON_SIZE_NORMAL, theme.ICON_SIZE_NORMAL)
+    image = pixmap.toImage()
+    # The X glyph's diagonal strokes cross through the center pixel.
+    center = image.pixelColor(image.width() // 2, image.height() // 2)
+    assert center.alpha() > 0
+    assert center.getRgb()[:3] == theme.qcolor("danger").getRgb()[:3]
+
+
+def test_get_icon_degrades_to_a_null_icon_for_an_unknown_name(qapp):
+    icon = theme.get_icon("does_not_exist")
+
+    assert isinstance(icon, QIcon)
+    assert icon.isNull()
+
+
+@pytest.mark.parametrize(
+    "kind,token",
+    [("star", "star_gold"), ("leaf", "leaf_green"), ("flower", "flower_pink")],
+)
+def test_make_decorative_motif_uses_the_frozen_token_color(qapp, kind, token):
+    label = theme.make_decorative_motif(kind)
+
+    assert theme.css(token) in label.styleSheet()
+
+
+def test_apply_paper_shadow_full_tier_uses_the_frozen_parameters(qapp):
+    frame = QFrame()
+
+    theme.apply_paper_shadow(frame, "full")
+
+    effect = frame.graphicsEffect()
+    assert effect is not None
+    assert effect.color().getRgb() == theme.qcolor("shadow_full").getRgb()
+    assert (effect.xOffset(), effect.yOffset()) == (0, 3)
+    assert effect.blurRadius() == 10
+
+
+def test_apply_paper_shadow_mini_tier_uses_the_frozen_parameters(qapp):
+    frame = QFrame()
+
+    theme.apply_paper_shadow(frame, "mini")
+
+    effect = frame.graphicsEffect()
+    assert effect is not None
+    assert effect.color().getRgb() == theme.qcolor("shadow_mini").getRgb()
+    assert (effect.xOffset(), effect.yOffset()) == (0, 2)
+    assert effect.blurRadius() == 6
+
+
+def test_make_notebook_surface_gets_the_full_paper_shadow():
+    frame, _layout = theme.make_notebook_surface("Title")
+
+    assert frame.graphicsEffect() is not None
+
+
+def test_make_mini_notebook_gets_the_mini_paper_shadow():
+    frame, _layout = theme.make_mini_notebook("Playback")
+
+    assert frame.graphicsEffect() is not None
+
+
 def test_icon_search_paths_include_the_frozen_locations_when_frozen(monkeypatch, tmp_path):
     fake_exe = tmp_path / "ListenTrace.exe"
     fake_exe.touch()

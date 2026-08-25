@@ -7,8 +7,10 @@ than approximating either with raster assets or fragile CSS borders.
 
 from __future__ import annotations
 
+import random
+
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QColor, QPainter, QPen
+from PySide6.QtGui import QColor, QImage, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import QFrame, QTextEdit, QWidget
 
 RULED_LINE_SPACING_PX = 28  # matches comfortable line height at 10pt font
@@ -65,6 +67,56 @@ def _paint_margin_line(painter: QPainter, height: int, margin_color: QColor) -> 
     pen.setWidth(MARGIN_LINE_WIDTH_PX)
     painter.setPen(pen)
     painter.drawLine(MARGIN_INSET_PX, 0, MARGIN_INSET_PX, height)
+
+
+_GRAIN_TILE_SIZE_PX = 64
+_GRAIN_OPACITY = 0.025  # ~2.5%, within the frozen 2-3% contract band
+_grain_tile_cache: QPixmap | None = None
+
+
+def _build_grain_tile() -> QPixmap:
+    """A small deterministic pseudo-random luminance-noise tile (fixed
+    seed -- not per-frame flicker), tiled across large paper fills for a
+    restrained, non-directional procedural grain (M13 Stage B; local/
+    procedural only, no runtime-fetched texture asset)."""
+    rng = random.Random(1337)
+    image = QImage(_GRAIN_TILE_SIZE_PX, _GRAIN_TILE_SIZE_PX, QImage.Format.Format_ARGB32_Premultiplied)
+    image.fill(Qt.GlobalColor.transparent)
+    alpha = round(255 * _GRAIN_OPACITY)
+    for y in range(_GRAIN_TILE_SIZE_PX):
+        for x in range(_GRAIN_TILE_SIZE_PX):
+            luminance = rng.randint(0, 255)
+            image.setPixelColor(x, y, QColor(luminance, luminance, luminance, alpha))
+    return QPixmap.fromImage(image)
+
+
+def _grain_tile() -> QPixmap:
+    global _grain_tile_cache
+    if _grain_tile_cache is None:
+        _grain_tile_cache = _build_grain_tile()
+    return _grain_tile_cache
+
+
+def paint_paper_grain(painter: QPainter, width: int, height: int) -> None:
+    """Paint restrained procedural grain over a `width` x `height` rect.
+    Callers must paint this *before* ruled lines/text/shadows so grain
+    stays subordinate to them per the frozen hierarchy -- never on media,
+    controls, highlights, or dense-data regions."""
+    painter.drawTiledPixmap(0, 0, width, height, _grain_tile())
+
+
+class GrainedPaperFrame(QFrame):
+    """A top-level page-level paper sheet with restrained procedural grain
+    on its fill (M13 Stage B; large paper-sheet fills only -- NOT used for
+    mini-notebooks' small fills, which stay plain per the frozen rule).
+    Used by `theme.make_notebook_surface()`'s outer frame.
+    """
+
+    def paintEvent(self, event) -> None:  # type: ignore[override]
+        super().paintEvent(event)
+        painter = QPainter(self)
+        paint_paper_grain(painter, self.width(), self.height())
+        painter.end()
 
 
 class RuledTextEdit(QTextEdit):
