@@ -56,7 +56,7 @@ class QuickPracticeStartDialog(QDialog):
     ) -> None:
         super().__init__(parent)
         self.setWindowTitle(f"Quick Practice — {material_title}")
-        self.resize(560, 480)
+        self.resize(720, 520)
         self._connection = connection
         self._material_id = material_id
         self._cues = cues
@@ -64,16 +64,23 @@ class QuickPracticeStartDialog(QDialog):
 
         layout = QVBoxLayout(self)
 
-        source_row = QHBoxLayout()
+        header_label = QLabel(f"Quick Practice — {material_title}")
+        theme.apply_role(header_label, "title")
+        layout.addWidget(header_label)
+
+        regions_row = QHBoxLayout()
+        regions_row.setSpacing(theme.SPACE_SECTION)
+
+        # LEFT: PRACTICE SOURCE
+        source_card, source_column = theme.make_card("Practice Source")
         self._source_group = QButtonGroup(self)
         self._recommended_radio = QRadioButton("Recommended Practice")
         self._selected_radio = QRadioButton("Selected Cues")
         self._source_group.addButton(self._recommended_radio)
         self._source_group.addButton(self._selected_radio)
         self._recommended_radio.toggled.connect(self._on_source_changed)
-        source_row.addWidget(self._recommended_radio)
-        source_row.addWidget(self._selected_radio)
-        layout.addLayout(source_row)
+        source_column.addWidget(self._recommended_radio)
+        source_column.addWidget(self._selected_radio)
 
         recommended_row = QHBoxLayout()
         recommended_row.addWidget(QLabel("Number of cues:"))
@@ -83,13 +90,19 @@ class QuickPracticeStartDialog(QDialog):
         self._count_combo.setCurrentIndex(rules.ALLOWED_RECOMMENDED_COUNTS.index(rules.DEFAULT_RECOMMENDED_COUNT))
         self._count_combo.currentIndexChanged.connect(self._refresh_recommended_preview)
         recommended_row.addWidget(self._count_combo)
-        layout.addLayout(recommended_row)
+        source_column.addLayout(recommended_row)
+        source_column.addStretch(1)
+        regions_row.addWidget(source_card, 0)
+
+        # RIGHT: ACTIVE SELECTION / PREVIEW
+        selection_column = QVBoxLayout()
+        selection_column.setSpacing(theme.SPACE_SECTION)
 
         preview_card, preview_column = theme.make_card("Preview (transparent reasons — never a hidden score)")
         self._recommended_preview = QListWidget()
         theme.configure_long_text_list(self._recommended_preview)
         preview_column.addWidget(self._recommended_preview, 1)
-        layout.addWidget(preview_card, 1)
+        selection_column.addWidget(preview_card, 1)
 
         cues_card, cues_column = theme.make_card("Cues (select one, a range, or several — order picked is preserved)")
         self._cue_list = QListWidget()
@@ -100,7 +113,10 @@ class QuickPracticeStartDialog(QDialog):
             item.setData(Qt.ItemDataRole.UserRole, cue.id)
             self._cue_list.addItem(item)
         cues_column.addWidget(self._cue_list, 1)
-        layout.addWidget(cues_card, 1)
+        selection_column.addWidget(cues_card, 1)
+
+        regions_row.addLayout(selection_column, 1)
+        layout.addLayout(regions_row, 1)
 
         if initial_selected_cue_ids:
             self._selected_radio.setChecked(True)
