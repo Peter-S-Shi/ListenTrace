@@ -946,7 +946,10 @@ class GuidedSessionWindow(QMainWindow):
         apply_surface(left_frame, "paper")
 
         cues_hdr = QLabel("CUES & AUDIO")
-        apply_role(cues_hdr, "caption")
+        # M13 Due-Frame Polish, Axis 3: the due-frame board renders every
+        # Stage 3 panel header (this one, "Transcript & Diagnosis
+        # Notebook") in blue-ink section-header style, not plain caption.
+        apply_role(cues_hdr, "section_header")
         left_column.addWidget(cues_hdr)
 
         self._diagnosis_cue_list = QListWidget()
@@ -996,7 +999,7 @@ class GuidedSessionWindow(QMainWindow):
         apply_surface(right_frame, "paper")
 
         diag_hdr = QLabel("TRANSCRIPT & ERROR DIAGNOSIS (select text to diagnose):")
-        apply_role(diag_hdr, "caption")
+        apply_role(diag_hdr, "section_header")
         right_column.addWidget(diag_hdr)
 
         self._diagnosis_transcript_view = QTextEdit()

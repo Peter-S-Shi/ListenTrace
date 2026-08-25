@@ -354,3 +354,37 @@ class SpiralBindingWidget(QWidget):
         if usable < 0:
             return 0
         return int(usable // _RING_SPACING_PX) + 1
+
+
+_FLOURISH_WIDTH_PX = 22
+_FLOURISH_HEIGHT_PX = 12
+
+
+class SketchFlourishWidget(QWidget):
+    """A small blue-pencil hand-drawn flourish (two short offset strokes) --
+    M13 Due-Frame Polish, Axis 3. The approved due-frame boards repeatedly
+    end a rich workspace surface's blue subtitle/caption line with exactly
+    this mark (Player's "...CUE STUDY WORKSPACE", the shared-modules
+    board's "...for learning surfaces"), so it is a recurring caption-line
+    terminator, not a one-off decoration. Fixed, deterministic geometry --
+    no randomness, no rotation per instance.
+    """
+
+    def __init__(self, color: QColor, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._color = color
+        self.setFixedSize(_FLOURISH_WIDTH_PX, _FLOURISH_HEIGHT_PX)
+
+    def paintEvent(self, event) -> None:  # type: ignore[override]
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        pen = QPen(self._color)
+        pen.setWidthF(1.6)
+        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+        painter.setPen(pen)
+        # A longer lower stroke and a shorter, slightly raised upper stroke
+        # -- the same two-stroke silhouette visible in both due-frame
+        # occurrences.
+        painter.drawLine(QPointF(0, 8), QPointF(18, 6))
+        painter.drawLine(QPointF(6, 3), QPointF(20, 2))
+        painter.end()

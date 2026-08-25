@@ -357,6 +357,41 @@ def test_make_surface_header_supports_a_different_title_role_variant(qapp):
     assert header.subtitle_label.property("role") == "subtitle"
 
 
+def test_make_card_title_uses_the_section_header_role_when_decorated(qapp):
+    """M13 Due-Frame Polish, Axis 3: a decorated card's own title is a
+    blue-ink section header (e.g. Guided Session's "SESSION DIAGNOSIS (so
+    far)"), not a plain caption -- `section_header` existed in the shared
+    QSS with zero real consumers before this."""
+    frame, layout = theme.make_card("Session Diagnosis")
+
+    title_label = layout.itemAt(0).widget()
+    assert title_label.text() == "Session Diagnosis"
+    assert title_label.property("role") == "section_header"
+
+
+def test_make_card_title_stays_plain_caption_when_not_decorated(qapp):
+    """Compact dialogs (decorated=False) keep the plain caption, matching
+    the due frame's own restraint there."""
+    frame, layout = theme.make_card("Scope", decorated=False)
+
+    title_label = layout.itemAt(0).widget()
+    assert title_label.property("role") == "caption"
+
+
+def test_make_surface_header_subtitle_gets_a_sketch_flourish(qapp):
+    """M13 Due-Frame Polish, Axis 3: the due-frame boards end this exact
+    subtitle/caption line with a small blue-pencil flourish mark."""
+    from listentrace.ui.widgets.notebook_paper import SketchFlourishWidget
+
+    header = theme.make_surface_header("Material Library", subtitle="Study archive", title_role="page_title")
+
+    title_col = header.top_bar.itemAt(0).layout()
+    subtitle_row = title_col.itemAt(1).layout()
+    widgets = [subtitle_row.itemAt(i).widget() for i in range(subtitle_row.count())]
+    assert header.subtitle_label in widgets
+    assert any(isinstance(w, SketchFlourishWidget) for w in widgets)
+
+
 def test_make_surface_header_chips_get_their_own_roles(qapp):
     header = theme.make_surface_header("Title", chips=[("VIDEO", "badge_primary")])
 

@@ -47,6 +47,7 @@ from listentrace.ui.widgets.notebook_paper import (
     GrainedPaperFrame,
     LayeredPaperFrame,
     RuledPaperFrame,
+    SketchFlourishWidget,
     SpiralBindingWidget,
     paint_ink_outline,
 )
@@ -510,7 +511,15 @@ def make_card(title: str | None = None, decorated: bool = True) -> tuple[QFrame,
     layout.setSpacing(SPACE_NORMAL)
     if title is not None:
         caption = QLabel(title)
-        apply_role(caption, "caption")
+        # M13 Due-Frame Polish, Axis 3: the due-frame boards repeatedly
+        # render a card's own title as a blue-ink section header (e.g.
+        # Guided Session's "SESSION DIAGNOSIS (so far)") -- `role=
+        # "section_header"` already existed in the shared QSS for exactly
+        # this (handwritten_blue color) but had zero real consumers
+        # anywhere in the app until now. Tied to the same `decorated` flag
+        # as the paper/ink-outline treatment: compact dialogs keep the
+        # plain caption, matching the due frame's own restraint there.
+        apply_role(caption, "section_header" if decorated else "caption")
         layout.addWidget(caption)
     return frame, layout
 
@@ -715,7 +724,16 @@ def make_surface_header(
     if subtitle is not None:
         subtitle_label = QLabel(subtitle)
         apply_role(subtitle_label, "subtitle" if title_role == "page_title" else "caption")
-        title_col.addWidget(subtitle_label)
+        # M13 Due-Frame Polish, Axis 3: the due-frame boards consistently
+        # end this exact subtitle/caption line with a small blue-pencil
+        # flourish -- see SketchFlourishWidget's own docstring for the two
+        # separate boards this was observed on.
+        subtitle_row = QHBoxLayout()
+        subtitle_row.setSpacing(SPACE_COMPACT)
+        subtitle_row.addWidget(subtitle_label)
+        subtitle_row.addWidget(SketchFlourishWidget(qcolor("handwritten_blue")))
+        subtitle_row.addStretch(1)
+        title_col.addLayout(subtitle_row)
 
     top_bar.addLayout(title_col, 1)
     return SurfaceHeader(top_bar, title_row, title_label, subtitle_label)
