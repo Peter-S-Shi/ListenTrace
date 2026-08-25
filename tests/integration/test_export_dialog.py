@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from PySide6.QtWidgets import QFileDialog, QMessageBox
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QFileDialog, QMessageBox, QScrollArea
 
 from listentrace.application.services import export_formatters, export_service
 from listentrace.domain.models.material import Material
@@ -278,6 +279,111 @@ def test_saved_output_always_corresponds_to_the_regenerated_selection(qapp, tmp_
         dialog._selected_privacy_fields(),
     )
     assert export_formatters.render_markdown(direct_bundle) == dialog._markdown_text
+    dialog.close()
+
+
+# ---- Batch F corrective: responsive geometry ----
+
+
+def test_dialog_enables_the_native_maximize_button(qapp, tmp_path):
+    connection = open_connection(tmp_path / "smoke.db")
+    migrate(connection)
+
+    dialog = ExportDialog(connection, None)
+    assert dialog.windowFlags() & Qt.WindowType.WindowMaximizeButtonHint
+    dialog.close()
+
+
+def test_dialog_has_a_compact_default_and_can_shrink_to_a_small_window(qapp, tmp_path):
+    connection = open_connection(tmp_path / "smoke.db")
+    migrate(connection)
+
+    dialog = ExportDialog(connection, None)
+    # Not content-driven: the dialog must actually accept a substantially
+    # smaller size than its old 760x640 default rather than snapping back
+    # up to a large minimum dictated by its own controls.
+    dialog.resize(480, 360)
+    assert dialog.size().width() == 480
+    assert dialog.size().height() == 360
+    dialog.close()
+
+
+def test_every_control_from_scope_through_close_lives_inside_the_scroll_area(qapp, tmp_path):
+    """Structural proof that nothing is pinned outside the scrollable
+    workspace -- if a control were, it could strand below the viewport on a
+    short window regardless of how tall the scrollbar's range is."""
+    connection = open_connection(tmp_path / "smoke.db")
+    migrate(connection)
+
+    dialog = ExportDialog(connection, None)
+    scroll_areas = dialog.findChildren(QScrollArea)
+    assert len(scroll_areas) == 1
+    content = scroll_areas[0].widget()
+    assert content is not None
+
+    for widget in (
+        dialog._scope_combo,
+        dialog._material_list,
+        dialog._preset_combo,
+        dialog._custom_start_edit,
+        next(iter(dialog._category_checkboxes.values())),
+        next(iter(dialog._privacy_checkboxes.values())),
+        dialog._generate_preview_button,
+        dialog._preview_tabs,
+        dialog._save_markdown_button,
+        dialog._copy_template_button,
+        dialog._status_label,
+    ):
+        assert content.isAncestorOf(widget)
+    dialog.close()
+
+
+def test_export_workspace_is_actually_scrollable_at_a_small_window_size(qapp, tmp_path):
+    connection = open_connection(tmp_path / "smoke.db")
+    migrate(connection)
+
+    dialog = ExportDialog(connection, None)
+    dialog.show()
+    dialog.resize(480, 360)
+    qapp.processEvents()
+
+    scroll = dialog.findChildren(QScrollArea)[0]
+    # Content taller than the shrunk viewport -- proving the learner can
+    # actually reach everything from Scope through Close by scrolling,
+    # not just that a QScrollArea happens to exist.
+    assert scroll.verticalScrollBar().maximum() > 0
+    # No horizontal scrolling under this practical (if small) width.
+    assert scroll.horizontalScrollBar().maximum() == 0
+    dialog.close()
+
+
+def test_save_and_copy_actions_are_recomposed_into_a_compact_grid_not_one_row(qapp, tmp_path):
+    """The six actions each get their own row (Save/Copy paired per format)
+    instead of sharing one six-wide row -- proving the width pressure from
+    the two "Evaluation Template" actions (the longest labels) is gone."""
+    connection = open_connection(tmp_path / "smoke.db")
+    migrate(connection)
+
+    dialog = ExportDialog(connection, None)
+    dialog.show()
+    qapp.processEvents()
+
+    def row_y(button):
+        return button.mapTo(dialog, button.rect().topLeft()).y()
+
+    ordered = (
+        dialog._save_markdown_button,
+        dialog._copy_markdown_button,
+        dialog._save_json_button,
+        dialog._copy_json_button,
+        dialog._save_template_button,
+        dialog._copy_template_button,
+    )
+    rows = [row_y(button) for button in ordered]
+    # Six distinct, strictly increasing rows -- no two actions share a row,
+    # and none of them sit side by side any more.
+    assert rows == sorted(rows)
+    assert len(set(rows)) == 6
     dialog.close()
 
 
