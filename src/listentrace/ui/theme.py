@@ -238,6 +238,19 @@ FONT_FAMILY = (
 # call site instead (DESIGN.md §4.2).
 HANDWRITING_FONT_FAMILY = '"Segoe Print", "Segoe Script", "Segoe UI"'
 MONOSPACE_FONT_FAMILY = '"Cascadia Mono", "Consolas", "Courier New", monospace'
+# M13 Due-Frame Polish, Axis 2: the due-frame boards' titles, subtitles,
+# section headers, and metric values consistently share one rounded
+# geometric-sans letterform (single-story lowercase "a", circular "o"/"g"/
+# "d") -- visibly not `FONT_FAMILY`'s corporate Segoe UI character. "Century
+# Gothic" (bundled with Windows, confirmed present via QFontDatabase on this
+# machine) is the closest safe local match. Latin-only, same CJK-fallback
+# rule as `HANDWRITING_FONT_FAMILY` above -- never forced onto CJK glyphs,
+# and never used for body/reading text (DESIGN.md's readability boundary is
+# unchanged; only the *display* tier's face changed).
+TITLE_FONT_FAMILY = (
+    '"Century Gothic", "Segoe UI Variable Text", "Segoe UI Variable", "Segoe UI", '
+    '"Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC", sans-serif'
+)
 
 
 def qcolor(token: str, theme_mode: str = "light") -> QColor:
@@ -991,9 +1004,14 @@ QSplitter::handle:vertical {{
 def _build_component_qss(m: str) -> str:
     return f"""
 /* Typography & Labels (DESIGN.md §4.2 type scale) */
-QLabel[role="page_title"] {{ font-size: 20px; font-weight: 700; color: {css('ink', m)}; }}
-QLabel[role="title"] {{ font-size: 16px; font-weight: 700; letter-spacing: 0.1px; color: {css('ink', m)}; }}
-QLabel[role="subtitle"] {{ font-size: 13px; color: {css('muted', m)}; }}
+/* M13 Due-Frame Polish, Axis 2: page_title/title/subtitle/metric_value use
+   `TITLE_FONT_FAMILY` (rounded geometric) instead of the body/engineering
+   `FONT_FAMILY` -- see that constant's own comment for the due-frame
+   evidence and CJK-fallback rule. Body, form, caption, helper, transcript,
+   question, and diagnosis roles are deliberately untouched. */
+QLabel[role="page_title"] {{ font-family: {TITLE_FONT_FAMILY}; font-size: 20px; font-weight: 700; color: {css('ink', m)}; }}
+QLabel[role="title"] {{ font-family: {TITLE_FONT_FAMILY}; font-size: 16px; font-weight: 700; letter-spacing: 0.1px; color: {css('ink', m)}; }}
+QLabel[role="subtitle"] {{ font-family: {TITLE_FONT_FAMILY}; font-size: 13px; color: {css('muted', m)}; }}
 QLabel[role="section_header"] {{
     font-size: 13px;
     font-weight: 700;
@@ -1017,7 +1035,7 @@ QLabel[role="dominant_cue"] {{ font-size: 17px; font-weight: 600; color: {css('i
 QLabel[role="question_stem"] {{ font-size: 16px; font-weight: 650; color: {css('ink', m)}; padding: 4px 0; }}
 QLabel[role="body"], QRadioButton[role="body"], QCheckBox[role="body"] {{ font-size: 14px; font-weight: 400; color: {css('ink', m)}; }}
 QLabel[role="transcript_cue"] {{ font-size: 16px; font-weight: 500; color: {css('ink', m)}; }}
-QLabel[role="metric_value"] {{ font-size: 14px; font-weight: 700; color: {css('ink', m)}; }}
+QLabel[role="metric_value"] {{ font-family: {TITLE_FONT_FAMILY}; font-size: 14px; font-weight: 700; color: {css('ink', m)}; }}
 /* Central semantic result-status role (M13 Stage B corrective) -- Quiz
    Review's own "correct"/"incorrect" outcome label, replacing a local
    14px/700/color stylesheet at each call site with one shared role plus an
@@ -1509,10 +1527,18 @@ QFrame[surface="workspace"] {{
 /* Buttons: Primary / Secondary / Quiet / Danger / Success */
 /* DESIGN.md §4.2 "Regular button" row: 13px/600 for every ordinary
    (non-hero) button role, color role-specific -- applied once here so
-   every role below inherits it without repeating the declaration. */
+   every role below inherits it without repeating the declaration.
+   M13 Due-Frame Polish, Axis 2: the due-frame boards render every ordinary
+   button's label in the casual handwriting face -- short,
+   personality-bearing chrome text, exactly the category
+   `HANDWRITING_FONT_FAMILY`'s own docstring sanctions it for. The
+   `[hero="true"]` filled tier is a distinct evidenced exception (see its
+   own rule below): those boards show it in the same bold rounded
+   *display* face as titles, not handwriting. */
 QPushButton[role="primary"], QPushButton[role="secondary"], QPushButton[role="quiet"],
 QPushButton[role="danger"], QPushButton[role="success"], QPushButton[role="notebook_primary_action"],
 QPushButton[role="notebook_action"], QPushButton[role="notebook_destructive_action"] {{
+    font-family: {HANDWRITING_FONT_FAMILY};
     font-size: 13px;
     font-weight: 600;
 }}
@@ -1555,6 +1581,7 @@ QPushButton[role="primary"][hero="true"] {{
     background-color: {css('accent', m)};
     color: {css('ink_on_accent', m)};
     border: {BORDER_WIDTH}px solid {css('accent', m)};
+    font-family: {TITLE_FONT_FAMILY};
     font-size: 14px;
     font-weight: 650;
     letter-spacing: 0.1px;
