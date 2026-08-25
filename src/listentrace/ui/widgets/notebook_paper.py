@@ -11,9 +11,21 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QPainter, QPen
 from PySide6.QtWidgets import QFrame, QTextEdit, QWidget
 
-# Faint blue ink for ruled lines -- Professional Blue at ~11% alpha.
-RULED_LINE_COLOR = QColor(37, 99, 235, 28)
 RULED_LINE_SPACING_PX = 28  # matches comfortable line height at 10pt font
+MARGIN_LINE_WIDTH_PX = 1
+MARGIN_INSET_PX = 32  # distance of the vertical margin rule from the left edge
+
+
+def ruled_paper_colors() -> tuple[QColor, QColor]:
+    """(rule_color, margin_color), sourced from `theme.py`'s `rule_blue`/
+    `margin_line` tokens rather than a hardcoded literal (M13 Stage B, G17).
+
+    Imported lazily to avoid a circular import: `theme.py` imports this
+    module at load time to build `make_mini_notebook`/`make_spiral_binding_strip`.
+    """
+    from listentrace.ui import theme
+
+    return theme.qcolor("rule_blue"), theme.qcolor("margin_line")
 
 
 def _ruled_line_phase(spacing_px: int, scroll_offset_px: int) -> int:
@@ -31,8 +43,10 @@ def _paint_ruled_lines(painter: QPainter, width: int, height: int, start_y: int)
     """Shared ruled-line drawing used by both `RuledTextEdit` (scroll-phase
     aware) and `RuledPaperFrame` (static) so the two surfaces render the same
     grammar from one place."""
+    rule_color, margin_color = ruled_paper_colors()
+
     painter.setRenderHint(QPainter.RenderHint.Antialiasing, False)
-    pen = QPen(RULED_LINE_COLOR)
+    pen = QPen(rule_color)
     pen.setWidth(1)
     painter.setPen(pen)
 
@@ -40,6 +54,17 @@ def _paint_ruled_lines(painter: QPainter, width: int, height: int, start_y: int)
     while y < height:
         painter.drawLine(0, y, width, y)
         y += RULED_LINE_SPACING_PX
+
+    _paint_margin_line(painter, height, margin_color)
+
+
+def _paint_margin_line(painter: QPainter, height: int, margin_color: QColor) -> None:
+    """The vertical margin rule near the left edge, like a school notebook's
+    red margin line (M13 Stage B, G17) -- shared by both ruled-paper surfaces."""
+    pen = QPen(margin_color)
+    pen.setWidth(MARGIN_LINE_WIDTH_PX)
+    painter.setPen(pen)
+    painter.drawLine(MARGIN_INSET_PX, 0, MARGIN_INSET_PX, height)
 
 
 class RuledTextEdit(QTextEdit):
@@ -78,7 +103,7 @@ class RuledPaperFrame(QFrame):
 
 _RING_HOLE_DIAMETER_PX = 6
 _RING_LOOP_DIAMETER_PX = 13
-_RING_SPACING_PX = 26
+_RING_SPACING_PX = 32  # G22: corrected from 26px (below the 28px tolerance floor)
 _RING_TOP_MARGIN_PX = 10
 
 
