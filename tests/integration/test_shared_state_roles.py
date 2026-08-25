@@ -15,15 +15,27 @@ tests never assume or require a shared base widget class between them.
 
 from __future__ import annotations
 
+import re
 from types import SimpleNamespace
 
 from listentrace.domain.enums.stage_status import StageStatus
+from listentrace.ui import theme
 from listentrace.ui.windows.guided_session_window import StageStepper
 from listentrace.ui.windows.quiz_window import QuizOptionCard
 
 
 def _progress(status: str) -> SimpleNamespace:
     return SimpleNamespace(status=status)
+
+
+def _qss_rule(sheet: str, selector: str) -> str:
+    """The literal `{ ... }` body Qt would parse for `selector`, extracted
+    from the real built stylesheet -- the actual public contract the style
+    engine consumes, not a private implementation detail. Used instead of
+    screenshot/pixel comparison per the reviewer's explicit guidance."""
+    match = re.search(re.escape(selector) + r"[^{]*\{([^}]*)\}", sheet)
+    assert match is not None, f"no QSS rule found for selector: {selector}"
+    return match.group(1)
 
 
 def test_stage_stepper_items_are_tagged_with_the_shared_stepper_item_role(qapp):
@@ -72,6 +84,44 @@ def test_quiz_option_card_starts_unselected(qapp):
     card = QuizOptionCard(index=0, letter="A")
 
     assert card.property("selected") == "false"
+
+
+def test_stepper_completed_state_uses_the_canonical_paper_primary_background():
+    sheet = theme.build_stylesheet("light")
+
+    rule = _qss_rule(sheet, 'QPushButton[role="stepper_item"][state="completed"]')
+
+    assert theme.css("surface_paper") in rule
+    assert theme.css("surface") not in rule
+
+
+def test_stepper_skipped_state_uses_the_canonical_paper_primary_background():
+    sheet = theme.build_stylesheet("light")
+
+    rule = _qss_rule(sheet, 'QPushButton[role="stepper_item"][state="skipped"]')
+
+    assert theme.css("surface_paper") in rule
+    assert theme.css("surface") not in rule
+
+
+def test_stepper_not_started_state_uses_the_canonical_paper_secondary_and_warm_border():
+    sheet = theme.build_stylesheet("light")
+
+    rule = _qss_rule(sheet, 'QPushButton[role="stepper_item"][state="not_started"]')
+
+    assert theme.css("surface_soft") in rule
+    assert theme.css("line") in rule
+    assert theme.css("disabled_border") not in rule
+
+
+def test_stepper_not_started_badge_uses_the_canonical_muted_fill_and_disabled_text():
+    sheet = theme.build_stylesheet("light")
+
+    rule = _qss_rule(sheet, 'QLabel[role="stepper_item_badge"][state="not_started"]')
+
+    assert theme.css("stepper_future_badge") in rule
+    assert theme.css("stepper_future_badge").upper() == "#E3DDD4"
+    assert theme.css("disabled_text") in rule
 
 
 def test_quiz_option_card_checking_the_radio_marks_it_selected(qapp):

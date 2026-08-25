@@ -107,6 +107,7 @@ _TOKENS_LIGHT: dict[str, tuple[int, int, int, int]] = {
     "star_gold": (210, 164, 58, 255),          # #D2A43A
     "incorrect": (220, 38, 38, 255),           # #DC2626
     "neutral_state": (119, 110, 100, 255),     # #776E64
+    "stepper_future_badge": (227, 221, 212, 255),  # #E3DDD4 -- DESIGN.md §8.6 future-stage badge fill
     "ink_caption": (123, 113, 101, 255),       # #7B7165
     "ink_placeholder": (148, 138, 125, 255),   # #948A7D
     "ink_on_accent": (255, 253, 248, 255),     # #FFFDF8
@@ -1112,14 +1113,14 @@ QPushButton[role="stepper_item"][state="current"] {{
     border: 1.5px solid {css('accent', m)};
 }}
 QPushButton[role="stepper_item"][state="completed"] {{
-    background: {css('surface', m)};
+    background: {css('surface_paper', m)};
     border: {BORDER_WIDTH}px solid {css('success', m)};
 }}
 QPushButton[role="stepper_item"][state="completed"]:hover {{
     background: {css('accent_subtle', m)};
 }}
 QPushButton[role="stepper_item"][state="skipped"] {{
-    background: {css('surface', m)};
+    background: {css('surface_paper', m)};
     border: {BORDER_WIDTH}px solid {css('warning', m)};
 }}
 QPushButton[role="stepper_item"][state="skipped"]:hover {{
@@ -1127,8 +1128,8 @@ QPushButton[role="stepper_item"][state="skipped"]:hover {{
 }}
 QPushButton[role="stepper_item"][state="not_started"],
 QPushButton[role="stepper_item"][state="not_started"]:disabled {{
-    background: {css('surface', m)};
-    border: {BORDER_WIDTH}px solid {css('disabled_border', m)};
+    background: {css('surface_soft', m)};
+    border: {BORDER_WIDTH}px solid {css('line', m)};
 }}
 
 QLabel[role="stepper_item_badge"] {{
@@ -1149,7 +1150,7 @@ QLabel[role="stepper_item_badge"][state="skipped"] {{
     color: #FFFFFF;
 }}
 QLabel[role="stepper_item_badge"][state="not_started"] {{
-    background: {css('disabled_border', m)};
+    background: {css('stepper_future_badge', m)};
     color: {css('disabled_text', m)};
     font-weight: 600;
 }}
