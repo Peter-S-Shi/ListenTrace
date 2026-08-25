@@ -299,6 +299,24 @@ def test_m4_annotation_semantics_reused_misheard_requires_heard_as(qapp, conn, t
     window.close()
 
 
+def test_one_diagnosis_evidence_object_produces_exactly_one_diagnosis_list_row(qapp, conn, tmp_path, monkeypatch):
+    """M13 Axis 4 corrective: `_refresh_diagnosis_cue_panels()` previously called
+    `self._diagnosis_list.addItem(list_item)` both before building the
+    `DiagnosisNoteRow` and again after `setItemWidget()`, double-inserting the
+    same evidence object into the list."""
+    monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.StandardButton.Yes)
+    window, _, session_id = _open_guided_window(conn, tmp_path)
+    window._show_stage("transcript_diagnosis")
+    window._diagnosis_cue_list.setCurrentRow(0)
+
+    window._diagnosis_label_checkboxes["keyword"].setChecked(True)
+    window._on_save_diagnosis_clicked()
+
+    assert window._diagnosis_list.count() == 1
+
+    window.close()
+
+
 def test_invalid_media_preserves_session_text_workflow(qapp, conn, tmp_path):
     bad_path = tmp_path / "bad.mp3"
     bad_path.write_bytes(b"not a real mp3 file, just garbage bytes" * 20)

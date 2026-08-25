@@ -174,9 +174,13 @@ class QuickPracticeStartDialog(QDialog):
         cue_by_id = {cue.id: cue for cue in self._cues}
         for entry in entries:
             cue = cue_by_id.get(entry.subtitle_cue_id)
-            reasons = ", ".join(_REASON_LABELS.get(r, r) for r in entry.reasons) if entry.reasons else "safe fallback"
+            reason_texts = [_REASON_LABELS.get(r, r) for r in entry.reasons] if entry.reasons else ["safe fallback"]
             label = _cue_label(cue) if cue is not None else str(entry.subtitle_cue_id)
-            self._recommended_preview.addItem(f"{label} — {reasons}")
+            row = theme.make_reason_tag_row(label, reason_texts)
+            item = QListWidgetItem()
+            item.setSizeHint(theme.ruled_list_row_size_hint(row))
+            self._recommended_preview.addItem(item)
+            self._recommended_preview.setItemWidget(item, row)
         if not entries:
             empty = QListWidgetItem("No usable cues available for Quick Practice.")
             empty.setFlags(Qt.ItemFlag.NoItemFlags)

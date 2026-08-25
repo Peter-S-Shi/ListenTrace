@@ -28,7 +28,7 @@ import sys
 from pathlib import Path
 from typing import NamedTuple
 
-from PySide6.QtCore import QSize, Qt
+from PySide6.QtCore import QPoint, QRect, QSize, Qt
 from PySide6.QtGui import QColor, QIcon, QPainter, QPalette, QPixmap
 from PySide6.QtWidgets import (
     QApplication,
@@ -36,6 +36,7 @@ from PySide6.QtWidgets import (
     QGraphicsDropShadowEffect,
     QHBoxLayout,
     QLabel,
+    QLayout,
     QListWidget,
     QPushButton,
     QSizePolicy,
@@ -565,6 +566,119 @@ class DiagnosisNoteRow(QFrame):
             f"border-bottom-left-radius: {RADIUS_NOTE_BL}px;"
             "}"
         )
+
+
+class FlowLayout(QLayout):
+    """A left-to-right, top-to-bottom wrapping layout (Qt's own documented
+    "Flow Layout" example, adapted). Used to lay out a variable number of
+    `make_paper_tag()` widgets so they wrap onto additional lines instead of
+    clipping or forcing horizontal scroll -- M13 Axis 4 corrective, Quick
+    Practice's recommendation-reason tags."""
+
+    def __init__(self, parent: QWidget | None = None, h_spacing: int = SPACE_TIGHT, v_spacing: int = SPACE_TIGHT) -> None:
+        super().__init__(parent)
+        self._h_spacing = h_spacing
+        self._v_spacing = v_spacing
+        self._items: list = []
+
+    def addItem(self, item) -> None:  # noqa: N802 -- Qt override
+        self._items.append(item)
+
+    def count(self) -> int:
+        return len(self._items)
+
+    def itemAt(self, index: int):  # noqa: N802 -- Qt override
+        return self._items[index] if 0 <= index < len(self._items) else None
+
+    def takeAt(self, index: int):  # noqa: N802 -- Qt override
+        return self._items.pop(index) if 0 <= index < len(self._items) else None
+
+    def expandingDirections(self):  # noqa: N802 -- Qt override
+        return Qt.Orientation(0)
+
+    def hasHeightForWidth(self) -> bool:  # noqa: N802 -- Qt override
+        return True
+
+    def heightForWidth(self, width: int) -> int:  # noqa: N802 -- Qt override
+        return self._do_layout(QRect(0, 0, width, 0), test_only=True)
+
+    def setGeometry(self, rect) -> None:  # noqa: N802 -- Qt override
+        super().setGeometry(rect)
+        self._do_layout(rect, test_only=False)
+
+    def sizeHint(self) -> QSize:
+        return self.minimumSize()
+
+    def minimumSize(self) -> QSize:
+        size = QSize()
+        for item in self._items:
+            size = size.expandedTo(item.minimumSize())
+        margins = self.contentsMargins()
+        size += QSize(margins.left() + margins.right(), margins.top() + margins.bottom())
+        return size
+
+    def _do_layout(self, rect: QRect, test_only: bool) -> int:
+        left, top, right, bottom = self.getContentsMargins()
+        effective_rect = rect.adjusted(left, top, -right, -bottom)
+        x, y = effective_rect.x(), effective_rect.y()
+        line_height = 0
+
+        for item in self._items:
+            item_size = item.sizeHint()
+            next_x = x + item_size.width() + self._h_spacing
+            if next_x - self._h_spacing > effective_rect.right() and line_height > 0:
+                x = effective_rect.x()
+                y = y + line_height + self._v_spacing
+                next_x = x + item_size.width() + self._h_spacing
+                line_height = 0
+            if not test_only:
+                item.setGeometry(QRect(QPoint(x, y), item_size))
+            x = next_x
+            line_height = max(line_height, item_size.height())
+
+        return y + line_height - rect.y()
+
+
+def make_paper_tag(text: str) -> QLabel:
+    """A small neutral warm-paper tag (M13 Axis 4 corrective) -- the direct
+    due-frame consumer: Quick Practice's recommendation-reason tags
+    ("misheard", "quiz miss", "connected speech", ...), pixel-sampled at a
+    near-paper RGB (249, 247, 241), not a saturated diagnosis color.
+
+    Distinct from `DiagnosisNoteRow`, which is a shared-product *extension*
+    of the same paper-slip idea to the real annotation/diagnosis list rows
+    -- the due-frame boards themselves don't render those rows as paper
+    slips, so this tag (not `DiagnosisNoteRow`) is the primary evidenced
+    object. Deliberately colorless: recommendation reasons carry no
+    per-label user color to derive a tint from.
+    """
+    label = QLabel(text)
+    apply_role(label, "paper_tag")
+    apply_paper_shadow(label, "chip")
+    return label
+
+
+def make_reason_tag_row(cue_label: str, reasons: list[str]) -> QWidget:
+    """A recommendation-preview row: ordinary readable cue/time/text on its
+    own line, followed by a `FlowLayout` of `make_paper_tag()` reason tags
+    that wrap cleanly instead of clipping when a cue has several reasons.
+    """
+    row = QWidget()
+    row_layout = QVBoxLayout(row)
+    row_layout.setContentsMargins(SPACE_TIGHT, SPACE_COMPACT, SPACE_TIGHT, SPACE_COMPACT)
+    row_layout.setSpacing(SPACE_COMPACT)
+
+    cue_text_label = QLabel(cue_label)
+    cue_text_label.setWordWrap(True)
+    row_layout.addWidget(cue_text_label)
+
+    tag_flow_widget = QWidget()
+    tag_flow = FlowLayout(tag_flow_widget)
+    for reason in reasons:
+        tag_flow.addWidget(make_paper_tag(reason))
+    row_layout.addWidget(tag_flow_widget)
+
+    return row
 
 
 def make_card(title: str | None = None, decorated: bool = True) -> tuple[QFrame, QVBoxLayout]:
@@ -1261,6 +1375,21 @@ QListWidget[role="nav_directory"]::item:selected:!active {{
     background-color: {css('accent_subtle', m)};
     color: {css('accent', m)};
     border-left: 3px solid {css('accent_hover', m)};
+}}
+
+/* M13 Axis 4 -- the neutral warm-paper recommendation-reason tag
+(`make_paper_tag()`), distinct from `role="chip"` below: a due-frame-
+evidenced paper-slip object, not a generic saturated GUI chip. */
+QLabel[role="paper_tag"] {{
+    background-color: {css('paper_deep', m)};
+    color: {css('ink_caption', m)};
+    border: {BORDER_WIDTH}px solid {css('paper_edge', m)};
+    border-top-left-radius: {RADIUS_NOTE_TL}px;
+    border-top-right-radius: {RADIUS_NOTE_TR}px;
+    border-bottom-right-radius: {RADIUS_NOTE_BR}px;
+    border-bottom-left-radius: {RADIUS_NOTE_BL}px;
+    padding: 2px 8px;
+    font-size: 12px;
 }}
 
 /* Badges & Chips */

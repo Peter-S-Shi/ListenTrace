@@ -1147,7 +1147,6 @@ class GuidedSessionWindow(QMainWindow):
             )
             list_item.setSizeHint(theme.ruled_list_row_size_hint(row))
             self._diagnosis_list.setItemWidget(list_item, row)
-            self._diagnosis_list.addItem(list_item)
         self._diagnosis_list.blockSignals(False)
 
         self._diagnosis_reference_list.clear()
