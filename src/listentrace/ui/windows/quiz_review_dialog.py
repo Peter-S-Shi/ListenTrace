@@ -68,9 +68,7 @@ class QuizReviewDialog(QDialog):
         header_row.addStretch(1)
 
         mode_badge = QLabel(f"Mode: {attempt.quiz_mode.upper()}")
-        mode_badge.setStyleSheet(
-            "background: rgba(0, 0, 0, 0.08); padding: 4px 8px; border-radius: 6px; font-size: 11px; font-weight: 700;"
-        )
+        apply_role(mode_badge, "chip")
         header_row.addWidget(mode_badge)
         score_layout.addLayout(header_row)
         layout.addWidget(score_card)
@@ -128,7 +126,6 @@ class QuizReviewDialog(QDialog):
         close_button = QPushButton("Close Review")
         close_button.clicked.connect(self.accept)
         apply_role(close_button, "primary")
-        close_button.setMinimumHeight(32)
         footer_row.addWidget(close_button)
         layout.addLayout(footer_row)
 

@@ -148,7 +148,7 @@ class ShadowingPracticeWindow(QMainWindow):
         apply_role(self._loop_settings_button, "quiet")
 
         self._time_label = QLabel("00:00 / 00:00")
-        self._time_label.setStyleSheet("font-family: monospace; font-size: 11px; color: #64748B;")
+        apply_role(self._time_label, "monospace")
 
         transport_row.addWidget(self._previous_button)
         transport_row.addWidget(self._play_button)

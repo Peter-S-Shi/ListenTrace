@@ -62,7 +62,12 @@ from listentrace.ui.widgets.loop_grace_change_bus import loop_grace_change_bus
 from listentrace.ui.widgets.notebook_paper import RuledTextEdit
 from listentrace.ui.widgets.recording_panel import RecordingPanel
 from listentrace.ui.windows.material_loop_settings_dialog import MaterialLoopSettingsDialog
-from listentrace.ui.windows.player_window import _OVERLAP_HIGHLIGHT, _color_badge_icon, _format_time
+from listentrace.ui.windows.player_window import (
+    _OVERLAP_HIGHLIGHT,
+    _UNKNOWN_LABEL_COLOR,
+    _color_badge_icon,
+    _format_time,
+)
 
 _STAGE_TITLES: dict[str, str] = {
     StageKey.GLOBAL_COMPREHENSION.value: "Global Comprehension",
@@ -139,9 +144,7 @@ class StageStepper(QFrame):
             badge = QLabel(num_str)
             badge.setAlignment(Qt.AlignmentFlag.AlignCenter)
             badge.setFixedSize(22, 22)
-            badge.setStyleSheet(
-                "border-radius: 11px; background: rgba(0, 0, 0, 0.08); font-weight: 700; font-size: 11px;"
-            )
+            apply_role(badge, "chip")
 
             lbl = QLabel(title)
             lbl.setStyleSheet("font-size: 12px; font-weight: 600;")
@@ -390,8 +393,6 @@ class GuidedSessionWindow(QMainWindow):
         apply_role(self._close_button, "quiet")
         apply_role(self._abandon_button, "danger")
         apply_role(self._complete_button, "success")
-        self._continue_button.setMinimumHeight(32)
-        self._complete_button.setMinimumHeight(32)
 
     # ---- read-only / status helpers ----
 
@@ -773,11 +774,9 @@ class GuidedSessionWindow(QMainWindow):
             self._capture_type_combo.addItem(capture_type.value.replace("_", " "), capture_type.value)
         self._capture_text_edit = QLineEdit()
         self._capture_text_edit.setPlaceholderText("Enter keyword or fragment...")
-        self._capture_text_edit.setMinimumHeight(28)
         self._capture_add_button = QPushButton("+ Add Capture")
         self._capture_add_button.clicked.connect(self._on_add_capture_clicked)
         apply_role(self._capture_add_button, "secondary")
-        self._capture_add_button.setMinimumHeight(28)
 
         add_row.addWidget(self._capture_type_combo)
         add_row.addWidget(self._capture_text_edit, 1)
@@ -1002,7 +1001,7 @@ class GuidedSessionWindow(QMainWindow):
         apply_role(self._diagnosis_loop_settings_button, "quiet")
 
         self._diagnosis_time_label = QLabel("00:00 / 00:00")
-        self._diagnosis_time_label.setStyleSheet("font-family: monospace; font-size: 11px; color: #64748B;")
+        apply_role(self._diagnosis_time_label, "monospace")
 
         t_util_row.addWidget(self._diagnosis_loop_settings_button)
         t_util_row.addStretch(1)
@@ -1047,7 +1046,6 @@ class GuidedSessionWindow(QMainWindow):
         heard_as_row.addWidget(heard_lbl)
         self._diagnosis_heard_as_edit = QLineEdit()
         self._diagnosis_heard_as_edit.setEnabled(False)
-        self._diagnosis_heard_as_edit.setMinimumHeight(26)
         heard_as_row.addWidget(self._diagnosis_heard_as_edit)
         right_column.addLayout(heard_as_row)
 
@@ -1056,7 +1054,6 @@ class GuidedSessionWindow(QMainWindow):
         apply_role(note_lbl, "caption")
         note_row.addWidget(note_lbl)
         self._diagnosis_note_edit = QLineEdit()
-        self._diagnosis_note_edit.setMinimumHeight(26)
         note_row.addWidget(self._diagnosis_note_edit)
         right_column.addLayout(note_row)
 
@@ -1154,7 +1151,7 @@ class GuidedSessionWindow(QMainWindow):
         for item_evidence in evidence:
             heard_as_suffix = f" (heard as: {item_evidence.heard_as})" if item_evidence.heard_as else ""
             list_item = QListWidgetItem(f"[{item_evidence.label_key}] {item_evidence.selected_text}{heard_as_suffix}")
-            list_item.setIcon(_color_badge_icon(colors.get(item_evidence.label_key, "#CCCCCC")))
+            list_item.setIcon(_color_badge_icon(colors.get(item_evidence.label_key, _UNKNOWN_LABEL_COLOR)))
             list_item.setData(Qt.ItemDataRole.UserRole, item_evidence.id)
             self._diagnosis_list.addItem(list_item)
         self._diagnosis_list.blockSignals(False)
@@ -1372,7 +1369,7 @@ class GuidedSessionWindow(QMainWindow):
         apply_role(self._shadowing_loop_settings_button, "quiet")
 
         self._shadowing_time_label = QLabel("00:00 / 00:00")
-        self._shadowing_time_label.setStyleSheet("font-family: monospace; font-size: 11px; color: #64748B;")
+        apply_role(self._shadowing_time_label, "monospace")
 
         transport_row.addWidget(self._shadowing_previous_button)
         transport_row.addWidget(self._shadowing_play_button)
@@ -1394,7 +1391,6 @@ class GuidedSessionWindow(QMainWindow):
 
         self._shadowing_note_edit = QLineEdit()
         self._shadowing_note_edit.setPlaceholderText("Optional reflection note for this cue...")
-        self._shadowing_note_edit.setMinimumHeight(28)
         action_layout.addWidget(self._shadowing_note_edit)
 
         action_row = QHBoxLayout()

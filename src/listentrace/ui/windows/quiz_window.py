@@ -229,7 +229,7 @@ class QuizWindow(QMainWindow):
 
         # Demoted Cue Playback bar
         transport_card = QFrame()
-        transport_card.setStyleSheet("background: rgba(0, 0, 0, 0.03); border-radius: 6px;")
+        apply_role(transport_card, "inset_panel")
         t_layout = QHBoxLayout(transport_card)
         t_layout.setContentsMargins(8, 4, 8, 4)
 
@@ -250,7 +250,7 @@ class QuizWindow(QMainWindow):
         apply_role(self._loop_settings_button, "quiet")
 
         self._time_label = QLabel("00:00 / 00:00")
-        self._time_label.setStyleSheet("font-family: monospace; font-size: 11px; color: #64748B;")
+        apply_role(self._time_label, "monospace")
 
         for widget in (self._play_button, self._replay_button, self._loop_button, self._loop_settings_button):
             t_layout.addWidget(widget)
@@ -324,7 +324,6 @@ class QuizWindow(QMainWindow):
         apply_role(self._review_button, "secondary")
         # _next_button / _submit_button roles are set dynamically in
         # _update_nav_buttons() based on question position.
-        self._submit_button.setMinimumHeight(32)
 
     # ---- panel construction ----
 
@@ -343,7 +342,6 @@ class QuizWindow(QMainWindow):
 
         self._answer_line_edit = QLineEdit()
         self._answer_line_edit.setPlaceholderText("Type your transcription answer here...")
-        self._answer_line_edit.setMinimumHeight(32)
         layout.addWidget(self._answer_line_edit)
         layout.addStretch(1)
         return panel

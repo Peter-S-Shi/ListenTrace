@@ -75,6 +75,11 @@ _SEEK_STEP_MS = 5000
 _ACTIVE_CUE_HIGHLIGHT = theme.qcolor("cue_active")
 _OVERLAP_HIGHLIGHT = theme.qcolor("text_overlap")
 _BADGE_SIZE = 12
+# M13 Stage B: the color shown when a diagnosis label has no stored color
+# (should be rare/never in practice) -- sourced from the `neutral_state`
+# token instead of a bare "#CCCCCC" literal repeated at every call site.
+# Re-exported for the same reason as _OVERLAP_HIGHLIGHT/_color_badge_icon above.
+_UNKNOWN_LABEL_COLOR = theme.css("neutral_state")
 
 
 def _is_text_entry_widget(widget: object) -> bool:
@@ -496,18 +501,6 @@ class PlayerWindow(QMainWindow):
         ):
             apply_role(button, "notebook_destructive_action")
 
-        for button in (
-            self._save_annotation_button,
-            self._update_annotation_button,
-            self._delete_annotation_button,
-            self._save_note_button,
-            self._delete_note_button,
-            self._save_item_button,
-            self._update_item_button,
-            self._delete_item_button,
-        ):
-            button.setMinimumHeight(28)
-
     # ---- workspace panel construction ----
 
     def _build_workspace_panel(self) -> QWidget:
@@ -564,7 +557,6 @@ class PlayerWindow(QMainWindow):
         apply_role(heard_as_lbl, "caption")
         heard_as_row.addWidget(heard_as_lbl)
         self._heard_as_edit = QLineEdit()
-        self._heard_as_edit.setMinimumHeight(28)
         self._heard_as_edit.setEnabled(False)
         apply_role(self._heard_as_edit, "notebook_writing_field")
         heard_as_row.addWidget(self._heard_as_edit)
@@ -575,7 +567,6 @@ class PlayerWindow(QMainWindow):
         apply_role(note_lbl, "caption")
         note_row.addWidget(note_lbl)
         self._annotation_note_edit = QLineEdit()
-        self._annotation_note_edit.setMinimumHeight(28)
         apply_role(self._annotation_note_edit, "notebook_writing_field")
         note_row.addWidget(self._annotation_note_edit)
         annotation_column.addLayout(note_row)
@@ -663,7 +654,6 @@ class PlayerWindow(QMainWindow):
         apply_role(mean_lbl, "caption")
         meaning_row.addWidget(mean_lbl)
         self._item_meaning_edit = QLineEdit()
-        self._item_meaning_edit.setMinimumHeight(28)
         apply_role(self._item_meaning_edit, "notebook_writing_field")
         meaning_row.addWidget(self._item_meaning_edit)
         item_column.addLayout(meaning_row)
@@ -673,7 +663,6 @@ class PlayerWindow(QMainWindow):
         apply_role(inote_lbl, "caption")
         item_note_row.addWidget(inote_lbl)
         self._item_note_edit = QLineEdit()
-        self._item_note_edit.setMinimumHeight(28)
         apply_role(self._item_note_edit, "notebook_writing_field")
         item_note_row.addWidget(self._item_note_edit)
         item_column.addLayout(item_note_row)
@@ -1153,7 +1142,7 @@ class PlayerWindow(QMainWindow):
         for annotation in workspace.annotations:
             heard_as_suffix = f" (heard as: {annotation.heard_as})" if annotation.heard_as else ""
             item = QListWidgetItem(f"[{annotation.label_key}] {annotation.selected_text}{heard_as_suffix}")
-            item.setIcon(_color_badge_icon(label_colors.get(annotation.label_key, "#CCCCCC")))
+            item.setIcon(_color_badge_icon(label_colors.get(annotation.label_key, _UNKNOWN_LABEL_COLOR)))
             item.setData(Qt.ItemDataRole.UserRole, annotation.id)
             self._annotation_list.addItem(item)
         self._annotation_list.blockSignals(False)
@@ -1490,4 +1479,4 @@ class PlayerWindow(QMainWindow):
             annotation_id = item.data(Qt.ItemDataRole.UserRole)
             annotation = next((a for a in annotations if a.id == annotation_id), None)
             if annotation is not None:
-                item.setIcon(_color_badge_icon(colors.get(annotation.label_key, "#CCCCCC")))
+                item.setIcon(_color_badge_icon(colors.get(annotation.label_key, _UNKNOWN_LABEL_COLOR)))

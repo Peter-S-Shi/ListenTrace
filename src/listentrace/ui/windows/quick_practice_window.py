@@ -54,7 +54,12 @@ from listentrace.ui.theme import SPACE_COMPACT, SPACE_NORMAL, apply_role, apply_
 from listentrace.ui.widgets.loop_grace_change_bus import loop_grace_change_bus
 from listentrace.ui.widgets.recording_panel import RecordingPanel
 from listentrace.ui.windows.material_loop_settings_dialog import MaterialLoopSettingsDialog
-from listentrace.ui.windows.player_window import _OVERLAP_HIGHLIGHT, _color_badge_icon, _format_time
+from listentrace.ui.windows.player_window import (
+    _OVERLAP_HIGHLIGHT,
+    _UNKNOWN_LABEL_COLOR,
+    _color_badge_icon,
+    _format_time,
+)
 
 _STEP_LISTEN_RECALL = 0
 _STEP_DIAGNOSE = 1
@@ -177,7 +182,6 @@ class QuickPracticeWindow(QMainWindow):
         self._step_action_button = QPushButton("")
         self._step_action_button.clicked.connect(self._on_step_action_clicked)
         apply_role(self._step_action_button, "primary")
-        self._step_action_button.setMinimumHeight(32)
         nav_row.addWidget(self._step_action_button)
         step_column.addLayout(nav_row)
 
@@ -426,7 +430,7 @@ class QuickPracticeWindow(QMainWindow):
 
         # Audio Bar Card
         audio_card = QFrame()
-        audio_card.setStyleSheet("background: rgba(0, 0, 0, 0.03); border-radius: 6px;")
+        apply_role(audio_card, "inset_panel")
         transport_row = QHBoxLayout(audio_card)
         transport_row.setContentsMargins(8, 6, 8, 6)
 
@@ -447,7 +451,7 @@ class QuickPracticeWindow(QMainWindow):
         apply_role(self._listen_loop_settings_button, "quiet")
 
         self._listen_time_label = QLabel("00:00 / 00:00")
-        self._listen_time_label.setStyleSheet("font-family: monospace; font-size: 11px; color: #64748B;")
+        apply_role(self._listen_time_label, "monospace")
 
         for button in (
             self._listen_play_button,
@@ -486,7 +490,6 @@ class QuickPracticeWindow(QMainWindow):
 
         self._heard_fragment_edit = QLineEdit()
         self._heard_fragment_edit.setPlaceholderText("Enter words or sounds you caught...")
-        self._heard_fragment_edit.setMinimumHeight(30)
         recall_layout.addWidget(self._heard_fragment_edit)
 
         layout.addWidget(recall_card)
@@ -571,7 +574,6 @@ class QuickPracticeWindow(QMainWindow):
         heard_as_row.addWidget(heard_lbl)
         self._diagnosis_heard_as_edit = QLineEdit()
         self._diagnosis_heard_as_edit.setEnabled(False)
-        self._diagnosis_heard_as_edit.setMinimumHeight(26)
         heard_as_row.addWidget(self._diagnosis_heard_as_edit)
         layout.addLayout(heard_as_row)
 
@@ -580,7 +582,6 @@ class QuickPracticeWindow(QMainWindow):
         apply_role(note_lbl, "caption")
         note_row.addWidget(note_lbl)
         self._diagnosis_note_edit = QLineEdit()
-        self._diagnosis_note_edit.setMinimumHeight(26)
         note_row.addWidget(self._diagnosis_note_edit)
         layout.addLayout(note_row)
 
@@ -633,7 +634,7 @@ class QuickPracticeWindow(QMainWindow):
         for diag in item_state.diagnosis:
             heard_as_suffix = f" (heard as: {diag.heard_as})" if diag.heard_as else ""
             item = QListWidgetItem(f"[{diag.label_key}] {diag.selected_text}{heard_as_suffix}")
-            item.setIcon(_color_badge_icon(colors.get(diag.label_key, "#CCCCCC")))
+            item.setIcon(_color_badge_icon(colors.get(diag.label_key, _UNKNOWN_LABEL_COLOR)))
             item.setData(Qt.ItemDataRole.UserRole, diag.id)
             self._diagnosis_list.addItem(item)
         self._diagnosis_list.blockSignals(False)
@@ -785,7 +786,7 @@ class QuickPracticeWindow(QMainWindow):
         apply_role(self._replay_loop_settings_button, "quiet")
 
         self._replay_time_label = QLabel("00:00 / 00:00")
-        self._replay_time_label.setStyleSheet("font-family: monospace; font-size: 11px; color: #64748B;")
+        apply_role(self._replay_time_label, "monospace")
 
         transport_row.addWidget(self._replay_play_button)
         transport_row.addWidget(self._replay_replay_button)

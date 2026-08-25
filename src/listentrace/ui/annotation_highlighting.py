@@ -5,7 +5,17 @@ from typing import Iterable, Protocol
 from PySide6.QtGui import QColor, QTextCharFormat, QTextCursor
 from PySide6.QtWidgets import QTextEdit
 
+from listentrace.ui import theme
 from listentrace.ui.text_offset_conversion import codepoint_index_to_qt_offset
+
+# M13 Stage B, G20: the transcript-highlight background is a 40% alpha tint
+# (never full opacity) -- distinct from the 100%-opacity 12px list/badge
+# swatch (`_color_badge_icon`), which is unaffected by this rule. Applies
+# uniformly to canonical-default and user-chosen label colors alike.
+_TRANSCRIPT_HIGHLIGHT_ALPHA = 0.4
+# Same "no stored color" fallback as the badge-icon call sites, sourced from
+# the `neutral_state` token rather than a bare literal.
+_UNKNOWN_LABEL_COLOR = theme.css("neutral_state")
 
 
 class _LabeledRange(Protocol):
@@ -59,7 +69,9 @@ def apply_range_highlighting(
 
         fmt = QTextCharFormat()
         if len(labels_here) == 1:
-            fmt.setBackground(QColor(colors.get(labels_here[0], "#CCCCCC")))
+            highlight_color = QColor(colors.get(labels_here[0], _UNKNOWN_LABEL_COLOR))
+            highlight_color.setAlphaF(_TRANSCRIPT_HIGHLIGHT_ALPHA)
+            fmt.setBackground(highlight_color)
         else:
             fmt.setBackground(overlap_color)
 

@@ -342,6 +342,24 @@ def make_spiral_binding_strip() -> QFrame:
     return strip
 
 
+def make_inset_panel(dense: bool = False) -> tuple[QFrame, QVBoxLayout]:
+    """A quiet nested sub-region (`role="inset_panel"`), e.g. a transport/audio
+    bar sitting inside an already-paper-surfaced card.
+
+    Distinct from `make_paper_surface()` (M13 Stage B, G16/G18): that helper
+    is currently unconsumed and remains a separate concern, not repurposed
+    to back this role just because both are "generic flat paper" -- callers
+    that need this specific quiet-nested-region look should use this helper.
+    """
+    frame = QFrame()
+    apply_role(frame, "inset_panel")
+    layout = QVBoxLayout(frame)
+    pad = SPACE_NORMAL if dense else SPACE_SECTION
+    layout.setContentsMargins(pad, SPACE_COMPACT, pad, SPACE_COMPACT)
+    layout.setSpacing(SPACE_COMPACT)
+    return frame, layout
+
+
 def make_media_frame() -> tuple[QFrame, QVBoxLayout]:
     """A warm paper frame around a media viewport -- media placed on a study desk."""
     frame = QFrame()
@@ -447,6 +465,13 @@ QLineEdit, QComboBox, QTextEdit, QPlainTextEdit, QListWidget, QTableWidget {{
     border-radius: {RADIUS_CONTROL}px;
     padding: {SPACE_COMPACT}px {SPACE_NORMAL}px;
 }}
+/* DESIGN.md §5 control-size contract: single-line inputs have a 34px height
+   floor. Scoped to QLineEdit/QComboBox only -- QTextEdit/QPlainTextEdit are
+   multi-line surfaces and QListWidget/QTableWidget are multi-row containers,
+   neither governed by this single-line floor. */
+QLineEdit, QComboBox {{
+    min-height: 34px;
+}}
 QListWidget::item:selected, QListWidget::item:selected:active {{
     background-color: {css('accent', m)};
     color: #FFFFFF;
@@ -512,7 +537,7 @@ QLabel[role="muted"] {{ color: {css('muted', m)}; }}
 QLabel[role="error"] {{ color: {css('danger', m)}; }}
 QLabel[role="warning"] {{ color: {css('warning', m)}; }}
 QLabel[role="success"] {{ color: {css('success', m)}; }}
-QLabel[role="monospace"] {{ font-family: {MONOSPACE_FONT_FAMILY}; color: {css('muted', m)}; }}
+QLabel[role="monospace"] {{ font-family: {MONOSPACE_FONT_FAMILY}; font-size: 11px; font-weight: 500; color: {css('muted', m)}; }}
 
 /* Notebook & Lined Paper Elements */
 QFrame[role="notebook_page"] {{
@@ -597,6 +622,34 @@ QPushButton[role="nav_item"][active="true"] {{
     font-weight: 600;
 }}
 
+/* Directory / bookmark list (e.g. Learning History section nav) -- the
+   QListWidget sibling of the QPushButton-based `nav_item` role above. */
+QListWidget[role="nav_directory"] {{
+    border: none;
+    padding: {SPACE_COMPACT}px;
+}}
+QListWidget[role="nav_directory"]::item {{
+    padding: {SPACE_NORMAL}px {SPACE_SECTION}px;
+    border-radius: {RADIUS_CONTROL}px;
+    color: {css('ink', m)};
+    font-size: 13px;
+    font-weight: 500;
+}}
+QListWidget[role="nav_directory"]::item:hover {{
+    background-color: {css('surface', m)};
+}}
+QListWidget[role="nav_directory"]::item:selected, QListWidget[role="nav_directory"]::item:selected:active {{
+    background-color: {css('accent_subtle', m)};
+    color: {css('accent', m)};
+    border-left: 3px solid {css('accent', m)};
+    font-weight: 600;
+}}
+QListWidget[role="nav_directory"]::item:selected:!active {{
+    background-color: {css('accent_subtle', m)};
+    color: {css('accent', m)};
+    border-left: 3px solid {css('accent_hover', m)};
+}}
+
 /* Badges & Chips */
 QLabel[role="chip"] {{
     background-color: {css('surface_soft', m)};
@@ -634,6 +687,15 @@ QLabel[role="badge_success"] {{
     font-size: 11px;
     font-weight: 600;
 }}
+QLabel[role="badge_secondary"] {{
+    background-color: {css('surface_soft', m)};
+    color: {css('secondary', m)};
+    border: {BORDER_WIDTH}px solid {css('line', m)};
+    border-radius: {RADIUS_PILL}px;
+    padding: 2px 8px;
+    font-size: 11px;
+    font-weight: 600;
+}}
 
 /* Player Notebook Study Desk (M13 Player Reconstruction) */
 QFrame[role="spiral_binding_strip"] {{
@@ -654,6 +716,18 @@ QFrame[role="media_frame"] {{
     background-color: {css('surface_paper', m)};
     border: {BORDER_WIDTH}px solid {css('line', m)};
     border-radius: {RADIUS_CARD}px;
+}}
+QFrame[role="inset_panel"] {{
+    background-color: {css('surface_soft', m)};
+    border: {BORDER_WIDTH}px solid {css('line_ruled', m)};
+    border-radius: {RADIUS_CONTROL}px;
+}}
+QLabel[role="media_placeholder"] {{
+    background-color: {css('surface_paper', m)};
+    color: {css('muted', m)};
+    border: {BORDER_WIDTH}px solid {css('line', m)};
+    border-radius: {RADIUS_CARD}px;
+    font-size: 13px;
 }}
 QLabel[role="study_status_strip"] {{
     background-color: {css('surface_soft', m)};
@@ -759,6 +833,7 @@ QPushButton[role="notebook_primary_action"] {{
     border: {BORDER_WIDTH}px solid {css('accent', m)};
     border-radius: {RADIUS_CONTROL}px;
     padding: {SPACE_COMPACT}px {SPACE_NORMAL}px;
+    min-height: 34px;
 }}
 QPushButton[role="notebook_primary_action"]:hover {{
     background-color: {css('accent', m)};
@@ -775,6 +850,7 @@ QPushButton[role="notebook_action"] {{
     border: {BORDER_WIDTH}px solid {css('line', m)};
     border-radius: {RADIUS_CONTROL}px;
     padding: {SPACE_COMPACT}px {SPACE_NORMAL}px;
+    min-height: 34px;
 }}
 QPushButton[role="notebook_action"]:hover {{
     background-color: {css('surface_soft', m)};
@@ -789,6 +865,7 @@ QPushButton[role="notebook_destructive_action"] {{
     border: {BORDER_WIDTH}px solid {css('danger', m)};
     border-radius: {RADIUS_CONTROL}px;
     padding: {SPACE_COMPACT}px {SPACE_NORMAL}px;
+    min-height: 34px;
 }}
 QPushButton[role="notebook_destructive_action"]:hover {{
     background-color: {css('danger', m)};
@@ -804,6 +881,16 @@ QFrame[role="card"] {{
     background-color: {css('surface', m)};
     border: {BORDER_WIDTH}px solid {css('line', m)};
     border-radius: {RADIUS_CARD}px;
+}}
+
+/* Surface: Soft Panel (directory / sidebar backing) */
+QMainWindow[surface="surface_soft"],
+QWidget[surface="surface_soft"],
+QScrollArea[surface="surface_soft"],
+QScrollArea[surface="surface_soft"] > QWidget > QWidget,
+QListWidget[surface="surface_soft"] {{
+    background-color: {css('surface_soft', m)};
+    color: {css('ink', m)};
 }}
 
 /* Paper Surface */
@@ -895,6 +982,7 @@ QPushButton[role="primary"] {{
     border: none;
     border-radius: {RADIUS_CONTROL}px;
     padding: {SPACE_NORMAL}px {SPACE_SECTION}px;
+    min-height: 34px;
 }}
 QPushButton[role="primary"]:hover {{ background-color: {css('accent_hover', m)}; }}
 QPushButton[role="primary"]:pressed {{ background-color: {css('accent_pressed', m)}; }}
@@ -910,6 +998,7 @@ QPushButton[role="secondary"] {{
     border: {BORDER_WIDTH}px solid {css('line', m)};
     border-radius: {RADIUS_CONTROL}px;
     padding: {SPACE_COMPACT}px {SPACE_NORMAL + 2}px;
+    min-height: 34px;
 }}
 QPushButton[role="secondary"]:hover {{ background-color: {css('surface_soft', m)}; }}
 QPushButton[role="secondary"]:disabled {{
@@ -923,6 +1012,7 @@ QPushButton[role="quiet"] {{
     color: {css('muted', m)};
     border: none;
     padding: {SPACE_COMPACT}px {SPACE_NORMAL}px;
+    min-height: 30px;
 }}
 QPushButton[role="quiet"]:hover {{ color: {css('ink', m)}; }}
 QPushButton[role="quiet"]:disabled {{ color: {css('disabled_text', m)}; }}
@@ -933,6 +1023,7 @@ QPushButton[role="danger"] {{
     border: {BORDER_WIDTH}px solid {css('danger', m)};
     border-radius: {RADIUS_CONTROL}px;
     padding: {SPACE_COMPACT}px {SPACE_NORMAL}px;
+    min-height: 34px;
 }}
 QPushButton[role="danger"]:hover {{ background-color: {css('danger', m)}; color: #FFFFFF; }}
 QPushButton[role="danger"]:pressed {{ background-color: {css('danger_hover', m)}; color: #FFFFFF; }}
@@ -948,6 +1039,7 @@ QPushButton[role="success"] {{
     border: none;
     border-radius: {RADIUS_CONTROL}px;
     padding: {SPACE_COMPACT}px {SPACE_NORMAL}px;
+    min-height: 34px;
 }}
 QPushButton[role="success"]:disabled {{
     background-color: {css('disabled_surface', m)};
