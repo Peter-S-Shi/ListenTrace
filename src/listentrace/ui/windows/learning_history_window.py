@@ -79,25 +79,28 @@ def _format_accuracy(accuracy: float | None) -> str:
     return "no completed attempts yet" if accuracy is None else f"{accuracy:.0%}"
 
 
-# Overview metric grid: (key, display label, tooltip-or-None). Same 10
-# metrics/semantics as before -- only the presentation changed from a raw
-# multi-line QLabel to a scan-oriented 2-column grid. Long clarifying detail
-# that doesn't fit a short label lives in the tooltip instead of inline text.
-_OVERVIEW_METRICS: list[tuple[str, str, str | None]] = [
-    ("materials_practiced", "Materials Practiced", None),
-    ("completed_sessions", "Completed Sessions", None),
-    ("active_sessions", "Active Sessions", None),
-    ("abandoned_sessions", "Abandoned Sessions", None),
-    ("completed_quizzes", "Completed Quizzes", None),
-    ("avg_quiz_accuracy", "Avg Quiz Accuracy", "Across completed attempts only."),
-    ("session_diagnosis_evidence", "Session Diagnosis Evidence", None),
+# Overview metric grid: (key, display label, tooltip-or-None, icon name).
+# Same 10 metrics/semantics as before -- the icon is a purely presentational
+# addition (M13 Due-Frame-First Visual Polish, Axis 5: the approved due-frame
+# board gives the METRIC SUMMARY SHEET its own icon per metric). Long
+# clarifying detail that doesn't fit a short label lives in the tooltip
+# instead of inline text.
+_OVERVIEW_METRICS: list[tuple[str, str, str | None, str]] = [
+    ("materials_practiced", "Materials Practiced", None, "material"),
+    ("completed_sessions", "Completed Sessions", None, "check"),
+    ("active_sessions", "Active Sessions", None, "clock"),
+    ("abandoned_sessions", "Abandoned Sessions", None, "x_circle"),
+    ("completed_quizzes", "Completed Quizzes", None, "quiz"),
+    ("avg_quiz_accuracy", "Avg Quiz Accuracy", "Across completed attempts only.", "chart"),
+    ("session_diagnosis_evidence", "Session Diagnosis Evidence", None, "clipboard"),
     (
         "shadowing_practice_actions",
         "Shadowing Practice Actions",
         "Cumulative; approximate under a date filter — see docs.",
+        "mic",
     ),
-    ("retained_recordings", "Retained Recordings", None),
-    ("quick_practices_completed", "Quick Practices Completed", None),
+    ("retained_recordings", "Retained Recordings", None, "waveform"),
+    ("quick_practices_completed", "Quick Practices Completed", None, "play"),
 ]
 
 
@@ -304,27 +307,21 @@ class LearningHistoryWindow(QMainWindow):
 
         stats_card, stats_column = theme.make_card()
         # A raw multi-line QLabel read like a debug/status report rather than
-        # a finished Study Dossier. A scan-oriented 2-column metric grid
-        # keeps exactly the same data/semantics, just recomposed to read at
-        # a glance -- no new metrics, no score/ranking invented.
+        # a finished Study Dossier. A scan-oriented 2-column icon+metric tile
+        # grid keeps exactly the same data/semantics, just recomposed to read
+        # at a glance -- no new metrics, no score/ranking invented (M13
+        # Due-Frame-First Visual Polish, Axis 5).
         self._overview_grid = QGridLayout()
-        self._overview_grid.setHorizontalSpacing(24)
-        self._overview_grid.setVerticalSpacing(4)
+        self._overview_grid.setHorizontalSpacing(SPACE_NORMAL)
+        self._overview_grid.setVerticalSpacing(SPACE_NORMAL)
         self._overview_metric_labels: dict[str, QLabel] = {}
-        for key, name_text, tooltip in _OVERVIEW_METRICS:
-            name_label = QLabel(name_text)
-            theme.apply_role(name_label, "caption")
-            value_label = QLabel("")
-            theme.apply_role(value_label, "metric_value")
-            if tooltip:
-                name_label.setToolTip(tooltip)
-                value_label.setToolTip(tooltip)
-            row, col_pair = divmod(_OVERVIEW_METRICS.index((key, name_text, tooltip)), 2)
-            self._overview_grid.addWidget(name_label, row, col_pair * 2)
-            self._overview_grid.addWidget(value_label, row, col_pair * 2 + 1)
+        for index, (key, name_text, tooltip, icon_name) in enumerate(_OVERVIEW_METRICS):
+            tile, value_label = theme.make_metric_tile(icon_name, name_text, tooltip)
+            row, col = divmod(index, 2)
+            self._overview_grid.addWidget(tile, row, col)
             self._overview_metric_labels[key] = value_label
+        self._overview_grid.setColumnStretch(0, 1)
         self._overview_grid.setColumnStretch(1, 1)
-        self._overview_grid.setColumnStretch(3, 1)
         stats_column.addLayout(self._overview_grid)
         layout.addWidget(stats_card)
 

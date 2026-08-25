@@ -634,6 +634,47 @@ def make_decorative_motif(kind: str, size_px: int = 20) -> QLabel:
     return label
 
 
+def make_metric_tile(icon_name: str, label_text: str, tooltip: str | None = None) -> tuple[QFrame, QLabel]:
+    """An icon + label/value tile for a scan-oriented metric sheet (M13
+    Due-Frame-First Visual Polish, Axis 5 -- Learning History's Overview
+    "METRIC SUMMARY SHEET"). Returns `(tile, value_label)`; the caller sets
+    `value_label`'s text after construction. `label_text` is the static
+    metric name shown above the value. Purely presentational -- carries no
+    new metric semantics beyond what the caller already computed.
+    """
+    tile = QFrame()
+    apply_role(tile, "metric_tile")
+    layout = QHBoxLayout(tile)
+    layout.setContentsMargins(SPACE_NORMAL, SPACE_NORMAL, SPACE_NORMAL, SPACE_NORMAL)
+    layout.setSpacing(SPACE_NORMAL)
+
+    icon_label = QLabel()
+    icon_pixmap = get_icon(icon_name, color_token="accent", size=ICON_SIZE_EMPHASIZED).pixmap(
+        ICON_SIZE_EMPHASIZED, ICON_SIZE_EMPHASIZED
+    )
+    icon_label.setPixmap(icon_pixmap)
+    icon_label.setFixedSize(ICON_SIZE_EMPHASIZED, ICON_SIZE_EMPHASIZED)
+    if tooltip:
+        icon_label.setToolTip(tooltip)
+    layout.addWidget(icon_label)
+
+    text_col = QVBoxLayout()
+    text_col.setSpacing(0)
+    name_label = QLabel(label_text)
+    apply_role(name_label, "caption")
+    if tooltip:
+        name_label.setToolTip(tooltip)
+    value_label = QLabel("")
+    apply_role(value_label, "metric_value")
+    if tooltip:
+        value_label.setToolTip(tooltip)
+    text_col.addWidget(name_label)
+    text_col.addWidget(value_label)
+    layout.addLayout(text_col, 1)
+
+    return tile, value_label
+
+
 def make_media_frame() -> tuple[QFrame, QVBoxLayout]:
     """A warm paper frame around a media viewport -- media placed on a study desk."""
     frame = QFrame()
@@ -904,12 +945,22 @@ QLabel[role="notebook_spiral_cues"] {{
     letter-spacing: 2px;
 }}
 
+/* Washi-tape section stamp (M13 Due-Frame-First Visual Polish, Axis 1/3/4):
+   the due-frame boards render every notebook section label as a pinned
+   tape/paper-slip with handwritten-blue ink, not plain colored text on the
+   bare surface -- this closes that gap for every `make_notebook_surface()`
+   context-label consumer (Player x2, Guided Session Stage 5, Main Library
+   dossier) from one shared rule. Consumes the previously-orphaned
+   `tape_cream` token. */
 QLabel[role="notebook_doodle_tag"] {{
     font-family: {HANDWRITING_FONT_FAMILY};
     color: {css('handwritten_blue', m)};
-    font-size: 15px;
+    background-color: {css('tape_cream', m)};
+    font-size: 14px;
     font-weight: 600;
     letter-spacing: 0.2px;
+    padding: 3px 12px;
+    border-radius: 3px;
 }}
 
 /* Ruled List for Notebook Archive / Material Browsing */
@@ -1240,6 +1291,15 @@ QFrame[role="card"] {{
     background-color: {css('surface', m)};
     border: {BORDER_WIDTH}px solid {css('line', m)};
     border-radius: {RADIUS_CARD}px;
+}}
+
+/* Metric tile (M13 Due-Frame-First Visual Polish, Axis 5): a small
+   icon + label/value card for a scan-oriented metric sheet, e.g. Learning
+   History's Overview "METRIC SUMMARY SHEET". */
+QFrame[role="metric_tile"] {{
+    background-color: {css('surface_soft', m)};
+    border: {BORDER_WIDTH}px solid {css('line', m)};
+    border-radius: {RADIUS_CONTROL}px;
 }}
 
 /* Surface: Soft Panel (directory / sidebar backing) */

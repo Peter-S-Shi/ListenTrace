@@ -43,6 +43,7 @@ from listentrace.ui.theme import (
     apply_role,
     apply_surface,
     configure_long_text_list,
+    get_icon,
     make_card,
     make_notebook_surface,
     make_surface_header,
@@ -432,6 +433,17 @@ class MainWindow(QMainWindow):
                 label += "  [media missing]"
             item = QListWidgetItem(label)
             item.setData(Qt.ItemDataRole.UserRole, material.id)
+            # M13 Due-Frame-First Visual Polish, Axis 5: the approved
+            # due-frame board gives every Study Archive row its own small
+            # status marker rather than plain text alone -- never the only
+            # signal (the "[media missing]" text above still carries that
+            # state on its own).
+            if not material.media_available:
+                item.setIcon(get_icon("warning", color_token="danger"))
+            elif self._showing_archived:
+                item.setIcon(get_icon("archive", color_token="secondary"))
+            else:
+                item.setIcon(get_icon("material", color_token="accent"))
             self._material_list.addItem(item)
 
     def _selected_material_id(self) -> int | None:

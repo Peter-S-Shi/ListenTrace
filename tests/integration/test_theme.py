@@ -258,7 +258,27 @@ def test_status_dot_icon_uses_the_frozen_color_per_status(qapp, status, token):
     assert center.getRgb()[:3] == theme.qcolor(token).getRgb()[:3]
 
 
-@pytest.mark.parametrize("name", ["play", "forward", "back", "up", "down", "check", "close"])
+@pytest.mark.parametrize(
+    "name",
+    [
+        "play",
+        "forward",
+        "back",
+        "up",
+        "down",
+        "check",
+        "close",
+        "material",
+        "clock",
+        "x_circle",
+        "quiz",
+        "chart",
+        "clipboard",
+        "mic",
+        "waveform",
+        "warning",
+    ],
+)
 def test_get_icon_finds_every_sanctioned_inventory_icon(qapp, name):
     icon = theme.get_icon(name)
 
@@ -304,6 +324,22 @@ def test_make_decorative_motif_uses_the_frozen_token_color(qapp, kind, token):
         for y in range(image.height())
     )
     assert found
+
+
+def test_make_metric_tile_returns_a_settable_value_label(qapp):
+    tile, value_label = theme.make_metric_tile("material", "Materials Practiced")
+
+    assert tile.property("role") == "metric_tile"
+    value_label.setText("3")
+    assert value_label.text() == "3"
+    assert value_label.property("role") == "metric_value"
+
+
+def test_make_metric_tile_renders_the_requested_icon(qapp):
+    tile, _value_label = theme.make_metric_tile("clock", "Active Sessions")
+
+    icon_labels = [child for child in tile.findChildren(QLabel) if child.pixmap() is not None and not child.pixmap().isNull()]
+    assert len(icon_labels) == 1
 
 
 def test_make_surface_header_default_title_role(qapp):
@@ -452,7 +488,16 @@ def test_notebook_doodle_tag_uses_the_handwriting_grammar():
     rule = _qss_rule(sheet, 'QLabel[role="notebook_doodle_tag"]')
     assert theme.HANDWRITING_FONT_FAMILY in rule
     assert theme.css("handwritten_blue") in rule
-    assert "font-size: 15px" in rule
+    assert "font-size: 14px" in rule
+
+
+def test_notebook_doodle_tag_renders_as_a_pinned_tape_stamp():
+    """M13 Due-Frame-First Visual Polish, Axis 1/3/4: the approved due-frame
+    boards render every notebook section label as a pinned tape/paper-slip,
+    not plain colored text on the bare surface."""
+    sheet = theme.build_stylesheet("light")
+    rule = _qss_rule(sheet, 'QLabel[role="notebook_doodle_tag"]')
+    assert theme.css("tape_cream") in rule
 
 
 def test_danger_button_ordinary_hover_is_not_filled_red():
