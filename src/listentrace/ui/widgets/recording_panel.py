@@ -99,7 +99,9 @@ class RecordingPanel(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
 
         device_row = QHBoxLayout()
-        device_row.addWidget(QLabel("Microphone:"))
+        mic_lbl = QLabel("Microphone:")
+        theme.apply_role(mic_lbl, "caption")
+        device_row.addWidget(mic_lbl)
         self._device_combo = QComboBox()
         self._device_combo.currentIndexChanged.connect(self._on_device_selected)
         device_row.addWidget(self._device_combo, 1)
@@ -140,7 +142,9 @@ class RecordingPanel(QWidget):
         theme.apply_role(self._recording_state_label, "caption")
         layout.addWidget(self._recording_state_label)
 
-        layout.addWidget(QLabel("Takes for this cue:"))
+        takes_lbl = QLabel("Takes for this cue:")
+        theme.apply_role(takes_lbl, "caption")
+        layout.addWidget(takes_lbl)
         self._takes_list = QListWidget()
         theme.configure_long_text_list(self._takes_list)
         self._takes_list.currentItemChanged.connect(lambda *_: self._update_take_buttons())

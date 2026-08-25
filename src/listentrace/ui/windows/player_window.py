@@ -531,6 +531,7 @@ class PlayerWindow(QMainWindow):
         self._label_checkboxes: dict[str, QCheckBox] = {}
         for index, label in enumerate(AnnotationLabel):
             checkbox = QCheckBox(label.value.replace("_", " "))
+            apply_role(checkbox, "body")
             checkbox.stateChanged.connect(self._on_label_checkbox_changed)
             self._label_checkboxes[label.value] = checkbox
             label_grid.addWidget(checkbox, index, 0)
@@ -651,7 +652,9 @@ class PlayerWindow(QMainWindow):
         item_note_row.addWidget(self._item_note_edit)
         item_column.addLayout(item_note_row)
 
-        item_column.addWidget(QLabel("Context (editable):"))
+        context_lbl = QLabel("Context (editable):")
+        apply_role(context_lbl, "caption")
+        item_column.addWidget(context_lbl)
         self._item_context_edit = RuledTextEdit()
         self._item_context_edit.setMaximumHeight(52)
         item_column.addWidget(self._item_context_edit)

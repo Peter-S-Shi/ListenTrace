@@ -1019,6 +1019,7 @@ class GuidedSessionWindow(QMainWindow):
         self._diagnosis_label_checkboxes: dict[str, QCheckBox] = {}
         for index, label in enumerate(AnnotationLabel):
             checkbox = QCheckBox(label.value.replace("_", " "))
+            apply_role(checkbox, "body")
             checkbox.stateChanged.connect(self._on_diagnosis_label_checkbox_changed)
             self._diagnosis_label_checkboxes[label.value] = checkbox
             row, column = divmod(index, _LABEL_GRID_COLUMNS)

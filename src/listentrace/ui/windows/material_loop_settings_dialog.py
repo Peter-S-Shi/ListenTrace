@@ -72,10 +72,12 @@ class MaterialLoopSettingsDialog(QDialog):
         layout.addWidget(explanation)
 
         self._inherit_radio = QRadioButton()
+        apply_role(self._inherit_radio, "body")
         self._inherit_radio.toggled.connect(self._on_inherit_toggled)
         layout.addWidget(self._inherit_radio)
 
         self._custom_radio = QRadioButton("Custom for this Material")
+        apply_role(self._custom_radio, "body")
         self._custom_radio.toggled.connect(self._on_custom_toggled)
         layout.addWidget(self._custom_radio)
 

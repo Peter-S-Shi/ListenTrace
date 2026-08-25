@@ -79,6 +79,8 @@ class QuickPracticeStartDialog(QDialog):
         self._source_group = QButtonGroup(self)
         self._recommended_radio = QRadioButton("Recommended Practice")
         self._selected_radio = QRadioButton("Selected Cues")
+        theme.apply_role(self._recommended_radio, "body")
+        theme.apply_role(self._selected_radio, "body")
         self._source_group.addButton(self._recommended_radio)
         self._source_group.addButton(self._selected_radio)
         self._recommended_radio.toggled.connect(self._on_source_changed)
@@ -86,7 +88,9 @@ class QuickPracticeStartDialog(QDialog):
         source_column.addWidget(self._selected_radio)
 
         recommended_row = QHBoxLayout()
-        recommended_row.addWidget(QLabel("Number of cues:"))
+        count_lbl = QLabel("Number of cues:")
+        theme.apply_role(count_lbl, "caption")
+        recommended_row.addWidget(count_lbl)
         self._count_combo = QComboBox()
         for count in rules.ALLOWED_RECOMMENDED_COUNTS:
             self._count_combo.addItem(str(count), count)
