@@ -134,7 +134,7 @@ class MainWindow(QMainWindow):
         # 1. Left Sidebar (Acrobat-Style Bookmark / Navigation Directory)
         # -------------------------------------------------------------------
         self._sidebar_widget = QWidget(self._main_splitter)
-        apply_surface(self._sidebar_widget, "workspace")
+        apply_surface(self._sidebar_widget, "sidebar")
         sidebar_layout = QVBoxLayout(self._sidebar_widget)
         sidebar_layout.setContentsMargins(SPACE_NORMAL, SPACE_SECTION, SPACE_NORMAL, SPACE_SECTION)
         sidebar_layout.setSpacing(SPACE_COMPACT)
@@ -267,6 +267,7 @@ class MainWindow(QMainWindow):
 
         # Dominant Hero Action: Open Player
         self._open_player_button = QPushButton("Open Player (Listening Focus)")
+        self._open_player_button.setProperty("hero", "true")
         apply_role(self._open_player_button, "primary")
         set_button_icon(self._open_player_button, "play", color_token="ink_on_accent")
         self._open_player_button.clicked.connect(self._on_open_player_clicked)

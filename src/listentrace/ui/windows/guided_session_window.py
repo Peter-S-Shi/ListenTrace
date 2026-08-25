@@ -345,6 +345,7 @@ class GuidedSessionWindow(QMainWindow):
         apply_role(self._back_button, "quiet")
         theme.set_button_icon(self._back_button, "back", color_token="secondary")
         apply_role(self._skip_button, "quiet")
+        self._continue_button.setProperty("hero", "true")
         apply_role(self._continue_button, "primary")
         theme.set_button_icon(self._continue_button, "save", color_token="ink_on_accent")
         apply_role(self._close_button, "quiet")
@@ -1304,7 +1305,7 @@ class GuidedSessionWindow(QMainWindow):
 
         self._shadowing_cue_label = QLabel("")
         self._shadowing_cue_label.setWordWrap(True)
-        self._shadowing_cue_label.setStyleSheet("font-size: 15px; font-weight: 600; padding: 6px 0;")
+        apply_role(self._shadowing_cue_label, "dominant_cue")
         cue_layout.addWidget(self._shadowing_cue_label)
 
         transport_row = QHBoxLayout()

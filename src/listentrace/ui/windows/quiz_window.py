@@ -204,7 +204,7 @@ class QuizWindow(QMainWindow):
         # Prompt & Type
         self._question_label = QLabel("")
         self._question_label.setWordWrap(True)
-        self._question_label.setStyleSheet("font-size: 15px; font-weight: 600; padding: 4px 0;")
+        apply_role(self._question_label, "question_stem")
         canvas_layout.addWidget(self._question_label)
 
         # Demoted Cue Playback bar
@@ -566,11 +566,13 @@ class QuizWindow(QMainWindow):
         # button visually leads.
         if on_last_question:
             apply_role(self._next_button, "quiet")
+            self._submit_button.setProperty("hero", "true")
             apply_role(self._submit_button, "primary")
             theme.set_button_icon(self._next_button, "forward", color_token="secondary")
             theme.set_button_icon(self._submit_button, "motif_star", color_token="ink_on_accent")
         else:
             apply_role(self._next_button, "primary")
+            self._submit_button.setProperty("hero", None)
             apply_role(self._submit_button, "quiet")
             theme.set_button_icon(self._next_button, "forward", color_token="ink_on_accent")
             theme.set_button_icon(self._submit_button, "motif_star", color_token="secondary")

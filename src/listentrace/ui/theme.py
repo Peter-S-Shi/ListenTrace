@@ -122,6 +122,21 @@ _TOKENS_LIGHT: dict[str, tuple[int, int, int, int]] = {
     # the canonical ruled-paper pale blue without altering that shared look.
     "notebook_rule_blue": (191, 219, 254, 133),  # #BFDBFE @ 52% pale-blue ruled line
     "notebook_binding": (125, 135, 148, 255),    # #7D8794 spiral_metal
+    # M13 Stage B whole-product reconciliation (DESIGN.md §7/§8) -- exact
+    # per-role button/input/list/scrollbar values not covered by the more
+    # general palette above.
+    "ink_button_secondary": (42, 39, 35, 255),   # #2A2723 -- secondary button text (DESIGN.md §7.3)
+    "quiet_hover": (243, 238, 230, 255),         # #F3EEE6 -- quiet button hover bg (§7.4)
+    "quiet_pressed": (234, 227, 216, 255),       # #EAE3D8 -- quiet button pressed bg (§7.4)
+    "danger_pressed": (251, 232, 232, 255),      # #FBE8E8 -- danger button pressed bg (§7.5)
+    "danger_focus_ring": (239, 154, 155, 255),   # #EF9A9B -- danger's own focus ring (§7.5)
+    "input_hover_border": (183, 170, 152, 255),  # #B7AA98 -- LineEdit/ComboBox hover border (§8.1)
+    "input_readonly_bg": (244, 239, 231, 255),   # #F4EFE7 -- read-only input bg (§8.1)
+    "list_hover": (247, 244, 237, 255),          # #F7F4ED -- ruled-list row hover (§8.3)
+    "list_divider": (191, 219, 254, 89),         # #BFDBFE @ 35% -- ruled-list row divider (§8.3)
+    "scrollbar_thumb": (185, 176, 164, 255),     # #B9B0A4 (§8.4)
+    "scrollbar_thumb_hover": (145, 135, 123, 255), # #91877B (§8.4)
+    "scrollbar_track": (243, 238, 230, 255),     # #F3EEE6 (§8.4)
 }
 
 _TOKENS_DARK: dict[str, tuple[int, int, int, int]] = {
@@ -170,11 +185,13 @@ _TOKENS = _TOKENS_LIGHT
 # Spacing & Shape Scale (Spacious Learning Density)
 # ---------------------------------------------------------------------------
 
-SPACE_COMPACT = 4
-SPACE_NORMAL = 8
-SPACE_SECTION = 16
-SPACE_PAGE = 24
-SPACE_LARGE = 32
+SPACE_COMPACT = 4   # DESIGN.md §5.1 SPACE_XXS
+SPACE_TIGHT = 6      # SPACE_XS
+SPACE_NORMAL = 8     # SPACE_S
+SPACE_MEDIUM = 12    # SPACE_M
+SPACE_SECTION = 16   # SPACE_L
+SPACE_PAGE = 24      # SPACE_XL
+SPACE_LARGE = 32     # SPACE_XXL
 
 RADIUS_CONTROL = 6
 RADIUS_CARD = 10
@@ -672,8 +689,12 @@ QLineEdit, QTextEdit, QPlainTextEdit, QComboBox, QListWidget, QTableWidget {{
     selection-background-color: {css('accent', m)};
     selection-color: #FFFFFF;
 }}
+/* DESIGN.md §8.1: input focus border is `accent` itself (#2563EB), not the
+   softer shared `focus` token used elsewhere -- `accent_border_soft`
+   (#93C5FD) is the contract's paired "focus ring" value, approximated here
+   via hover border since Qt QSS has no outer-glow/box-shadow primitive. */
 QLineEdit:focus, QTextEdit:focus, QPlainTextEdit:focus, QComboBox:focus, QListWidget:focus {{
-    border: {BORDER_WIDTH}px solid {css('focus', m)};
+    border: {BORDER_WIDTH}px solid {css('accent', m)};
 }}
 *:disabled {{
     color: {css('disabled_text', m)};
@@ -682,10 +703,22 @@ QLabel {{
     background-color: transparent;
 }}
 QLineEdit, QComboBox, QTextEdit, QPlainTextEdit, QListWidget, QTableWidget {{
-    background-color: {css('surface', m)};
-    border: {BORDER_WIDTH}px solid {css('line', m)};
+    background-color: {css('surface_paper', m)};
+    border: {BORDER_WIDTH}px solid {css('paper_edge', m)};
     border-radius: {RADIUS_CONTROL}px;
-    padding: {SPACE_COMPACT}px {SPACE_NORMAL}px;
+    padding: {SPACE_COMPACT}px 10px;
+}}
+QLineEdit:hover, QComboBox:hover {{
+    border-color: {css('input_hover_border', m)};
+}}
+QLineEdit:read-only {{
+    background-color: {css('input_readonly_bg', m)};
+    border-color: {css('line', m)};
+    color: {css('secondary', m)};
+}}
+QLineEdit[invalid="true"] {{
+    border-color: {css('danger', m)};
+    background-color: {css('danger_subtle', m)};
 }}
 /* DESIGN.md §5 control-size contract: single-line inputs have a 34px height
    floor. Scoped to QLineEdit/QComboBox only -- QTextEdit/QPlainTextEdit are
@@ -696,15 +729,26 @@ QLineEdit, QComboBox, QTextEdit, QPlainTextEdit, QListWidget, QTableWidget {{
    min-height is set to (34 - 8 - 2) to converge the *rendered* height on
    the contract. */
 QLineEdit, QComboBox {{
+    font-size: 14px;
     min-height: 24px;
 }}
+/* DESIGN.md §8.3: standard list selection is a light selected-paper tint
+   with ink text and a blue border -- never a full-blue/white "enterprise"
+   selection. This base rule covers every QListWidget by default (dialogs
+   without a dedicated role="ruled_list"/etc.), not just the roled ones. */
 QListWidget::item:selected, QListWidget::item:selected:active {{
-    background-color: {css('accent', m)};
-    color: #FFFFFF;
+    background-color: {css('accent_subtle', m)};
+    color: {css('ink', m)};
+    border: {BORDER_WIDTH}px solid {css('accent', m)};
+    font-weight: 600;
 }}
 QListWidget::item:selected:!active {{
-    background-color: {css('accent_hover', m)};
-    color: #FFFFFF;
+    background-color: {css('accent_subtle', m)};
+    color: {css('ink', m)};
+    border: {BORDER_WIDTH}px solid {css('accent_border_soft', m)};
+}}
+QListWidget::item:hover {{
+    background-color: {css('list_hover', m)};
 }}
 QSlider::groove:horizontal {{
     height: 4px;
@@ -724,16 +768,25 @@ QSlider::handle:horizontal {{
 QSlider::handle:horizontal:hover {{
     background: {css('accent_hover', m)};
 }}
-QScrollBar:vertical, QScrollBar:horizontal {{
+/* DESIGN.md §8.4: 10px width, quiet thumb, 28px minimum thumb length. */
+QScrollBar:vertical {{
     background: transparent;
     border: none;
+    width: 10px;
+}}
+QScrollBar:horizontal {{
+    background: transparent;
+    border: none;
+    height: 10px;
 }}
 QScrollBar::handle {{
-    background: {css('line', m)};
+    background: {css('scrollbar_thumb', m)};
     border-radius: 4px;
 }}
+QScrollBar::handle:vertical {{ min-height: 28px; }}
+QScrollBar::handle:horizontal {{ min-width: 28px; }}
 QScrollBar::handle:hover {{
-    background: {css('muted', m)};
+    background: {css('scrollbar_thumb_hover', m)};
 }}
 QScrollBar::add-line, QScrollBar::sub-line, QScrollBar::add-page, QScrollBar::sub-page {{
     width: 0px;
@@ -754,16 +807,31 @@ QSplitter::handle:vertical {{
 
 def _build_component_qss(m: str) -> str:
     return f"""
-/* Typography & Labels */
-QLabel[role="page_title"] {{ font-size: 20px; font-weight: bold; color: {css('ink', m)}; }}
-QLabel[role="title"] {{ font-size: 15px; font-weight: bold; color: {css('ink', m)}; }}
+/* Typography & Labels (DESIGN.md §4.2 type scale) */
+QLabel[role="page_title"] {{ font-size: 20px; font-weight: 700; color: {css('ink', m)}; }}
+QLabel[role="title"] {{ font-size: 16px; font-weight: 700; letter-spacing: 0.1px; color: {css('ink', m)}; }}
 QLabel[role="subtitle"] {{ font-size: 13px; color: {css('muted', m)}; }}
-QLabel[role="caption"] {{ font-size: 11px; font-weight: bold; text-transform: uppercase; color: {css('muted', m)}; }}
+QLabel[role="section_header"] {{
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.6px;
+    color: {css('handwritten_blue', m)};
+}}
+QLabel[role="caption"] {{
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.4px;
+    color: {css('ink_caption', m)};
+}}
+QLabel[role="helper"] {{ font-size: 12px; font-weight: 400; color: {css('muted', m)}; }}
+QLabel[role="form_label"] {{ font-size: 13px; font-weight: 600; color: {css('secondary', m)}; }}
 QLabel[role="muted"] {{ color: {css('muted', m)}; }}
-QLabel[role="error"] {{ color: {css('danger', m)}; }}
-QLabel[role="warning"] {{ color: {css('warning', m)}; }}
-QLabel[role="success"] {{ color: {css('success', m)}; }}
+QLabel[role="error"] {{ font-size: 12px; font-weight: 600; color: {css('danger', m)}; }}
+QLabel[role="warning"] {{ font-size: 12px; font-weight: 600; color: {css('warning', m)}; }}
+QLabel[role="success"] {{ font-size: 12px; font-weight: 600; color: {css('success', m)}; }}
 QLabel[role="monospace"] {{ font-family: {MONOSPACE_FONT_FAMILY}; font-size: 11px; font-weight: 500; color: {css('muted', m)}; }}
+QLabel[role="dominant_cue"] {{ font-size: 17px; font-weight: 600; color: {css('ink', m)}; padding: 4px 0; }}
+QLabel[role="question_stem"] {{ font-size: 16px; font-weight: 650; color: {css('ink', m)}; padding: 4px 0; }}
 
 /* Notebook & Lined Paper Elements */
 QFrame[role="notebook_page"] {{
@@ -786,9 +854,11 @@ QLabel[role="notebook_spiral_cues"] {{
 }}
 
 QLabel[role="notebook_doodle_tag"] {{
-    color: {css('muted', m)};
-    font-size: 11px;
+    font-family: {HANDWRITING_FONT_FAMILY};
+    color: {css('handwritten_blue', m)};
+    font-size: 15px;
     font-weight: 600;
+    letter-spacing: 0.2px;
 }}
 
 /* Ruled List for Notebook Archive / Material Browsing */
@@ -800,23 +870,23 @@ QListWidget[role="ruled_list"] {{
 }}
 QListWidget[role="ruled_list"]::item {{
     padding: {SPACE_NORMAL}px {SPACE_SECTION}px;
-    border-bottom: 1px solid {css('line_ruled', m)};
+    border-bottom: 1px solid {css('list_divider', m)};
     border-radius: {RADIUS_CONTROL}px;
     margin-bottom: 2px;
 }}
 QListWidget[role="ruled_list"]::item:hover {{
-    background-color: {css('surface_soft', m)};
+    background-color: {css('list_hover', m)};
 }}
 QListWidget[role="ruled_list"]::item:selected, QListWidget[role="ruled_list"]::item:selected:active {{
     background-color: {css('accent_subtle', m)};
-    color: {css('accent', m)};
+    color: {css('ink', m)};
     border-left: 3px solid {css('accent', m)};
     font-weight: 600;
 }}
 QListWidget[role="ruled_list"]::item:selected:!active {{
     background-color: {css('accent_subtle', m)};
-    color: {css('accent', m)};
-    border-left: 3px solid {css('accent_hover', m)};
+    color: {css('ink', m)};
+    border-left: 3px solid {css('accent_border_soft', m)};
 }}
 
 /* Ruled Metadata Rows in Dossier */
@@ -1122,6 +1192,15 @@ QListWidget[surface="surface_soft"] {{
     color: {css('ink', m)};
 }}
 
+/* Surface: Sidebar (app directory / archive rail) -- the dedicated
+   `surface_sidebar`/sidebar_bg token, distinct from the generic
+   `workspace` surface. */
+QMainWindow[surface="sidebar"],
+QWidget[surface="sidebar"] {{
+    background-color: {css('surface_sidebar', m)};
+    color: {css('ink', m)};
+}}
+
 /* Paper Surface */
 QMainWindow[surface="paper"],
 QWidget[surface="paper"],
@@ -1204,46 +1283,62 @@ QFrame[surface="workspace"] {{
 }}
 
 /* Buttons: Primary / Secondary / Quiet / Danger / Success */
+/* DESIGN.md §4.2 "Regular button" row: 13px/600 for every ordinary
+   (non-hero) button role, color role-specific -- applied once here so
+   every role below inherits it without repeating the declaration. */
+QPushButton[role="primary"], QPushButton[role="secondary"], QPushButton[role="quiet"],
+QPushButton[role="danger"], QPushButton[role="success"], QPushButton[role="notebook_primary_action"],
+QPushButton[role="notebook_action"], QPushButton[role="notebook_destructive_action"] {{
+    font-size: 13px;
+    font-weight: 600;
+}}
+
 QPushButton[role="primary"] {{
     background-color: {css('accent', m)};
-    color: #FFFFFF;
-    font-weight: 600;
-    border: none;
+    color: {css('ink_on_accent', m)};
+    border: {BORDER_WIDTH}px solid {css('accent', m)};
     border-radius: {RADIUS_CONTROL}px;
-    padding: {SPACE_NORMAL}px {SPACE_SECTION}px;
+    padding: {SPACE_NORMAL}px {SPACE_MEDIUM}px;
     /* Qt's QSS box model adds padding/border on top of min-height (it
-       constrains the content box, not the padding/border box) -- this
-       control has 2*SPACE_NORMAL=16px vertical padding and no border, so
-       min-height is set to (34 - 16) to converge the *rendered* height on
-       the DESIGN.md §2.8 34px standard-button contract, not just the
-       min-height property's raw value. */
-    min-height: 18px;
+       constrains the content box, not the padding/border box): vertical
+       padding 2*SPACE_NORMAL=16px + border 2*1px=2px -> 34-16-2=16 to
+       converge the *rendered* height on the DESIGN.md §5.3 34px
+       ordinary-primary contract. */
+    min-height: 16px;
 }}
-/* Hero tier (DESIGN.md §2.8, 40px): an opt-in variant for the single most
-   prominent progression action on a surface -- additive infrastructure,
-   not yet wired to any window (later Stage B batches opt specific buttons
-   in via `widget.setProperty("hero", "true")`). */
+/* Hero tier (DESIGN.md §5.3/§7.2, 40px): the single most prominent
+   progression action on a surface -- opted in via
+   `widget.setProperty("hero", "true")`. */
 QPushButton[role="primary"][hero="true"] {{
-    min-height: 24px;
+    font-size: 14px;
+    font-weight: 650;
+    letter-spacing: 0.1px;
+    padding: {SPACE_NORMAL}px {SPACE_SECTION}px;
+    /* vertical padding 16px + border 2px -> 40-16-2=22. */
+    min-height: 22px;
 }}
-QPushButton[role="primary"]:hover {{ background-color: {css('accent_hover', m)}; }}
-QPushButton[role="primary"]:pressed {{ background-color: {css('accent_pressed', m)}; }}
+QPushButton[role="primary"]:hover {{ background-color: {css('accent_hover', m)}; border-color: {css('accent_hover', m)}; }}
+QPushButton[role="primary"]:pressed {{ background-color: {css('accent_pressed', m)}; border-color: {css('accent_pressed', m)}; }}
 QPushButton[role="primary"]:disabled {{
     background-color: {css('disabled_surface', m)};
+    border-color: {css('disabled_border', m)};
     color: {css('disabled_text', m)};
 }}
 
 QPushButton[role="secondary"] {{
-    background-color: {css('surface', m)};
-    color: {css('ink', m)};
-    font-weight: 500;
-    border: {BORDER_WIDTH}px solid {css('line', m)};
+    background-color: {css('surface_paper', m)};
+    color: {css('ink_button_secondary', m)};
+    border: {BORDER_WIDTH}px solid {css('paper_edge', m)};
     border-radius: {RADIUS_CONTROL}px;
-    padding: {SPACE_COMPACT}px {SPACE_NORMAL + 2}px;
+    padding: {SPACE_COMPACT}px {SPACE_MEDIUM}px;
     /* 2*SPACE_COMPACT=8px vertical padding + 2*1px border -> 34-8-2=24. */
     min-height: 24px;
 }}
-QPushButton[role="secondary"]:hover {{ background-color: {css('surface_soft', m)}; }}
+QPushButton[role="secondary"]:hover {{
+    background-color: {css('accent_subtle', m)};
+    border-color: {css('accent_border_soft', m)};
+}}
+QPushButton[role="secondary"]:pressed {{ background-color: {css('accent_selected', m)}; }}
 QPushButton[role="secondary"]:disabled {{
     background-color: {css('disabled_surface', m)};
     color: {css('disabled_text', m)};
@@ -1252,40 +1347,52 @@ QPushButton[role="secondary"]:disabled {{
 
 QPushButton[role="quiet"] {{
     background-color: transparent;
-    color: {css('muted', m)};
-    border: none;
-    padding: {SPACE_COMPACT}px {SPACE_NORMAL}px;
-    /* 2*SPACE_COMPACT=8px vertical padding, no border -> 30-8=22. */
-    min-height: 22px;
+    color: {css('secondary', m)};
+    border: {BORDER_WIDTH}px solid transparent;
+    border-radius: {RADIUS_CONTROL}px;
+    padding: {SPACE_COMPACT}px 10px;
+    /* 2*SPACE_COMPACT=8px vertical padding, transparent border still
+       reserves its 2*1px in the box model -> 30-8-2=20. */
+    min-height: 20px;
 }}
-QPushButton[role="quiet"]:hover {{ color: {css('ink', m)}; }}
+QPushButton[role="quiet"]:hover {{ background-color: {css('quiet_hover', m)}; color: {css('ink', m)}; }}
+QPushButton[role="quiet"]:pressed {{ background-color: {css('quiet_pressed', m)}; }}
 QPushButton[role="quiet"]:disabled {{ color: {css('disabled_text', m)}; }}
 
 QPushButton[role="danger"] {{
-    background-color: {css('surface', m)};
+    background-color: {css('surface_paper', m)};
     color: {css('danger', m)};
     border: {BORDER_WIDTH}px solid {css('danger', m)};
     border-radius: {RADIUS_CONTROL}px;
-    padding: {SPACE_COMPACT}px {SPACE_NORMAL}px;
+    padding: {SPACE_COMPACT}px {SPACE_MEDIUM}px;
     /* 2*SPACE_COMPACT=8px vertical padding + 2*1px border -> 34-8-2=24. */
     min-height: 24px;
 }}
-QPushButton[role="danger"]:hover {{ background-color: {css('danger', m)}; color: #FFFFFF; }}
-QPushButton[role="danger"]:pressed {{ background-color: {css('danger_hover', m)}; color: #FFFFFF; }}
+/* DESIGN.md §7.5: danger's ordinary hover is a subtle paper-pink tint, NOT
+   a filled solid-red button -- filled red is reserved for a destructive
+   confirmation dialog's unambiguous final commit, never ordinary hover. */
+QPushButton[role="danger"]:hover {{ background-color: {css('danger_subtle', m)}; }}
+QPushButton[role="danger"]:pressed {{ background-color: {css('danger_pressed', m)}; }}
 QPushButton[role="danger"]:disabled {{
     background-color: {css('disabled_surface', m)};
     color: {css('disabled_text', m)};
     border-color: {css('disabled_border', m)};
 }}
+/* Danger has its own focus-ring color (#EF9A9B), distinct from every other
+   role's shared `focus` token -- declared after the generic QPushButton:focus
+   rule below so equal-specificity QSS ordering lets it win. */
+QPushButton[role="danger"]:focus {{
+    border: 2px solid {css('danger_focus_ring', m)};
+}}
 
 QPushButton[role="success"] {{
     background-color: {css('success', m)};
     color: #FFFFFF;
-    border: none;
+    border: {BORDER_WIDTH}px solid {css('success', m)};
     border-radius: {RADIUS_CONTROL}px;
-    padding: {SPACE_COMPACT}px {SPACE_NORMAL}px;
-    /* 2*SPACE_COMPACT=8px vertical padding, no border -> 34-8=26. */
-    min-height: 26px;
+    padding: {SPACE_COMPACT}px {SPACE_MEDIUM}px;
+    /* 2*SPACE_COMPACT=8px vertical padding + 2*1px border -> 34-8-2=24. */
+    min-height: 24px;
 }}
 QPushButton[role="success"]:disabled {{
     background-color: {css('disabled_surface', m)};
@@ -1293,7 +1400,7 @@ QPushButton[role="success"]:disabled {{
 }}
 
 QPushButton:focus {{
-    border: {BORDER_WIDTH}px solid {css('focus', m)};
+    border: 2px solid {css('focus', m)};
 }}
 
 /* Shared state-card rendering vocabulary (M13 Stage B, G15): the visual
@@ -1413,11 +1520,14 @@ QLabel[role="quiz_option_marker"][selected="true"] {{
     color: {css('accent', m)};
 }}
 
-/* RadioButton */
+/* RadioButton / CheckBox -- DESIGN.md §8.2: 16px indicator, 8px label gap */
+QRadioButton, QCheckBox {{
+    spacing: {SPACE_NORMAL}px;
+}}
 QRadioButton::indicator {{
-    width: 14px;
-    height: 14px;
-    border-radius: 8px;
+    width: 16px;
+    height: 16px;
+    border-radius: 9px;
     border: {BORDER_WIDTH}px solid {css('line', m)};
     background-color: {css('surface', m)};
 }}
@@ -1429,8 +1539,26 @@ QRadioButton::indicator:checked {{
 QRadioButton::indicator:focus {{
     border: {BORDER_WIDTH}px solid {css('focus', m)};
 }}
+QRadioButton:disabled, QCheckBox:disabled {{
+    color: {css('disabled_text', m)};
+}}
+QCheckBox::indicator {{
+    width: 16px;
+    height: 16px;
+    border-radius: 3px;
+    border: {BORDER_WIDTH}px solid {css('line', m)};
+    background-color: {css('surface', m)};
+}}
+QCheckBox::indicator:hover {{ border-color: {css('muted', m)}; }}
+QCheckBox::indicator:checked {{
+    border: {BORDER_WIDTH}px solid {css('accent', m)};
+    background-color: {css('accent', m)};
+}}
+QCheckBox::indicator:focus {{
+    border: {BORDER_WIDTH}px solid {css('focus', m)};
+}}
 
-/* TabWidget */
+/* TabWidget -- DESIGN.md §7.7/§5.3: a paper-index tab, 34px */
 QTabWidget::pane {{ border: {BORDER_WIDTH}px solid {css('line', m)}; }}
 QTabBar::tab {{
     background: {css('surface_soft', m)};
@@ -1441,6 +1569,9 @@ QTabBar::tab {{
     border-top-right-radius: {RADIUS_CONTROL}px;
     padding: {SPACE_COMPACT + 2}px {SPACE_NORMAL + 2}px;
     margin-right: 2px;
+    /* 2*(SPACE_COMPACT+2)=12px vertical padding + 1px top border (bottom
+       is none) -> 34-12-1=21. */
+    min-height: 21px;
 }}
 QTabBar::tab:selected {{
     background: {css('surface', m)};
@@ -1507,6 +1638,20 @@ def get_app_icon() -> QIcon:
 ICON_SIZE_NORMAL = 16
 ICON_SIZE_EMPHASIZED = 20
 ICON_TEXT_GAP_PX = 6
+
+# Documented Qt platform exception (frozen contract still 6px): unlike
+# make_status_row()'s hand-built QHBoxLayout -- where ICON_TEXT_GAP_PX is a
+# real, exact layout.setSpacing() value -- a QPushButton's native
+# icon-to-text gap comes from QStyle::PM_ButtonMargin, which Qt Style
+# Sheets have no supported property to override, and whose exact pixel
+# value is a platform/style detail (Fusion/Windows/etc. each compute it
+# differently). set_button_icon() cannot make this exact without replacing
+# QPushButton's native icon+text layout with fully custom painting, which
+# is out of proportion to a cosmetic icon-text gap. Bounded instead of
+# exact: PM_ButtonMargin must stay within BUTTON_ICON_GAP_TOLERANCE_PX of
+# the frozen 6px target (see test_button_icon_gap_is_within_the_documented_
+# platform_tolerance).
+BUTTON_ICON_GAP_TOLERANCE_PX = 4
 
 
 def _icons_search_dirs() -> list[Path]:

@@ -62,6 +62,7 @@ class ImportDialog(QDialog):
         button_row = QHBoxLayout()
         import_button = QPushButton("Import")
         import_button.clicked.connect(self._on_import_clicked)
+        import_button.setProperty("hero", "true")
         theme.apply_role(import_button, "primary")
         cancel_button = QPushButton("Cancel")
         cancel_button.clicked.connect(self.reject)

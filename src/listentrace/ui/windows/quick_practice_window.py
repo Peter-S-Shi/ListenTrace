@@ -175,6 +175,7 @@ class QuickPracticeWindow(QMainWindow):
 
         self._step_action_button = QPushButton("")
         self._step_action_button.clicked.connect(self._on_step_action_clicked)
+        self._step_action_button.setProperty("hero", "true")
         apply_role(self._step_action_button, "primary")
         nav_row.addWidget(self._step_action_button)
         step_column.addLayout(nav_row)
@@ -636,7 +637,7 @@ class QuickPracticeWindow(QMainWindow):
         self._diagnosis_list.blockSignals(False)
 
         self._clear_diagnosis_form()
-        self._step_action_button.setText("Continue to Shadowing ▶")
+        self._step_action_button.setText("Continue to Shadowing")
         self._step_action_button.setEnabled(True)
 
     def _clear_diagnosis_form(self) -> None:
@@ -761,7 +762,7 @@ class QuickPracticeWindow(QMainWindow):
 
         self._replay_cue_label = QLabel("")
         self._replay_cue_label.setWordWrap(True)
-        self._replay_cue_label.setStyleSheet("font-size: 15px; font-weight: 600; padding: 4px 0;")
+        apply_role(self._replay_cue_label, "dominant_cue")
         cue_layout.addWidget(self._replay_cue_label)
 
         transport_row = QHBoxLayout()

@@ -118,7 +118,7 @@ class ShadowingPracticeWindow(QMainWindow):
 
         self._cue_label = QLabel("")
         self._cue_label.setWordWrap(True)
-        self._cue_label.setStyleSheet("font-size: 15px; font-weight: 600; padding: 4px 0;")
+        apply_role(self._cue_label, "dominant_cue")
         cue_layout.addWidget(self._cue_label)
 
         transport_row = QHBoxLayout()

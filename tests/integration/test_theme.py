@@ -17,6 +17,16 @@ def _rendered_height(widget) -> int:
     return widget.sizeHint().height()
 
 
+def _qss_rule(sheet: str, selector: str) -> str:
+    """The literal `{ ... }` body Qt would parse for `selector` -- the
+    actual public contract the style engine consumes."""
+    import re
+
+    match = re.search(re.escape(selector) + r"[^{]*\{([^}]*)\}", sheet)
+    assert match is not None, f"no QSS rule found for selector: {selector}"
+    return match.group(1)
+
+
 def test_build_stylesheet_is_non_empty_and_contains_m13_tokens():
     sheet = theme.build_stylesheet("light")
 
@@ -319,6 +329,21 @@ def test_make_surface_header_chips_get_their_own_roles(qapp):
     assert chip.property("role") == "badge_primary"
 
 
+def test_button_icon_gap_is_within_the_documented_platform_tolerance(qapp):
+    """QPushButton's native icon-to-text gap (QStyle::PM_ButtonMargin) has
+    no supported QSS override -- documented as a bounded platform
+    exception rather than claimed exact. Contrast with
+    make_status_row(), where the same 6px contract IS enforced exactly via
+    real layout spacing."""
+    from PySide6.QtWidgets import QPushButton, QStyle
+
+    button = QPushButton("Label")
+    button.ensurePolished()
+    margin = button.style().pixelMetric(QStyle.PixelMetric.PM_ButtonMargin, None, button)
+
+    assert abs(margin - theme.ICON_TEXT_GAP_PX) <= theme.BUTTON_ICON_GAP_TOLERANCE_PX
+
+
 def test_make_status_row_enforces_the_frozen_6px_icon_text_gap(qapp):
     row = theme.make_status_row("Active", "active")
 
@@ -381,3 +406,117 @@ def test_icon_search_paths_include_the_frozen_locations_when_frozen(monkeypatch,
 
     assert paths[0] == fake_exe.parent / "listentrace.ico"
     assert paths[1] == tmp_path / "meipass" / "listentrace.ico"
+
+
+# ---------------------------------------------------------------------------
+# M13 Stage B whole-product reconciliation contract tests
+# ---------------------------------------------------------------------------
+
+
+def test_title_role_matches_the_16px_major_title_contract():
+    sheet = theme.build_stylesheet("light")
+    rule = _qss_rule(sheet, 'QLabel[role="title"]')
+    assert "font-size: 16px" in rule
+    assert "font-weight: 700" in rule
+
+
+def test_caption_role_matches_the_contract_and_does_not_rely_on_text_transform():
+    sheet = theme.build_stylesheet("light")
+    rule = _qss_rule(sheet, 'QLabel[role="caption"]')
+    assert "font-size: 12px" in rule
+    assert "font-weight: 600" in rule
+    assert "letter-spacing: 0.4px" in rule
+    assert theme.css("ink_caption") in rule
+    assert "text-transform" not in rule
+
+
+def test_notebook_doodle_tag_uses_the_handwriting_grammar():
+    sheet = theme.build_stylesheet("light")
+    rule = _qss_rule(sheet, 'QLabel[role="notebook_doodle_tag"]')
+    assert theme.HANDWRITING_FONT_FAMILY in rule
+    assert theme.css("handwritten_blue") in rule
+    assert "font-size: 15px" in rule
+
+
+def test_danger_button_ordinary_hover_is_not_filled_red():
+    sheet = theme.build_stylesheet("light")
+    rule = _qss_rule(sheet, 'QPushButton[role="danger"]:hover')
+    assert theme.css("danger_subtle") in rule
+    assert theme.css("danger") not in rule
+
+
+def test_quiet_button_hover_has_a_real_background_not_text_color_only():
+    sheet = theme.build_stylesheet("light")
+    rule = _qss_rule(sheet, 'QPushButton[role="quiet"]:hover')
+    assert theme.css("quiet_hover") in rule
+
+
+def test_secondary_button_uses_the_canonical_paper_and_paper_edge():
+    sheet = theme.build_stylesheet("light")
+    rule = _qss_rule(sheet, 'QPushButton[role="secondary"] ')
+    assert theme.css("surface_paper") in rule
+    assert theme.css("paper_edge") in rule
+
+
+def test_input_uses_paper_primary_and_paper_edge_not_generic_surface():
+    sheet = theme.build_stylesheet("light")
+    rule = _qss_rule(sheet, "QLineEdit, QComboBox, QTextEdit, QPlainTextEdit, QListWidget, QTableWidget")
+    assert theme.css("surface_paper") in rule
+    assert theme.css("paper_edge") in rule
+
+
+def test_checkbox_and_radio_indicator_is_the_canonical_16px():
+    sheet = theme.build_stylesheet("light")
+    assert "width: 16px" in _qss_rule(sheet, "QCheckBox::indicator")
+    assert "width: 16px" in _qss_rule(sheet, "QRadioButton::indicator")
+
+
+def test_scrollbar_matches_the_10px_width_and_28px_minimum_thumb_contract():
+    sheet = theme.build_stylesheet("light")
+    assert "width: 10px" in _qss_rule(sheet, "QScrollBar:vertical")
+    assert "min-height: 28px" in _qss_rule(sheet, "QScrollBar::handle:vertical")
+    assert theme.css("scrollbar_thumb") in _qss_rule(sheet, "QScrollBar::handle ")
+
+
+def test_base_list_selection_is_not_full_blue_white_enterprise_style():
+    sheet = theme.build_stylesheet("light")
+    rule = _qss_rule(sheet, "QListWidget::item:selected, QListWidget::item:selected:active")
+    assert "#FFFFFF" not in rule
+    assert theme.css("accent_subtle") in rule
+    assert theme.css("ink") in rule
+
+
+def test_sidebar_surface_uses_the_dedicated_sidebar_token():
+    sheet = theme.build_stylesheet("light")
+    rule = _qss_rule(sheet, 'QWidget[surface="sidebar"]')
+    assert theme.css("surface_sidebar") in rule
+
+
+def test_workspace_surface_uses_surface_plain_not_desk_bg():
+    sheet = theme.build_stylesheet("light")
+    rule = _qss_rule(sheet, 'QFrame[surface="workspace"]')
+    assert theme.css("surface", "light") in rule
+    assert theme.css("page", "light") not in rule
+
+
+def test_hero_button_matches_the_40px_14px650_contract(qapp):
+    button = QPushButton("Label")
+    theme.apply_role(button, "primary")
+    button.setProperty("hero", "true")
+
+    assert _rendered_height(button) == 40
+    sheet = theme.build_stylesheet("light")
+    rule = _qss_rule(sheet, 'QPushButton[role="primary"][hero="true"]')
+    assert "font-size: 14px" in rule
+
+
+def test_spacing_scale_has_all_seven_canonical_tiers():
+    assert (
+        theme.SPACE_COMPACT,
+        theme.SPACE_TIGHT,
+        theme.SPACE_NORMAL,
+        theme.SPACE_MEDIUM,
+        theme.SPACE_SECTION,
+        theme.SPACE_PAGE,
+        theme.SPACE_LARGE,
+    ) == (4, 6, 8, 12, 16, 24, 32)
