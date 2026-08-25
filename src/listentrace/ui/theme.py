@@ -42,7 +42,12 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from listentrace.ui.widgets.notebook_paper import GrainedPaperFrame, RuledPaperFrame, SpiralBindingWidget
+from listentrace.ui.widgets.notebook_paper import (
+    GrainedPaperFrame,
+    LayeredPaperFrame,
+    RuledPaperFrame,
+    SpiralBindingWidget,
+)
 
 # ---------------------------------------------------------------------------
 # Tokens: Light & Dark Palettes
@@ -205,6 +210,21 @@ RADIUS_CONTROL = 6
 RADIUS_CARD = 10
 RADIUS_PILL = 9999
 RADIUS_STATE_CARD = 8  # shared by stepper_item/quiz_option (M13 Stage B, G15)
+
+# M13 Due-Frame-First Visual Polish, Axis 1: a small, fixed per-corner
+# variance on cards/media frames/ordinary buttons -- a "hand-set" rectangle
+# instead of a mathematically uniform machine one, matching the due-frame
+# boards' controlled irregularity. Deliberately NOT applied to pills, list
+# rows, inputs, or state-card badges, whose symmetric shape is functional
+# (a pill/pill-badge that isn't symmetric doesn't read as a pill).
+RADIUS_CARD_TL = RADIUS_CARD
+RADIUS_CARD_TR = RADIUS_CARD - 3
+RADIUS_CARD_BR = RADIUS_CARD + 2
+RADIUS_CARD_BL = RADIUS_CARD - 1
+RADIUS_BUTTON_TL = RADIUS_CONTROL
+RADIUS_BUTTON_TR = RADIUS_CONTROL - 2
+RADIUS_BUTTON_BR = RADIUS_CONTROL + 3
+RADIUS_BUTTON_BL = RADIUS_CONTROL - 1
 BORDER_WIDTH = 1
 
 FONT_FAMILY = (
@@ -389,8 +409,10 @@ def apply_paper_shadow(widget: QWidget, tier: str = "full") -> None:
 
 
 def make_card(title: str | None = None) -> tuple[QFrame, QVBoxLayout]:
-    """A light `QFrame[role="card"]` surface with spacious padding."""
-    frame = QFrame()
+    """A light `QFrame[role="card"]` surface with spacious padding, and a
+    small lifted paper corner (M13 Due-Frame-First Visual Polish, Axis 1)
+    instead of a perfectly flat machine rectangle."""
+    frame = LayeredPaperFrame()
     apply_role(frame, "card")
     layout = QVBoxLayout(frame)
     layout.setContentsMargins(SPACE_SECTION, SPACE_SECTION, SPACE_SECTION, SPACE_SECTION)
@@ -676,8 +698,10 @@ def make_metric_tile(icon_name: str, label_text: str, tooltip: str | None = None
 
 
 def make_media_frame() -> tuple[QFrame, QVBoxLayout]:
-    """A warm paper frame around a media viewport -- media placed on a study desk."""
-    frame = QFrame()
+    """A warm paper frame around a media viewport -- media placed on a study
+    desk, with a small lifted paper corner (M13 Due-Frame-First Visual
+    Polish, Axis 1) instead of a perfectly flat machine rectangle."""
+    frame = LayeredPaperFrame()
     apply_role(frame, "media_frame")
     layout = QVBoxLayout(frame)
     layout.setContentsMargins(SPACE_NORMAL, SPACE_NORMAL, SPACE_NORMAL, SPACE_NORMAL)
@@ -1113,7 +1137,10 @@ QSplitter[role="player_split"]::handle:horizontal:hover {{
 QFrame[role="media_frame"] {{
     background-color: {css('surface_paper', m)};
     border: {BORDER_WIDTH}px solid {css('line', m)};
-    border-radius: {RADIUS_CARD}px;
+    border-top-left-radius: {RADIUS_CARD_TL}px;
+    border-top-right-radius: {RADIUS_CARD_TR}px;
+    border-bottom-right-radius: {RADIUS_CARD_BR}px;
+    border-bottom-left-radius: {RADIUS_CARD_BL}px;
 }}
 QFrame[role="inset_panel"] {{
     background-color: {css('surface_soft', m)};
@@ -1290,7 +1317,10 @@ QPushButton[role="notebook_destructive_action"]:disabled {{
 QFrame[role="card"] {{
     background-color: {css('surface', m)};
     border: {BORDER_WIDTH}px solid {css('line', m)};
-    border-radius: {RADIUS_CARD}px;
+    border-top-left-radius: {RADIUS_CARD_TL}px;
+    border-top-right-radius: {RADIUS_CARD_TR}px;
+    border-bottom-right-radius: {RADIUS_CARD_BR}px;
+    border-bottom-left-radius: {RADIUS_CARD_BL}px;
 }}
 
 /* Metric tile (M13 Due-Frame-First Visual Polish, Axis 5): a small
@@ -1400,7 +1430,10 @@ QPushButton[role="primary"] {{
     background-color: {css('accent', m)};
     color: {css('ink_on_accent', m)};
     border: {BORDER_WIDTH}px solid {css('accent', m)};
-    border-radius: {RADIUS_CONTROL}px;
+    border-top-left-radius: {RADIUS_BUTTON_TL}px;
+    border-top-right-radius: {RADIUS_BUTTON_TR}px;
+    border-bottom-right-radius: {RADIUS_BUTTON_BR}px;
+    border-bottom-left-radius: {RADIUS_BUTTON_BL}px;
     padding: {SPACE_NORMAL}px {SPACE_MEDIUM}px;
     /* Qt's QSS box model adds padding/border on top of min-height (it
        constrains the content box, not the padding/border box): vertical
@@ -1432,7 +1465,10 @@ QPushButton[role="secondary"] {{
     background-color: {css('surface_paper', m)};
     color: {css('ink_button_secondary', m)};
     border: {BORDER_WIDTH}px solid {css('paper_edge', m)};
-    border-radius: {RADIUS_CONTROL}px;
+    border-top-left-radius: {RADIUS_BUTTON_TL}px;
+    border-top-right-radius: {RADIUS_BUTTON_TR}px;
+    border-bottom-right-radius: {RADIUS_BUTTON_BR}px;
+    border-bottom-left-radius: {RADIUS_BUTTON_BL}px;
     padding: {SPACE_COMPACT}px {SPACE_MEDIUM}px;
     /* 2*SPACE_COMPACT=8px vertical padding + 2*1px border -> 34-8-2=24. */
     min-height: 24px;
@@ -1452,7 +1488,10 @@ QPushButton[role="quiet"] {{
     background-color: transparent;
     color: {css('secondary', m)};
     border: {BORDER_WIDTH}px solid transparent;
-    border-radius: {RADIUS_CONTROL}px;
+    border-top-left-radius: {RADIUS_BUTTON_TL}px;
+    border-top-right-radius: {RADIUS_BUTTON_TR}px;
+    border-bottom-right-radius: {RADIUS_BUTTON_BR}px;
+    border-bottom-left-radius: {RADIUS_BUTTON_BL}px;
     padding: {SPACE_COMPACT}px 10px;
     /* 2*SPACE_COMPACT=8px vertical padding, transparent border still
        reserves its 2*1px in the box model -> 30-8-2=20. */
@@ -1466,7 +1505,10 @@ QPushButton[role="danger"] {{
     background-color: {css('surface_paper', m)};
     color: {css('danger', m)};
     border: {BORDER_WIDTH}px solid {css('danger', m)};
-    border-radius: {RADIUS_CONTROL}px;
+    border-top-left-radius: {RADIUS_BUTTON_TL}px;
+    border-top-right-radius: {RADIUS_BUTTON_TR}px;
+    border-bottom-right-radius: {RADIUS_BUTTON_BR}px;
+    border-bottom-left-radius: {RADIUS_BUTTON_BL}px;
     padding: {SPACE_COMPACT}px {SPACE_MEDIUM}px;
     /* 2*SPACE_COMPACT=8px vertical padding + 2*1px border -> 34-8-2=24. */
     min-height: 24px;
@@ -1492,7 +1534,10 @@ QPushButton[role="success"] {{
     background-color: {css('success', m)};
     color: {css('ink_on_accent', m)};
     border: {BORDER_WIDTH}px solid {css('success', m)};
-    border-radius: {RADIUS_CONTROL}px;
+    border-top-left-radius: {RADIUS_BUTTON_TL}px;
+    border-top-right-radius: {RADIUS_BUTTON_TR}px;
+    border-bottom-right-radius: {RADIUS_BUTTON_BR}px;
+    border-bottom-left-radius: {RADIUS_BUTTON_BL}px;
     padding: {SPACE_COMPACT}px {SPACE_MEDIUM}px;
     /* 2*SPACE_COMPACT=8px vertical padding + 2*1px border -> 34-8-2=24. */
     min-height: 24px;

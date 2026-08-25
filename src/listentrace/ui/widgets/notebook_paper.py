@@ -9,8 +9,8 @@ from __future__ import annotations
 
 import random
 
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QColor, QImage, QPainter, QPen, QPixmap
+from PySide6.QtCore import QPointF, Qt
+from PySide6.QtGui import QColor, QImage, QPainter, QPen, QPixmap, QPolygonF
 from PySide6.QtWidgets import QFrame, QTextEdit, QWidget
 
 RULED_LINE_SPACING_PX = 28  # matches comfortable line height at 10pt font
@@ -117,6 +117,52 @@ class GrainedPaperFrame(QFrame):
         painter = QPainter(self)
         paint_paper_grain(painter, self.width(), self.height())
         painter.end()
+        _paint_dog_ear(self)
+
+
+_DOG_EAR_SIZE_PX = 15
+_DOG_EAR_INSET_PX = 9  # keeps the fold clear of a rounded card's own corner radius
+
+
+def _paint_dog_ear(widget: QWidget) -> None:
+    """Paint one small lifted-paper-corner fold at the bottom-right, so the
+    surface reads as a physical sheet of paper rather than a flat machine
+    rectangle (M13 Due-Frame-First Visual Polish, Axis 1 -- the approved
+    due-frame boards consistently show layered/lifted paper edges, never a
+    single flat-bordered rectangle). Fixed size/position, not per-instance
+    randomness -- every consumer gets the identical controlled fold.
+    """
+    from listentrace.ui import theme
+
+    painter = QPainter(widget)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+    w, h = widget.width(), widget.height()
+    x = w - _DOG_EAR_INSET_PX
+    y = h - _DOG_EAR_INSET_PX
+    fold = QPolygonF(
+        [
+            QPointF(x - _DOG_EAR_SIZE_PX, y),
+            QPointF(x, y),
+            QPointF(x, y - _DOG_EAR_SIZE_PX),
+        ]
+    )
+    painter.setPen(QPen(theme.qcolor("paper_edge"), 1))
+    painter.setBrush(theme.qcolor("paper_deep"))
+    painter.drawPolygon(fold)
+    painter.end()
+
+
+class LayeredPaperFrame(QFrame):
+    """A page/card frame with one small lifted paper corner at its
+    bottom-right, instead of a perfectly flat single machine-drawn
+    rectangle (M13 Due-Frame-First Visual Polish, Axis 1). Renders its own
+    normal QSS-styled rect first (fill/border/radius unchanged), then
+    overlays the fixed dog-ear fold on top.
+    """
+
+    def paintEvent(self, event) -> None:  # type: ignore[override]
+        super().paintEvent(event)
+        _paint_dog_ear(self)
 
 
 class GrainedDeskWidget(QWidget):
