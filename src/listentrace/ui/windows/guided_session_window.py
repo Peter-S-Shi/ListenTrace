@@ -136,13 +136,15 @@ class StageStepper(QFrame):
             inner_layout.setContentsMargins(8, 6, 8, 6)
             inner_layout.setSpacing(6)
 
+            apply_role(btn, "stepper_item")
+
             badge = QLabel(num_str)
             badge.setAlignment(Qt.AlignmentFlag.AlignCenter)
             badge.setFixedSize(22, 22)
-            apply_role(badge, "chip")
+            apply_role(badge, "stepper_item_badge")
 
             lbl = QLabel(title)
-            lbl.setStyleSheet("font-size: 12px; font-weight: 600;")
+            apply_role(lbl, "stepper_item_label")
 
             inner_layout.addWidget(badge)
             inner_layout.addWidget(lbl)
@@ -163,15 +165,6 @@ class StageStepper(QFrame):
             self._layout.addWidget(btn, 1)
 
     def update_stepper(self, current_stage: str, stage_progress: dict[str, Any], read_only: bool) -> None:
-        accent = theme.css("accent")
-        accent_subtle = theme.css("accent_subtle")
-        success = theme.css("success")
-        warning = theme.css("warning")
-        surface = theme.css("surface")
-        line = theme.css("line")
-        ink = theme.css("ink")
-        muted = theme.css("muted")
-
         for key, btn in self._step_buttons.items():
             badge = self._step_badges[key]
             label = self._step_labels[key]
@@ -183,7 +176,6 @@ class StageStepper(QFrame):
             is_current = key == current_stage
             is_completed = status == StageStatus.COMPLETED.value
             is_skipped = status == StageStatus.SKIPPED.value
-            is_not_started = status == StageStatus.NOT_STARTED.value
 
             # Navigation safety: disable future unreached stages (NOT_STARTED and
             # not the current stage).  read_only sessions disable all stages.
@@ -193,48 +185,18 @@ class StageStepper(QFrame):
             btn.setEnabled(not read_only and is_reachable)
 
             if is_current:
-                btn.setStyleSheet(
-                    f"QPushButton {{ background: {accent_subtle}; border: 1.5px solid {accent}; border-radius: 8px; }}"
-                    f"QPushButton:focus {{ border: 2px solid {accent}; }}"
-                )
-                badge.setStyleSheet(
-                    f"border-radius: 11px; background: {accent}; color: #FFFFFF; font-weight: 700; font-size: 11px;"
-                )
-                badge.setText(idx_str)
-                label.setStyleSheet(f"font-size: 12px; font-weight: 700; color: {ink};")
+                state, badge_text = "current", idx_str
             elif is_completed:
-                btn.setStyleSheet(
-                    f"QPushButton {{ background: {surface}; border: 1px solid {success}; border-radius: 8px; }}"
-                    f"QPushButton:focus {{ border: 2px solid {accent}; }}"
-                    f"QPushButton:hover {{ background: {accent_subtle}; }}"
-                )
-                badge.setStyleSheet(
-                    f"border-radius: 11px; background: {success}; color: #FFFFFF; font-weight: 700; font-size: 11px;"
-                )
-                badge.setText("✓")
-                label.setStyleSheet(f"font-size: 12px; font-weight: 600; color: {ink};")
+                state, badge_text = "completed", "✓"
             elif is_skipped:
-                btn.setStyleSheet(
-                    f"QPushButton {{ background: {surface}; border: 1px solid {warning}; border-radius: 8px; }}"
-                    f"QPushButton:focus {{ border: 2px solid {accent}; }}"
-                    f"QPushButton:hover {{ background: {accent_subtle}; }}"
-                )
-                badge.setStyleSheet(
-                    f"border-radius: 11px; background: {warning}; color: #FFFFFF; font-weight: 700; font-size: 11px;"
-                )
-                badge.setText("–")
-                label.setStyleSheet(f"font-size: 12px; font-weight: 500; color: {muted};")
+                state, badge_text = "skipped", "–"
             else:
-                # NOT_STARTED (or any other) — visually disabled future stage
-                btn.setStyleSheet(
-                    f"QPushButton {{ background: {surface}; border: 1px solid {line}; border-radius: 8px; }}"
-                    f"QPushButton:disabled {{ background: {surface}; border: 1px solid {line}; }}"
-                )
-                badge.setStyleSheet(
-                    f"border-radius: 11px; background: {line}; color: {muted}; font-weight: 600; font-size: 11px;"
-                )
-                badge.setText(idx_str)
-                label.setStyleSheet(f"font-size: 12px; font-weight: 500; color: {muted};")
+                state, badge_text = "not_started", idx_str
+
+            theme.apply_variant(btn, state=state)
+            theme.apply_variant(badge, state=state)
+            theme.apply_variant(label, state=state)
+            badge.setText(badge_text)
 
 
 class GuidedSessionWindow(QMainWindow):

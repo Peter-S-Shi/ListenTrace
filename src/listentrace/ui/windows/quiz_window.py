@@ -51,6 +51,7 @@ class QuizOptionCard(QFrame):
         self.setObjectName(f"quiz_option_card_{index}")
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setMinimumHeight(52)
+        apply_role(self, "quiz_option")
         # Keyboard/focus accessibility: the card itself is the interactive
         # target (not just the nested radio button), so it needs its own
         # focus policy and a visible focus ring — Tab traversal and
@@ -68,6 +69,7 @@ class QuizOptionCard(QFrame):
         self._badge = QLabel(letter)
         self._badge.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._badge.setFixedSize(24, 24)
+        apply_role(self._badge, "quiz_option_badge")
 
         self._label = QLabel("")
         self._label.setWordWrap(True)
@@ -77,7 +79,7 @@ class QuizOptionCard(QFrame):
         # border/background so selection is never conveyed by color alone.
         self._selected_marker = QLabel("")
         self._selected_marker.setFixedWidth(16)
-        self._selected_marker.setStyleSheet("font-size: 13px; font-weight: 700;")
+        apply_role(self._selected_marker, "quiz_option_marker")
 
         layout.addWidget(self._radio, 0)
         layout.addWidget(self._badge, 0)
@@ -105,32 +107,11 @@ class QuizOptionCard(QFrame):
         self._update_appearance(checked)
 
     def _update_appearance(self, checked: bool) -> None:
-        accent = theme.css("accent")
-        accent_subtle = theme.css("accent_subtle")
-        surface = theme.css("surface")
-        line = theme.css("line")
-        ink = theme.css("ink")
-
-        if checked:
-            self.setStyleSheet(
-                f"QFrame {{ background: {accent_subtle}; border: 1.5px solid {accent}; border-radius: 8px; }}"
-                f"QFrame:focus {{ border: 2px solid {accent}; }}"
-            )
-            self._badge.setStyleSheet(
-                f"border-radius: 12px; background: {accent}; color: #FFFFFF; font-weight: 700; font-size: 11px;"
-            )
-            self._selected_marker.setText("✓")
-            self._selected_marker.setStyleSheet(f"font-size: 13px; font-weight: 700; color: {accent};")
-        else:
-            self.setStyleSheet(
-                f"QFrame {{ background: {surface}; border: 1px solid {line}; border-radius: 8px; }}"
-                f"QFrame:hover {{ border-color: {accent}; }}"
-                f"QFrame:focus {{ border: 2px solid {accent}; }}"
-            )
-            self._badge.setStyleSheet(
-                f"border-radius: 12px; background: {line}; color: {ink}; font-weight: 700; font-size: 11px;"
-            )
-            self._selected_marker.setText("")
+        selected = "true" if checked else "false"
+        theme.apply_variant(self, selected=selected)
+        theme.apply_variant(self._badge, selected=selected)
+        theme.apply_variant(self._selected_marker, selected=selected)
+        self._selected_marker.setText("✓" if checked else "")
 
 
 class QuizWindow(QMainWindow):

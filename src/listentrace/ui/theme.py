@@ -176,6 +176,7 @@ SPACE_LARGE = 32
 RADIUS_CONTROL = 6
 RADIUS_CARD = 10
 RADIUS_PILL = 9999
+RADIUS_STATE_CARD = 8  # shared by stepper_item/quiz_option (M13 Stage B, G15)
 BORDER_WIDTH = 1
 
 FONT_FAMILY = (
@@ -217,6 +218,22 @@ def apply_role(widget: QWidget, role: str) -> None:
 def apply_surface(widget: QWidget, surface: str) -> None:
     """Tag `widget` with a surface family (workspace / paper / cinema / elevated)."""
     widget.setProperty("surface", surface)
+    style = widget.style()
+    if style is not None:
+        style.unpolish(widget)
+        style.polish(widget)
+
+
+def apply_variant(widget: QWidget, **properties: str) -> None:
+    """Set one or more state-variant properties (e.g. `state="completed"`,
+    `selected="true"`) consumed by `role="..."[prop="value"]` QSS selectors,
+    and re-polish so a later change to an already-visible widget actually
+    re-renders (M13 Stage B, G15's shared stepper_item/quiz_option
+    vocabulary; the same "tag a property, then unpolish/polish" mechanism
+    `apply_role`/`apply_surface` use, generalized to arbitrary properties
+    that change repeatedly on one widget rather than being set once)."""
+    for name, value in properties.items():
+        widget.setProperty(name, value)
     style = widget.style()
     if style is not None:
         style.unpolish(widget)
@@ -1075,6 +1092,123 @@ QPushButton[role="success"]:disabled {{
 
 QPushButton:focus {{
     border: {BORDER_WIDTH}px solid {css('focus', m)};
+}}
+
+/* Shared state-card rendering vocabulary (M13 Stage B, G15): the visual
+   mechanics genuinely common to Guided Session's StageStepper items and
+   Quiz's QuizOptionCard answer cards -- border/radius, focus treatment,
+   selected/active + success/warning/disabled tokens. They remain distinct
+   semantic roles (`stepper_item` progress state vs `quiz_option` answer
+   selection), each still its own widget -- this is shared vocabulary, not
+   a shared widget. */
+QPushButton[role="stepper_item"] {{
+    border-radius: {RADIUS_STATE_CARD}px;
+}}
+QPushButton[role="stepper_item"]:focus {{
+    border: 2px solid {css('accent', m)};
+}}
+QPushButton[role="stepper_item"][state="current"] {{
+    background: {css('accent_subtle', m)};
+    border: 1.5px solid {css('accent', m)};
+}}
+QPushButton[role="stepper_item"][state="completed"] {{
+    background: {css('surface', m)};
+    border: {BORDER_WIDTH}px solid {css('success', m)};
+}}
+QPushButton[role="stepper_item"][state="completed"]:hover {{
+    background: {css('accent_subtle', m)};
+}}
+QPushButton[role="stepper_item"][state="skipped"] {{
+    background: {css('surface', m)};
+    border: {BORDER_WIDTH}px solid {css('warning', m)};
+}}
+QPushButton[role="stepper_item"][state="skipped"]:hover {{
+    background: {css('accent_subtle', m)};
+}}
+QPushButton[role="stepper_item"][state="not_started"],
+QPushButton[role="stepper_item"][state="not_started"]:disabled {{
+    background: {css('surface', m)};
+    border: {BORDER_WIDTH}px solid {css('disabled_border', m)};
+}}
+
+QLabel[role="stepper_item_badge"] {{
+    border-radius: 11px;
+    font-size: 11px;
+    font-weight: 700;
+}}
+QLabel[role="stepper_item_badge"][state="current"] {{
+    background: {css('accent', m)};
+    color: #FFFFFF;
+}}
+QLabel[role="stepper_item_badge"][state="completed"] {{
+    background: {css('success', m)};
+    color: #FFFFFF;
+}}
+QLabel[role="stepper_item_badge"][state="skipped"] {{
+    background: {css('warning', m)};
+    color: #FFFFFF;
+}}
+QLabel[role="stepper_item_badge"][state="not_started"] {{
+    background: {css('disabled_border', m)};
+    color: {css('disabled_text', m)};
+    font-weight: 600;
+}}
+
+QLabel[role="stepper_item_label"] {{
+    font-size: 12px;
+}}
+QLabel[role="stepper_item_label"][state="current"] {{
+    font-weight: 700;
+    color: {css('ink', m)};
+}}
+QLabel[role="stepper_item_label"][state="completed"] {{
+    font-weight: 600;
+    color: {css('ink', m)};
+}}
+QLabel[role="stepper_item_label"][state="skipped"],
+QLabel[role="stepper_item_label"][state="not_started"] {{
+    font-weight: 500;
+    color: {css('muted', m)};
+}}
+
+QFrame[role="quiz_option"] {{
+    border-radius: {RADIUS_STATE_CARD}px;
+}}
+QFrame[role="quiz_option"]:focus {{
+    border: 2px solid {css('accent', m)};
+}}
+QFrame[role="quiz_option"][selected="true"] {{
+    background: {css('accent_subtle', m)};
+    border: 1.5px solid {css('accent', m)};
+}}
+QFrame[role="quiz_option"][selected="false"] {{
+    background: {css('surface', m)};
+    border: {BORDER_WIDTH}px solid {css('line', m)};
+}}
+QFrame[role="quiz_option"][selected="false"]:hover {{
+    border-color: {css('accent', m)};
+}}
+
+QLabel[role="quiz_option_badge"] {{
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 700;
+}}
+QLabel[role="quiz_option_badge"][selected="true"] {{
+    background: {css('accent', m)};
+    color: #FFFFFF;
+}}
+QLabel[role="quiz_option_badge"][selected="false"] {{
+    background: {css('line', m)};
+    color: {css('ink', m)};
+}}
+
+QLabel[role="quiz_option_marker"] {{
+    font-size: 13px;
+    font-weight: 700;
+}}
+QLabel[role="quiz_option_marker"][selected="true"] {{
+    color: {css('accent', m)};
 }}
 
 /* RadioButton */
