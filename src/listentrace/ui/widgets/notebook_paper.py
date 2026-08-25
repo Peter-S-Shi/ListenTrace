@@ -76,12 +76,22 @@ class RuledTextEdit(QTextEdit):
 
     _ruled_line_phase = staticmethod(_ruled_line_phase)
 
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        # QAbstractScrollArea normally auto-erases the viewport with the
+        # palette base color before every paint; with it on, whatever this
+        # subclass paints in `paintEvent` before delegating to QTextEdit's
+        # own text painting gets wiped, which is why the ruled/margin lines
+        # previously ended up drawn *over* the text instead of under it
+        # (corrective: rendering contract requires lines under text).
+        self.viewport().setAutoFillBackground(False)
+
     def paintEvent(self, event) -> None:  # type: ignore[override]
-        super().paintEvent(event)
         painter = QPainter(self.viewport())
         start_y = self._ruled_line_phase(RULED_LINE_SPACING_PX, self.verticalScrollBar().value())
         _paint_ruled_lines(painter, self.viewport().width(), self.viewport().height(), start_y)
         painter.end()
+        super().paintEvent(event)
 
 
 class RuledPaperFrame(QFrame):

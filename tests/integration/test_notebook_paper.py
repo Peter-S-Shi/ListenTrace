@@ -11,6 +11,9 @@ which tests the same pure calculations rather than rendered output.
 
 from __future__ import annotations
 
+from PySide6.QtGui import QPaintEvent
+from PySide6.QtWidgets import QTextEdit
+
 from listentrace.ui import theme
 from listentrace.ui.widgets import notebook_paper
 
@@ -34,3 +37,39 @@ def test_margin_line_geometry_matches_the_canonical_contract():
 def test_spiral_ring_pitch_matches_the_corrected_32px_target():
     # G22: was 26px (below the 28px tolerance floor), corrected to 32px.
     assert notebook_paper._RING_SPACING_PX == 32
+
+
+def test_ruled_text_edit_viewport_does_not_autofill_over_the_custom_paint_layer(qapp):
+    """The rendering contract requires ruled/margin lines to sit *under*
+    readable text. QAbstractScrollArea's default viewport autofill erases
+    whatever a subclass painted before delegating to QTextEdit's own text
+    painting, which is exactly what previously made the lines draw over the
+    text instead of under it (paint order alone isn't enough while autofill
+    is on)."""
+    widget = notebook_paper.RuledTextEdit()
+
+    assert widget.viewport().autoFillBackground() is False
+
+
+def test_ruled_text_edit_paints_ruled_lines_before_delegating_to_qtextedit_text_paint(qapp, monkeypatch):
+    """Regression coverage for the corrective: ruled/margin lines must be
+    painted before QTextEdit's own paintEvent draws the text, so the text
+    layer composites on top. Spies on both painting steps and asserts call
+    order through the real `paintEvent` public override -- not screenshot
+    pixels, not private internals."""
+    order: list[str] = []
+    monkeypatch.setattr(
+        notebook_paper, "_paint_ruled_lines", lambda *a, **k: order.append("rules")
+    )
+    original_text_paint = QTextEdit.paintEvent
+    monkeypatch.setattr(
+        QTextEdit,
+        "paintEvent",
+        lambda self, event: (order.append("text"), original_text_paint(self, event))[1],
+    )
+
+    widget = notebook_paper.RuledTextEdit()
+    widget.resize(200, 200)
+    widget.paintEvent(QPaintEvent(widget.rect()))
+
+    assert order == ["rules", "text"]
