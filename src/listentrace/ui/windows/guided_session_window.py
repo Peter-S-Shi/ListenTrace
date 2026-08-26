@@ -1019,7 +1019,7 @@ class GuidedSessionWindow(QMainWindow):
         self._diagnosis_label_checkboxes: dict[str, QCheckBox] = {}
         for index, label in enumerate(AnnotationLabel):
             checkbox = QCheckBox(label.value.replace("_", " "))
-            apply_role(checkbox, "body")
+            apply_role(checkbox, "ui_label")
             checkbox.stateChanged.connect(self._on_diagnosis_label_checkbox_changed)
             self._diagnosis_label_checkboxes[label.value] = checkbox
             row, column = divmod(index, _LABEL_GRID_COLUMNS)
@@ -1028,7 +1028,7 @@ class GuidedSessionWindow(QMainWindow):
 
         heard_as_row = QHBoxLayout()
         heard_lbl = QLabel("Heard as:")
-        apply_role(heard_lbl, "caption")
+        apply_role(heard_lbl, "ui_label")
         heard_as_row.addWidget(heard_lbl)
         self._diagnosis_heard_as_edit = QLineEdit()
         self._diagnosis_heard_as_edit.setEnabled(False)
@@ -1037,7 +1037,7 @@ class GuidedSessionWindow(QMainWindow):
 
         note_row = QHBoxLayout()
         note_lbl = QLabel("Note:")
-        apply_role(note_lbl, "caption")
+        apply_role(note_lbl, "ui_label")
         note_row.addWidget(note_lbl)
         self._diagnosis_note_edit = QLineEdit()
         note_row.addWidget(self._diagnosis_note_edit)
@@ -1066,7 +1066,7 @@ class GuidedSessionWindow(QMainWindow):
         right_column.addLayout(diag_buttons_row)
 
         diag_evidence_lbl = QLabel("Session diagnosis on this cue:")
-        apply_role(diag_evidence_lbl, "caption")
+        apply_role(diag_evidence_lbl, "ui_label")
         right_column.addWidget(diag_evidence_lbl)
         self._diagnosis_list = QListWidget()
         apply_role(self._diagnosis_list, "ruled_list")
@@ -1075,7 +1075,7 @@ class GuidedSessionWindow(QMainWindow):
         right_column.addWidget(self._diagnosis_list)
 
         ref_lbl = QLabel("Existing material annotations (reference):")
-        apply_role(ref_lbl, "caption")
+        apply_role(ref_lbl, "ui_label")
         right_column.addWidget(ref_lbl)
         self._diagnosis_reference_list = QListWidget()
         apply_role(self._diagnosis_reference_list, "ruled_list")

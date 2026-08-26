@@ -1243,6 +1243,28 @@ QLabel[role="monospace"] {{ font-family: {MONOSPACE_FONT_FAMILY}; font-size: 11p
 QLabel[role="dominant_cue"] {{ font-size: 17px; font-weight: 600; color: {css('ink', m)}; padding: 4px 0; }}
 QLabel[role="question_stem"] {{ font-size: 16px; font-weight: 650; color: {css('ink', m)}; padding: 4px 0; }}
 QLabel[role="body"], QRadioButton[role="body"], QCheckBox[role="body"] {{ font-size: 14px; font-weight: 400; color: {css('ink', m)}; }}
+/* M13 Axis 6 corrective: `role="body"`/`role="caption"` deliberately never
+   overrode `font-family` -- both stayed on the inherited base `FONT_FAMILY`
+   (Segoe UI Variable Text / Segoe UI), which the Product Owner correctly
+   rejected as still reading as plain default Windows UI chrome for short
+   product-authored UI labels (checkbox/radio option text, short field/form
+   labels, short functional status text) even after role tagging fixed the
+   *accidental* (un-role-assigned) half of the problem. `role="ui_label"` is
+   the narrow, explicit answer: same short-label use case as `body`/`caption`,
+   but on the accepted display/geometric-sans family (`TITLE_FONT_FAMILY`,
+   same CJK-fallback discipline as every other `TITLE_FONT_FAMILY` consumer)
+   so the visible font *character* actually changes, not just its size/
+   weight. Scoped to the specific checkbox/radio/short-label consumers the
+   Axis-6 evidence named -- never applied to transcript, learner-entered
+   text, notes, or any other long-form/editable content, which must keep
+   reading in the plain functional stack. */
+QLabel[role="ui_label"], QRadioButton[role="ui_label"], QCheckBox[role="ui_label"] {{
+    font-family: {TITLE_FONT_FAMILY};
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.2px;
+    color: {css('ink', m)};
+}}
 QLabel[role="transcript_cue"] {{ font-size: 16px; font-weight: 500; color: {css('ink', m)}; }}
 QLabel[role="metric_value"] {{ font-family: {TITLE_FONT_FAMILY}; font-size: 14px; font-weight: 700; color: {css('ink', m)}; }}
 /* Central semantic result-status role (M13 Stage B corrective) -- Quiz

@@ -100,7 +100,7 @@ class RecordingPanel(QWidget):
 
         device_row = QHBoxLayout()
         mic_lbl = QLabel("Microphone:")
-        theme.apply_role(mic_lbl, "caption")
+        theme.apply_role(mic_lbl, "ui_label")
         device_row.addWidget(mic_lbl)
         self._device_combo = QComboBox()
         self._device_combo.currentIndexChanged.connect(self._on_device_selected)
@@ -139,11 +139,11 @@ class RecordingPanel(QWidget):
         # whether a capture is currently in progress -- distinct from the
         # per-take "ready"/"failed" labels in the takes list below.
         self._recording_state_label = QLabel("")
-        theme.apply_role(self._recording_state_label, "caption")
+        theme.apply_role(self._recording_state_label, "ui_label")
         layout.addWidget(self._recording_state_label)
 
         takes_lbl = QLabel("Takes for this cue:")
-        theme.apply_role(takes_lbl, "caption")
+        theme.apply_role(takes_lbl, "ui_label")
         layout.addWidget(takes_lbl)
         self._takes_list = QListWidget()
         theme.configure_long_text_list(self._takes_list)
@@ -154,7 +154,7 @@ class RecordingPanel(QWidget):
         # region of the stage — show a calm inline hint and cap the list's
         # height until there is something to scroll through.
         self._takes_empty_label = QLabel("Record your first take to begin.")
-        theme.apply_role(self._takes_empty_label, "caption")
+        theme.apply_role(self._takes_empty_label, "ui_label")
         self._takes_empty_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(self._takes_empty_label)
 

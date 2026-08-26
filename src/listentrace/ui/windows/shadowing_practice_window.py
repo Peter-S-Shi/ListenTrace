@@ -113,7 +113,7 @@ class ShadowingPracticeWindow(QMainWindow):
         apply_surface(cue_card, "paper")
 
         cue_hdr = QLabel("SOURCE CUE CONTEXT & AUDIO:")
-        apply_role(cue_hdr, "caption")
+        apply_role(cue_hdr, "ui_label")
         cue_layout.addWidget(cue_hdr)
 
         self._cue_label = QLabel("")

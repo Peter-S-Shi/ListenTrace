@@ -257,7 +257,7 @@ class PlayerWindow(QMainWindow):
 
         volume_row = QHBoxLayout()
         vol_label = QLabel("Volume:")
-        apply_role(vol_label, "caption")
+        apply_role(vol_label, "ui_label")
         volume_row.addWidget(vol_label)
         self._volume_slider = QSlider(Qt.Orientation.Horizontal)
         self._volume_slider.setRange(0, 100)
@@ -506,7 +506,7 @@ class PlayerWindow(QMainWindow):
 
         annot_header = QLabel("Editing cue transcript (select text to annotate):")
         annot_header.setWordWrap(True)
-        apply_role(annot_header, "caption")
+        apply_role(annot_header, "ui_label")
         annotation_column.addWidget(annot_header)
 
         self._editing_transcript_view = RuledTextEdit()
@@ -531,7 +531,7 @@ class PlayerWindow(QMainWindow):
         self._label_checkboxes: dict[str, QCheckBox] = {}
         for index, label in enumerate(AnnotationLabel):
             checkbox = QCheckBox(label.value.replace("_", " "))
-            apply_role(checkbox, "body")
+            apply_role(checkbox, "ui_label")
             checkbox.stateChanged.connect(self._on_label_checkbox_changed)
             self._label_checkboxes[label.value] = checkbox
             label_grid.addWidget(checkbox, index, 0)
@@ -539,7 +539,7 @@ class PlayerWindow(QMainWindow):
 
         heard_as_row = QHBoxLayout()
         heard_as_lbl = QLabel("Heard as:")
-        apply_role(heard_as_lbl, "caption")
+        apply_role(heard_as_lbl, "ui_label")
         heard_as_row.addWidget(heard_as_lbl)
         self._heard_as_edit = QLineEdit()
         self._heard_as_edit.setEnabled(False)
@@ -549,7 +549,7 @@ class PlayerWindow(QMainWindow):
 
         note_row = QHBoxLayout()
         note_lbl = QLabel("Annotation note:")
-        apply_role(note_lbl, "caption")
+        apply_role(note_lbl, "ui_label")
         note_row.addWidget(note_lbl)
         self._annotation_note_edit = QLineEdit()
         apply_role(self._annotation_note_edit, "notebook_writing_field")
@@ -573,7 +573,7 @@ class PlayerWindow(QMainWindow):
 
         annots_on_cue_lbl = QLabel("Annotations on this cue:")
         annots_on_cue_lbl.setWordWrap(True)
-        apply_role(annots_on_cue_lbl, "caption")
+        apply_role(annots_on_cue_lbl, "ui_label")
         annotation_column.addWidget(annots_on_cue_lbl)
         self._annotation_list = QListWidget()
         self._annotation_list.setMaximumHeight(80)
@@ -590,7 +590,7 @@ class PlayerWindow(QMainWindow):
         note_column.setSpacing(4)
 
         cue_note_lbl = QLabel("Cue Note:")
-        apply_role(cue_note_lbl, "caption")
+        apply_role(cue_note_lbl, "ui_label")
         note_column.addWidget(cue_note_lbl)
         self._cue_note_edit = RuledTextEdit()
         self._cue_note_edit.setMaximumHeight(80)
@@ -615,7 +615,7 @@ class PlayerWindow(QMainWindow):
         item_column.setSpacing(4)
 
         item_hdr = QLabel("Save Language Item")
-        apply_role(item_hdr, "caption")
+        apply_role(item_hdr, "ui_label")
         item_column.addWidget(item_hdr)
         source_lock_note = QLabel(
             "Type, meaning, note, and context can be edited later. Source text/range is fixed once saved."
@@ -626,7 +626,7 @@ class PlayerWindow(QMainWindow):
 
         item_type_row = QHBoxLayout()
         type_lbl = QLabel("Type:")
-        apply_role(type_lbl, "caption")
+        apply_role(type_lbl, "ui_label")
         item_type_row.addWidget(type_lbl)
         self._item_type_combo = QComboBox()
         for item_type in SavedItemType:
@@ -636,7 +636,7 @@ class PlayerWindow(QMainWindow):
 
         meaning_row = QHBoxLayout()
         mean_lbl = QLabel("Meaning:")
-        apply_role(mean_lbl, "caption")
+        apply_role(mean_lbl, "ui_label")
         meaning_row.addWidget(mean_lbl)
         self._item_meaning_edit = QLineEdit()
         apply_role(self._item_meaning_edit, "notebook_writing_field")
@@ -645,7 +645,7 @@ class PlayerWindow(QMainWindow):
 
         item_note_row = QHBoxLayout()
         inote_lbl = QLabel("Note:")
-        apply_role(inote_lbl, "caption")
+        apply_role(inote_lbl, "ui_label")
         item_note_row.addWidget(inote_lbl)
         self._item_note_edit = QLineEdit()
         apply_role(self._item_note_edit, "notebook_writing_field")
@@ -653,7 +653,7 @@ class PlayerWindow(QMainWindow):
         item_column.addLayout(item_note_row)
 
         context_lbl = QLabel("Context (editable):")
-        apply_role(context_lbl, "caption")
+        apply_role(context_lbl, "ui_label")
         item_column.addWidget(context_lbl)
         self._item_context_edit = RuledTextEdit()
         self._item_context_edit.setMaximumHeight(52)
@@ -676,7 +676,7 @@ class PlayerWindow(QMainWindow):
 
         saved_on_cue_lbl = QLabel("Saved items on this cue:")
         saved_on_cue_lbl.setWordWrap(True)
-        apply_role(saved_on_cue_lbl, "caption")
+        apply_role(saved_on_cue_lbl, "ui_label")
         item_column.addWidget(saved_on_cue_lbl)
         self._saved_items_list = QListWidget()
         self._saved_items_list.setMaximumHeight(80)

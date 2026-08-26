@@ -464,7 +464,7 @@ class QuickPracticeWindow(QMainWindow):
         apply_surface(recall_card, "paper")
 
         recall_hdr = QLabel("Comprehension Self-Assessment:")
-        apply_role(recall_hdr, "caption")
+        apply_role(recall_hdr, "ui_label")
         recall_layout.addWidget(recall_hdr)
 
         recall_row = QHBoxLayout()
@@ -472,7 +472,7 @@ class QuickPracticeWindow(QMainWindow):
         self._recall_radio_buttons: dict[str, QRadioButton] = {}
         for value, label_text in _RECALL_LABELS:
             radio = QRadioButton(label_text)
-            apply_role(radio, "body")
+            apply_role(radio, "ui_label")
             radio.toggled.connect(self._on_recall_choice_changed)
             self._recall_group.addButton(radio)
             self._recall_radio_buttons[value] = radio
@@ -480,7 +480,7 @@ class QuickPracticeWindow(QMainWindow):
         recall_layout.addLayout(recall_row)
 
         frag_hdr = QLabel("What words/phrases did you catch? (optional)")
-        apply_role(frag_hdr, "caption")
+        apply_role(frag_hdr, "ui_label")
         recall_layout.addWidget(frag_hdr)
 
         self._heard_fragment_edit = QLineEdit()
@@ -543,7 +543,7 @@ class QuickPracticeWindow(QMainWindow):
 
         self._heard_fragment_reference_label = QLabel("")
         self._heard_fragment_reference_label.setWordWrap(True)
-        apply_role(self._heard_fragment_reference_label, "caption")
+        apply_role(self._heard_fragment_reference_label, "ui_label")
         layout.addWidget(self._heard_fragment_reference_label)
 
         # A single QHBoxLayout row can't hold all five label names (the
@@ -557,7 +557,7 @@ class QuickPracticeWindow(QMainWindow):
         self._diagnosis_label_checkboxes: dict[str, QCheckBox] = {}
         for index, label in enumerate(AnnotationLabel):
             checkbox = QCheckBox(label.value.replace("_", " "))
-            apply_role(checkbox, "body")
+            apply_role(checkbox, "ui_label")
             checkbox.stateChanged.connect(self._on_diagnosis_label_checkbox_changed)
             self._diagnosis_label_checkboxes[label.value] = checkbox
             row, column = divmod(index, _LABEL_GRID_COLUMNS)
@@ -566,7 +566,7 @@ class QuickPracticeWindow(QMainWindow):
 
         heard_as_row = QHBoxLayout()
         heard_lbl = QLabel("Heard as:")
-        apply_role(heard_lbl, "caption")
+        apply_role(heard_lbl, "ui_label")
         heard_as_row.addWidget(heard_lbl)
         self._diagnosis_heard_as_edit = QLineEdit()
         self._diagnosis_heard_as_edit.setEnabled(False)
@@ -575,7 +575,7 @@ class QuickPracticeWindow(QMainWindow):
 
         note_row = QHBoxLayout()
         note_lbl = QLabel("Note:")
-        apply_role(note_lbl, "caption")
+        apply_role(note_lbl, "ui_label")
         note_row.addWidget(note_lbl)
         self._diagnosis_note_edit = QLineEdit()
         note_row.addWidget(self._diagnosis_note_edit)
@@ -599,7 +599,7 @@ class QuickPracticeWindow(QMainWindow):
         layout.addLayout(buttons_row)
 
         diag_hdr = QLabel("Diagnosis recorded on this cue during this run:")
-        apply_role(diag_hdr, "caption")
+        apply_role(diag_hdr, "ui_label")
         layout.addWidget(diag_hdr)
 
         self._diagnosis_list = QListWidget()

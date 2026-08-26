@@ -470,7 +470,7 @@ class LearningHistoryWindow(QMainWindow):
         self._activity_checkboxes: dict[str, QCheckBox] = {}
         for activity_type in _ACTIVITY_TYPES:
             checkbox = QCheckBox(activity_type.capitalize())
-            apply_role(checkbox, "body")
+            apply_role(checkbox, "ui_label")
             checkbox.setChecked(True)
             checkbox.toggled.connect(self._on_activity_filter_changed)
             self._activity_checkboxes[activity_type] = checkbox
