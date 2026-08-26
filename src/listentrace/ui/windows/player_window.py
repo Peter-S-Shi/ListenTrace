@@ -381,6 +381,13 @@ class PlayerWindow(QMainWindow):
 
         cinema_layout.addLayout(notebooks_row)
 
+        # Propagate content-derived minimum constraints so QSplitter respects
+        # the real child layout floor (video 240px + frame / audio 120px +
+        # frame, status strip, scrubber, notebooks) without allowing stage_card
+        # to be crushed below its minimum when empty status labels are collapsed.
+        stage_card.setMinimumSize(stage_layout.minimumSize())
+        self._cinema_stage_widget.setMinimumSize(cinema_layout.minimumSize())
+
         self._main_splitter.addWidget(self._cinema_stage_widget)
 
         # === CENTER: Spiral Binding (open-book seam) ===
