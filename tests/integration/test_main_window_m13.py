@@ -12,13 +12,20 @@ from listentrace.infrastructure.db.migrations import migrate
 from listentrace.ui.windows.main_window import MainWindow
 
 
+from PySide6.QtCore import QSettings
+from listentrace.ui.windows.main_window import _SETTINGS_ORG, _SETTINGS_APP
+
+
 @pytest.fixture()
 def db_conn(tmp_path):
+    _settings = QSettings(_SETTINGS_ORG, _SETTINGS_APP)
+    _settings.clear()
     db_file = tmp_path / "test_main.db"
     conn = open_connection(db_file)
     migrate(conn)
     yield conn, db_file
     conn.close()
+    _settings.clear()
 
 
 def test_main_window_sidebar_collapse_and_restore(qapp, db_conn, tmp_path):

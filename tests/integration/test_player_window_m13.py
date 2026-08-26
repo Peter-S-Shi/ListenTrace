@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from pathlib import Path
+import struct
+import wave
 import pytest
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QScrollArea, QSplitter
@@ -21,10 +23,14 @@ def db_conn(tmp_path):
     connection.close()
 
 
-def _sample_player_load(tmp_path):
-    media_path = tmp_path / "sample.wav"
-    media_path.write_bytes(b"\x00" * 1000)
-    material = Material(id=1, title="M13 Architecture Lesson", media_path=str(media_path), media_kind="audio")
+def _sample_player_load(tmp_path, media_kind="audio"):
+    media_path = tmp_path / f"sample_{media_kind}.wav"
+    with wave.open(str(media_path), "w") as wf:
+        wf.setnchannels(1)
+        wf.setsampwidth(2)
+        wf.setframerate(8000)
+        wf.writeframes(struct.pack("<h", 0) * 8000 * 2)
+    material = Material(id=1, title=f"M13 {media_kind.title()} Lesson", media_path=str(media_path), media_kind=media_kind)
     cues = [
         SubtitleCue(cue_index=1, start_ms=0, end_ms=1000, text="First line of dialogue"),
         SubtitleCue(cue_index=2, start_ms=1000, end_ms=2500, text="Second line of dialogue"),
@@ -41,7 +47,11 @@ def test_player_window_m13_notebook_study_desk_architecture(qapp, db_conn, tmp_p
     assert isinstance(window._main_splitter, QSplitter)
     assert window._main_splitter.orientation() == Qt.Orientation.Horizontal
     assert window._main_splitter.count() == 3
-    assert window._main_splitter.widget(0) is window._cinema_stage_widget
+    assert window._main_splitter.widget(0) is window._cinema_scroll_area
+    assert isinstance(window._cinema_scroll_area, QScrollArea)
+    assert window._cinema_scroll_area.widget() is window._cinema_stage_widget
+    assert window._cinema_scroll_area.widgetResizable() is True
+    assert window._cinema_scroll_area.horizontalScrollBarPolicy() == Qt.ScrollBarPolicy.ScrollBarAlwaysOff
     assert window._main_splitter.widget(1) is window._spiral_binding_strip
     assert window._main_splitter.widget(2) is window._right_workspace_widget
 
@@ -132,3 +142,47 @@ def test_player_window_m13_annotation_notebook_scrolls_independently_of_media_pa
     assert window._video_widget is None or window._video_widget.isVisible()
 
     window.close()
+
+
+def test_player_window_m13_cinema_page_is_vertically_scrollable_on_short_windows(qapp, db_conn, tmp_path):
+    """M13 Final Player Accessibility: on shorter screens, the left cinema page
+    scrolls locally so all controls (Playback, Loop, Utility, Mute) remain
+    accessible without forcing an excessive window minimum height or clipping."""
+    load_res = _sample_player_load(tmp_path, media_kind="video")
+    window = PlayerWindow(load_res, db_conn)
+    window.resize(1040, 620)
+    window.show()
+    qapp.processEvents()
+
+    assert not isinstance(window.centralWidget(), QScrollArea)
+    assert isinstance(window._cinema_scroll_area, QScrollArea)
+    assert window._cinema_scroll_area.widgetResizable() is True
+    assert window._cinema_scroll_area.horizontalScrollBarPolicy() == Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+
+    # At short window height, video content is taller than viewport so vertical scrollbar is active
+    vbar = window._cinema_scroll_area.verticalScrollBar()
+    assert vbar.maximum() > 0
+
+    # Video and HUD do not overlap
+    video_top_left = window._video_widget.mapTo(window._cinema_stage_widget, window._video_widget.rect().topLeft())
+    video_bottom = video_top_left.y() + window._video_widget.height()
+    hud_top_left = window._active_subtitle_hud.mapTo(window._cinema_stage_widget, window._active_subtitle_hud.rect().topLeft())
+    assert video_bottom <= hud_top_left.y()
+
+    # Scrolling to maximum brings the bottom of the playback card and mute button into the viewport
+    vbar.setValue(vbar.maximum())
+    qapp.processEvents()
+
+    mute_pt = window._mute_button.mapTo(window._cinema_scroll_area.viewport(), window._mute_button.rect().topLeft())
+    mute_bottom = mute_pt.y() + window._mute_button.height()
+    viewport_h = window._cinema_scroll_area.viewport().height()
+
+    assert 0 <= mute_pt.y() < viewport_h
+    assert mute_bottom <= viewport_h
+
+    pb_pt = window._playback_notebook.mapTo(window._cinema_scroll_area.viewport(), window._playback_notebook.rect().topLeft())
+    pb_bottom = pb_pt.y() + window._playback_notebook.height()
+    assert pb_bottom <= viewport_h
+
+    window.close()
+

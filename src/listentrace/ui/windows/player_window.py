@@ -237,7 +237,7 @@ class PlayerWindow(QMainWindow):
         apply_role(self._main_splitter, "player_split")
 
         # === LEFT PANEL: Media Study Page ===
-        self._cinema_stage_widget = QWidget(self._main_splitter)
+        self._cinema_stage_widget = QWidget()
         apply_surface(self._cinema_stage_widget, "paper")
         cinema_layout = QVBoxLayout(self._cinema_stage_widget)
         cinema_layout.setContentsMargins(0, 0, 0, 0)
@@ -381,14 +381,23 @@ class PlayerWindow(QMainWindow):
 
         cinema_layout.addLayout(notebooks_row)
 
-        # Propagate content-derived minimum constraints so QSplitter respects
-        # the real child layout floor (video 240px + frame / audio 120px +
-        # frame, status strip, scrubber, notebooks) without allowing stage_card
-        # to be crushed below its minimum when empty status labels are collapsed.
+        # Propagate content-derived minimum constraints so the inner cinema
+        # stage retains its safe layout floor (video 240px + frame, HUD,
+        # scrubber, notebooks) inside the scroll container.
         stage_card.setMinimumSize(stage_layout.minimumSize())
         self._cinema_stage_widget.setMinimumSize(cinema_layout.minimumSize())
 
-        self._main_splitter.addWidget(self._cinema_stage_widget)
+        # Local QScrollArea around the left cinema/playback page: ensures
+        # all controls (e.g. Mute, card bottoms) remain fully reachable on
+        # shorter screens without requiring an outer window scrollbar or
+        # inflating the whole window minimum height beyond practical viewports.
+        self._cinema_scroll_area = QScrollArea()
+        self._cinema_scroll_area.setWidgetResizable(True)
+        self._cinema_scroll_area.setFrameShape(QFrame.Shape.NoFrame)
+        self._cinema_scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self._cinema_scroll_area.setWidget(self._cinema_stage_widget)
+
+        self._main_splitter.addWidget(self._cinema_scroll_area)
 
         # === CENTER: Spiral Binding (open-book seam) ===
         self._spiral_binding_strip = theme.make_spiral_binding_strip()
@@ -487,7 +496,6 @@ class PlayerWindow(QMainWindow):
         self._main_splitter.setStretchFactor(1, 0)
         self._main_splitter.setStretchFactor(2, 9)
         self._main_splitter.setSizes([580, 28, 440])
-        self._main_splitter.setMinimumSize(self._main_splitter.minimumSizeHint())
         root_layout.addWidget(self._main_splitter, 1)
 
         # -------------------------------------------------------------------
@@ -529,28 +537,12 @@ class PlayerWindow(QMainWindow):
         self._apply_presentation()
         self._set_workspace_form_enabled(False)
 
-        # Lock in the real minimum geometry Qt's layout computes for the
-        # complete Player. Derive the minimum height from the combined
-        # requirement of top bar, main splitter (cinema page: media frame,
-        # HUD, scrubber, mini-notebooks), layout spacing, and desk margins
-        # so no fixed control is clipped below the window client area when
-        # empty status labels are collapsed.
-        central.setGeometry(0, 0, 1040, 800)
-        root_layout.activate()
-        margins = root_layout.contentsMargins()
-        top_bar_height = top_bar.geometry().height() if top_bar.geometry().height() > 0 else top_bar.sizeHint().height()
-        splitter_min_height = self._main_splitter.minimumSize().height()
-        content_min_height = (
-            margins.top()
-            + top_bar_height
-            + root_layout.spacing()
-            + splitter_min_height
-            + margins.bottom()
-        )
-        min_height = max(self.minimumSizeHint().height(), content_min_height)
-        self.setMinimumSize(1040, min_height)
-        if self.height() < min_height:
-            self.resize(self.width(), min_height)
+        # Lock in a practical minimum window size. Now that both the left
+        # cinema page and the right annotation notebook have local
+        # QScrollAreas, the window itself can comfortably fit on shorter
+        # desktop screens (1040x620) while preserving inner safe child
+        # geometries and allowing vertical scrolling to reach all playback controls.
+        self.setMinimumSize(1040, 620)
 
         if initial_cue_index is not None and 0 <= initial_cue_index < self._cue_list.count():
             self._cue_list.setCurrentRow(initial_cue_index)
@@ -654,6 +646,7 @@ class PlayerWindow(QMainWindow):
         heard_as_row.addWidget(heard_as_lbl)
         self._heard_as_edit = QLineEdit()
         self._heard_as_edit.setEnabled(False)
+        self._heard_as_edit.setMinimumHeight(28)
         apply_role(self._heard_as_edit, "notebook_writing_field")
         heard_as_row.addWidget(self._heard_as_edit)
         annotation_column.addLayout(heard_as_row)
@@ -663,19 +656,23 @@ class PlayerWindow(QMainWindow):
         apply_role(note_lbl, "ui_label")
         note_row.addWidget(note_lbl)
         self._annotation_note_edit = QLineEdit()
+        self._annotation_note_edit.setMinimumHeight(28)
         apply_role(self._annotation_note_edit, "notebook_writing_field")
         note_row.addWidget(self._annotation_note_edit)
         annotation_column.addLayout(note_row)
 
         self._save_annotation_button = QPushButton("Save Annotation")
+        self._save_annotation_button.setMinimumHeight(28)
         self._save_annotation_button.clicked.connect(self._on_save_annotation_clicked)
         annotation_column.addWidget(self._save_annotation_button)
 
         annotation_update_delete_row = QHBoxLayout()
         self._update_annotation_button = QPushButton("Update")
+        self._update_annotation_button.setMinimumHeight(28)
         self._update_annotation_button.clicked.connect(self._on_update_annotation_clicked)
         self._update_annotation_button.setEnabled(False)
         self._delete_annotation_button = QPushButton("Delete")
+        self._delete_annotation_button.setMinimumHeight(28)
         self._delete_annotation_button.clicked.connect(self._on_delete_annotation_clicked)
         self._delete_annotation_button.setEnabled(False)
         annotation_update_delete_row.addWidget(self._update_annotation_button)
@@ -713,8 +710,10 @@ class PlayerWindow(QMainWindow):
         note_column.addWidget(self._cue_note_edit)
         note_buttons_row = QHBoxLayout()
         self._save_note_button = QPushButton("Save Note")
+        self._save_note_button.setMinimumHeight(28)
         self._save_note_button.clicked.connect(self._on_save_note_clicked)
         self._delete_note_button = QPushButton("Delete Note")
+        self._delete_note_button.setMinimumHeight(28)
         self._delete_note_button.clicked.connect(self._on_delete_note_clicked)
         note_buttons_row.addWidget(self._save_note_button)
         note_buttons_row.addWidget(self._delete_note_button)
@@ -755,6 +754,7 @@ class PlayerWindow(QMainWindow):
         apply_role(mean_lbl, "ui_label")
         meaning_row.addWidget(mean_lbl)
         self._item_meaning_edit = QLineEdit()
+        self._item_meaning_edit.setMinimumHeight(28)
         apply_role(self._item_meaning_edit, "notebook_writing_field")
         meaning_row.addWidget(self._item_meaning_edit)
         item_column.addLayout(meaning_row)
@@ -764,6 +764,7 @@ class PlayerWindow(QMainWindow):
         apply_role(inote_lbl, "ui_label")
         item_note_row.addWidget(inote_lbl)
         self._item_note_edit = QLineEdit()
+        self._item_note_edit.setMinimumHeight(28)
         apply_role(self._item_note_edit, "notebook_writing_field")
         item_note_row.addWidget(self._item_note_edit)
         item_column.addLayout(item_note_row)
@@ -776,14 +777,17 @@ class PlayerWindow(QMainWindow):
         item_column.addWidget(self._item_context_edit)
 
         self._save_item_button = QPushButton("Save Item")
+        self._save_item_button.setMinimumHeight(28)
         self._save_item_button.clicked.connect(self._on_save_item_clicked)
         item_column.addWidget(self._save_item_button)
 
         item_update_delete_row = QHBoxLayout()
         self._update_item_button = QPushButton("Update")
+        self._update_item_button.setMinimumHeight(28)
         self._update_item_button.clicked.connect(self._on_update_item_clicked)
         self._update_item_button.setEnabled(False)
         self._delete_item_button = QPushButton("Delete")
+        self._delete_item_button.setMinimumHeight(28)
         self._delete_item_button.clicked.connect(self._on_delete_item_clicked)
         self._delete_item_button.setEnabled(False)
         item_update_delete_row.addWidget(self._update_item_button)
