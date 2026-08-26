@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
     QPlainTextEdit,
     QPushButton,
     QScrollArea,
+    QSizePolicy,
     QSlider,
     QSplitter,
     QTabWidget,
@@ -128,6 +129,39 @@ class _CueTranscriptRow(QWidget):
 
     def set_active(self, active: bool) -> None:
         self._marker_label.setText("▶" if active else "")
+
+
+class _PlayerVideoWidget(QVideoWidget):
+    """Aspect-ratio-aware video viewport for the Player study desk.
+
+    Prevents QVideoWidget's default sizeHint (which returns raw video frame
+    resolution, e.g. 1920x1080) from inflating the vertical QScrollArea into a
+    massive black void. Instead, calculates proportional height derived from
+    the actual pane width and video aspect ratio while preserving the 240px
+    minimum safety floor.
+    """
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+
+    def hasHeightForWidth(self) -> bool:
+        return True
+
+    def heightForWidth(self, width: int) -> int:
+        video_size = self.videoSink().videoSize()
+        if video_size.isValid() and video_size.width() > 0 and video_size.height() > 0:
+            aspect = video_size.height() / video_size.width()
+            return max(240, int(width * aspect))
+        return max(240, int(width * 9 / 16))
+
+    def sizeHint(self) -> QSize:
+        video_size = self.videoSink().videoSize()
+        w = self.width() if self.width() > 0 else 530
+        if video_size.isValid() and video_size.width() > 0 and video_size.height() > 0:
+            aspect = video_size.height() / video_size.width()
+            return QSize(w, max(240, int(w * aspect)))
+        return QSize(w, max(240, int(w * 9 / 16)))
 
 
 def _is_text_entry_widget(widget: object) -> bool:
@@ -246,7 +280,7 @@ class PlayerWindow(QMainWindow):
         # Media Frame (viewport placed on the study desk)
         stage_card, stage_layout = theme.make_media_frame()
         if material.media_kind == "video":
-            self._video_widget: QVideoWidget | None = QVideoWidget()
+            self._video_widget: QVideoWidget | None = _PlayerVideoWidget()
             self._video_widget.setMinimumHeight(240)
             self._playback.set_video_output(self._video_widget)
             stage_layout.addWidget(self._video_widget)

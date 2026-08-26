@@ -186,3 +186,35 @@ def test_player_window_m13_cinema_page_is_vertically_scrollable_on_short_windows
 
     window.close()
 
+
+def test_player_window_m13_video_widget_preserves_aspect_ratio_without_black_box_expansion(qapp, db_conn, tmp_path):
+    """Verify that loading high-resolution video frames (e.g. 1080p, 4K) does not
+    inflate QVideoWidget's sizeHint to raw pixel dimensions inside QScrollArea,
+    which would otherwise create an enormous black void above and below the video."""
+    from PySide6.QtCore import QSize
+    from PySide6.QtMultimedia import QVideoFrame, QVideoFrameFormat
+
+    load_res = _sample_player_load(tmp_path, media_kind="video")
+    window = PlayerWindow(load_res, db_conn)
+
+    fmt = QVideoFrameFormat(QSize(1920, 1080), QVideoFrameFormat.PixelFormat.Format_RGBA8888)
+    frame = QVideoFrame(fmt)
+    window._video_widget.videoSink().setVideoFrame(frame)
+
+    window.resize(1060, 720)
+    window.show()
+    qapp.processEvents()
+
+    # Video height should be derived proportionally from pane width (~530x298), not balloon to 1080px
+    video_geom = window._video_widget.geometry()
+    assert 240 <= video_geom.height() < 400
+
+    # Video and HUD must maintain safety gap
+    video_top_left = window._video_widget.mapTo(window._cinema_stage_widget, window._video_widget.rect().topLeft())
+    video_bottom = video_top_left.y() + window._video_widget.height()
+    hud_top_left = window._active_subtitle_hud.mapTo(window._cinema_stage_widget, window._active_subtitle_hud.rect().topLeft())
+    assert video_bottom <= hud_top_left.y()
+
+    window.close()
+
+
