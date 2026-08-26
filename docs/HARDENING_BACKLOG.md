@@ -208,7 +208,7 @@ product intent through four structured feedback documents
 (`M12.QA feedback-round 1-4`, product-requirements/architecture-analysis
 inputs, not implementation orders — never committed, per the repo's local-
 prompt-draft convention). Phase 0 was a read-only audit producing
-`M12_CORRECTIVE_DIVERGENCE_MAP.md` (committed, human-reviewed before any
+`docs/M12_CORRECTIVE_DIVERGENCE_MAP.md` (committed, human-reviewed before any
 code changed), mapping each human finding to the applicable contract, actual
 current implementation, root-cause evidence, and a Batch assignment. What
 follows is the disposition after implementing that plan; the Divergence Map
@@ -260,7 +260,7 @@ Also added: `m08-09`, new manual QA coverage for the History Deletion capability
 ### Repair rules applied (Human QA Round 1 corrective work)
 
 - Root-cause domain grouping, not questionnaire-item-by-item patching (Round 4 §2) — e.g. the three cue-scoped-Play fixes share one new `PlayerSession.play_cue()` method rather than three independent per-window hacks.
-- Repository-grounded evidence took precedence over the feedback documents' illustrative assumptions where they conflicted with the real schema — see `M12_CORRECTIVE_DIVERGENCE_MAP.md` §0 for the two corrections found (no Mistake Book/Starred/Proficient Pool/Collection semantics exist in this codebase; `recording.practice_session_id` is `SET NULL`, not `CASCADE`).
+- Repository-grounded evidence took precedence over the feedback documents' illustrative assumptions where they conflicted with the real schema — see `docs/M12_CORRECTIVE_DIVERGENCE_MAP.md` §0 for the two corrections found (no Mistake Book/Starred/Proficient Pool/Collection semantics exist in this codebase; `recording.practice_session_id` is `SET NULL`, not `CASCADE`).
 - No Level-3 stop condition was triggered: no schema migration, no data-model redesign, no technology-stack change, no product-contract conflict.
 - `main` untouched throughout; all work on `milestone/12-product-hardening`.
 
