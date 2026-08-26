@@ -119,6 +119,17 @@ def remember_device_choice(conn: sqlite3.Connection, device_id: str, device_desc
 # ---- recording lifecycle ----
 
 
+def has_active_recording(conn: sqlite3.Connection) -> bool:
+    """Authoritative, current-state answer to "is any recording in progress
+    right now, app-wide" -- the same DB-level source of truth `begin_recording`
+    itself checks (and the partial unique index on `status = 'recording'`
+    ultimately enforces). Callers that only track this via a historical event
+    (e.g. a `RecordingPanel` created *after* another panel already started
+    recording) should query this directly rather than assume perfect signal
+    delivery/ordering."""
+    return bool(repo.list_recordings_with_status(conn, RecordingStatus.RECORDING.value))
+
+
 def begin_recording(
     conn: sqlite3.Connection,
     recordings_dir: Path,

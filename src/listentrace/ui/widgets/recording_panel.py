@@ -84,10 +84,6 @@ class RecordingPanel(QWidget):
         self._current_context: tuple[int | None, int | None, int | None] | None = None
 
         self._active_recording: Recording | None = None
-        # M14 Corrective Batch A (A4): true while a *different* open panel is
-        # recording -- distinct from `_active_recording`, which tracks this
-        # panel's own capture.
-        self._external_recording_active = False
         self._pending_action: str | None = None  # "finish" while awaiting RecordingController.recording_stopped
         self._takes: list[Recording] = []
         self._comparison_take: Recording | None = None
@@ -411,11 +407,22 @@ class RecordingPanel(QWidget):
     def _update_recording_buttons(self) -> None:
         has_cue = self._subtitle_cue_id is not None
         recording_in_progress = self._active_recording is not None
-        # M14 Corrective Batch A (A4): make Start Recording's availability
-        # truthful *before* click when a sibling panel elsewhere is already
-        # recording -- the domain/database invariant (migration 8's partial
-        # unique index) remains the ultimate safety guard either way.
-        blocked_by_other_panel = self._external_recording_active and not recording_in_progress
+        # M14 Corrective Batch A (A4, acceptance-gap fix): make Start
+        # Recording's availability truthful *before* click when a sibling
+        # panel elsewhere is already recording -- the domain/database
+        # invariant (migration 8's partial unique index) remains the
+        # ultimate safety guard either way. Queried fresh against the
+        # authoritative DB state on every call, rather than cached from a
+        # `recording_started`/`recording_stopped` event history: a panel
+        # constructed *after* another panel already started recording would
+        # otherwise have missed that event and stayed permanently wrong
+        # until the next stop. `recording_started`/`recording_stopped` still
+        # fire (see below) purely as "go re-check now" invalidation
+        # notifications for already-open sibling panels -- they no longer
+        # carry any state of their own.
+        blocked_by_other_panel = (
+            not recording_in_progress and recording_service.has_active_recording(self._connection)
+        )
         self._start_recording_button.setEnabled(
             has_cue
             and not recording_in_progress
@@ -549,15 +556,12 @@ class RecordingPanel(QWidget):
             self._update_recording_buttons()
 
     def _on_external_recording_started(self) -> None:
-        # A panel's own capture already disables its own Start button via
-        # `_active_recording`; only a genuinely *foreign* capture needs the
-        # separate external flag.
-        if self._active_recording is None:
-            self._external_recording_active = True
-            self._update_recording_buttons()
+        # Pure invalidation notification -- reconcile against the
+        # authoritative DB state in `_update_recording_buttons()` rather than
+        # trusting this event's payload/ordering (see its docstring note).
+        self._update_recording_buttons()
 
     def _on_external_recording_stopped(self) -> None:
-        self._external_recording_active = False
         self._update_recording_buttons()
 
     # ---- comparison sequencing ----

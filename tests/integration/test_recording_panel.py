@@ -139,6 +139,97 @@ def test_sibling_panel_start_button_becomes_truthful_while_another_panel_is_reco
     panel_b.deleteLater()
 
 
+def _monkeypatch_fake_recording_hardware(monkeypatch):
+    """Shared setup for the A4 acceptance-gap tests below: a fake device and
+    a no-op `RecordingController` so `_on_start_recording_clicked()` runs the
+    real production code path (real `begin_recording` DB write, real signal
+    emission) without touching real audio hardware."""
+    from listentrace.infrastructure.media.recording import AudioInputDevice, RecordingController
+
+    monkeypatch.setattr(QMessageBox, "information", lambda *a, **k: None)
+    monkeypatch.setattr(QMessageBox, "warning", lambda *a, **k: None)
+    fake_device = AudioInputDevice(device_id="dev-1", description="Fake Mic", is_default=True)
+    monkeypatch.setattr(RecordingPanel, "_selected_device", lambda self: fake_device)
+    monkeypatch.setattr(RecordingController, "set_device", lambda self, device_id: True)
+    monkeypatch.setattr(RecordingController, "start", lambda self, path: None)
+
+
+def test_late_joining_panel_starts_disabled_when_a_recording_is_already_in_progress(
+    qapp, conn, recordings_dir, monkeypatch
+):
+    """M14 Corrective Batch A4 acceptance gap: a `RecordingPanel` constructed
+    and given a valid cue/device context *after* another panel already
+    started recording must be truthfully disabled from the moment it gets a
+    context -- not just once it happens to receive a `recording_started`
+    event it was never alive to hear. This requires querying the
+    authoritative DB state (`recording_service.has_active_recording`), not
+    only historical event receipt."""
+    _monkeypatch_fake_recording_hardware(monkeypatch)
+    material_id, cues = _make_material_with_cues(conn)
+
+    panel_a = RecordingPanel(conn, recordings_dir)
+    panel_a.set_context(material_id, cues[0].id, None)
+    panel_a._on_start_recording_clicked()
+    assert panel_a._active_recording is not None
+
+    # Panel B is constructed and given a context only now -- strictly after
+    # A's `recording_started` signal already fired and had no listener.
+    panel_b = RecordingPanel(conn, recordings_dir)
+    panel_b.set_context(material_id, cues[1].id, None)
+
+    assert panel_b._start_recording_button.isEnabled() is False, (
+        "a panel that joins after recording already started must be "
+        "truthfully disabled immediately, not stuck enabled because it "
+        "missed the historical recording_started event"
+    )
+    assert "Another recording is in progress" in panel_b._recording_state_label.text()
+
+    panel_a.abort_active_recording()
+    assert panel_b._start_recording_button.isEnabled() is True, (
+        "the late-joining panel must re-enable once the recording that "
+        "blocked it stops"
+    )
+
+    panel_a.deleteLater()
+    panel_b.deleteLater()
+
+
+def test_immediate_startup_error_does_not_leave_sibling_panel_permanently_blocked(
+    qapp, conn, recordings_dir, monkeypatch
+):
+    """M14 Corrective Batch A4 acceptance gap: if the recorder reports an
+    error immediately around startup (e.g. the device vanished right after
+    `begin_recording` created the DB row), reconciliation must be driven by
+    authoritative current state, not by assuming perfect
+    started-then-stopped signal ordering -- a sibling panel must not be left
+    permanently blocked."""
+    _monkeypatch_fake_recording_hardware(monkeypatch)
+    material_id, cues = _make_material_with_cues(conn)
+
+    panel_a = RecordingPanel(conn, recordings_dir)
+    panel_a.set_context(material_id, cues[0].id, None)
+    panel_b = RecordingPanel(conn, recordings_dir)
+    panel_b.set_context(material_id, cues[1].id, None)
+
+    panel_a._on_start_recording_clicked()
+    assert panel_b._start_recording_button.isEnabled() is False
+
+    # Simulate the recorder failing immediately after starting -- before any
+    # further UI interaction settles.
+    panel_a._on_recording_error("The selected microphone disappeared.")
+
+    assert panel_a._active_recording is None
+    assert panel_b._start_recording_button.isEnabled() is True, (
+        "an immediate startup error must reconcile against authoritative "
+        "state and release the sibling panel, not leave it permanently "
+        "blocked by a recording that never actually completed"
+    )
+    assert panel_b._recording_state_label.text() == ""
+
+    panel_a.deleteLater()
+    panel_b.deleteLater()
+
+
 def test_re_deleting_an_already_gone_take_clears_the_stale_row_without_raising(
     qapp, conn, recordings_dir, monkeypatch
 ):
