@@ -81,10 +81,10 @@ _RECALL_LABELS: list[tuple[str, str]] = [
 # persistent stepper only. No new step is invented; this mirrors
 # `_STEP_*` exactly.
 _STEPPER_LABELS: list[tuple[int, str]] = [
-    (_STEP_LISTEN_RECALL, "1. Listen / Recall"),
-    (_STEP_DIAGNOSE, "2. Diagnose"),
-    (_STEP_REPLAY, "3. Replay / Shadow"),
-    (_STEP_SUMMARY, "4. Summary"),
+    (_STEP_LISTEN_RECALL, "Listen / Recall"),
+    (_STEP_DIAGNOSE, "Diagnose"),
+    (_STEP_REPLAY, "Replay / Shadow"),
+    (_STEP_SUMMARY, "Summary"),
 ]
 
 # Right support column pages -- fewer pages than steps, since Diagnose and
@@ -724,17 +724,18 @@ class QuickPracticeWindow(QMainWindow):
         apply_role(inst_lbl, "subtitle")
         layout.addWidget(inst_lbl)
 
-        # M13 Axis 8 (A8-05): the learner's own active processing surface
-        # -- a neutral notebook/note treatment (mini-notebook: "a hand-sized
-        # spiral notebook page for one control group"), not a diagnosis-
-        # colored or generic form card. `DiagnosisNoteRow` is deliberately
-        # NOT reused here -- that primitive carries diagnosis/evidence
-        # semantics this content doesn't have.
-        recall_notebook, recall_layout = theme.make_mini_notebook("Self-Assessment")
+        # M13 Axis 8 corrective (A8-05): two DISTINCT neutral notebook/note
+        # surfaces for the learner's two separate processing tasks, not one
+        # notebook holding both -- each a hand-sized `make_mini_notebook()`
+        # page ("a hand-sized spiral notebook page for one control group"),
+        # not a diagnosis-colored or generic form card. `DiagnosisNoteRow`
+        # is deliberately NOT reused here -- that primitive carries
+        # diagnosis/evidence semantics neither of these notes has.
+        assessment_notebook, assessment_layout = theme.make_mini_notebook("Self-Assessment")
 
         recall_hdr = QLabel("Comprehension Self-Assessment:")
         apply_role(recall_hdr, "ui_label")
-        recall_layout.addWidget(recall_hdr)
+        assessment_layout.addWidget(recall_hdr)
 
         recall_row = QHBoxLayout()
         self._recall_group = QButtonGroup(self)
@@ -746,17 +747,20 @@ class QuickPracticeWindow(QMainWindow):
             self._recall_group.addButton(radio)
             self._recall_radio_buttons[value] = radio
             recall_row.addWidget(radio)
-        recall_layout.addLayout(recall_row)
+        assessment_layout.addLayout(recall_row)
+
+        caught_words_notebook, caught_words_layout = theme.make_mini_notebook("Caught Words / Phrases")
 
         frag_hdr = QLabel("What words/phrases did you catch? (optional)")
         apply_role(frag_hdr, "ui_label")
-        recall_layout.addWidget(frag_hdr)
+        caught_words_layout.addWidget(frag_hdr)
 
         self._heard_fragment_edit = QLineEdit()
         self._heard_fragment_edit.setPlaceholderText("Enter words or sounds you caught...")
-        recall_layout.addWidget(self._heard_fragment_edit)
+        caught_words_layout.addWidget(self._heard_fragment_edit)
 
-        layout.addWidget(recall_notebook)
+        layout.addWidget(assessment_notebook)
+        layout.addWidget(caught_words_notebook)
         layout.addStretch(1)
         return panel
 
