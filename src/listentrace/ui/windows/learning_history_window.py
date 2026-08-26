@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (
     QComboBox,
     QDateEdit,
     QDialog,
+    QGridLayout,
     QHBoxLayout,
     QHeaderView,
     QLabel,
@@ -18,6 +19,8 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QMessageBox,
     QPushButton,
+    QSplitter,
+    QStackedWidget,
     QTabWidget,
     QTreeWidget,
     QTreeWidgetItem,
@@ -40,6 +43,8 @@ from listentrace.application.services.player_loading_service import load_materia
 from listentrace.domain.enums.quick_practice_status import QuickPracticeStatus
 from listentrace.domain.services import date_range as date_range_rules
 from listentrace.ui import theme
+from listentrace.ui.widgets.notebook_paper import GrainedDeskWidget
+from listentrace.ui.theme import SPACE_COMPACT, SPACE_NORMAL, SPACE_PAGE, SPACE_SECTION, apply_role, apply_surface
 from listentrace.ui.time_display import format_local_timestamp
 from listentrace.ui.widgets.simple_bar_chart import SimpleBarChart
 from listentrace.ui.windows.export_dialog import ExportDialog
@@ -74,6 +79,31 @@ def _format_accuracy(accuracy: float | None) -> str:
     return "no completed attempts yet" if accuracy is None else f"{accuracy:.0%}"
 
 
+# Overview metric grid: (key, display label, tooltip-or-None, icon name).
+# Same 10 metrics/semantics as before -- the icon is a purely presentational
+# addition (M13 Due-Frame-First Visual Polish, Axis 5: the approved due-frame
+# board gives the METRIC SUMMARY SHEET its own icon per metric). Long
+# clarifying detail that doesn't fit a short label lives in the tooltip
+# instead of inline text.
+_OVERVIEW_METRICS: list[tuple[str, str, str | None, str]] = [
+    ("materials_practiced", "Materials Practiced", None, "material"),
+    ("completed_sessions", "Completed Sessions", None, "check"),
+    ("active_sessions", "Active Sessions", None, "clock"),
+    ("abandoned_sessions", "Abandoned Sessions", None, "x_circle"),
+    ("completed_quizzes", "Completed Quizzes", None, "quiz"),
+    ("avg_quiz_accuracy", "Avg Quiz Accuracy", "Across completed attempts only.", "chart"),
+    ("session_diagnosis_evidence", "Session Diagnosis Evidence", None, "clipboard"),
+    (
+        "shadowing_practice_actions",
+        "Shadowing Practice Actions",
+        "Cumulative; approximate under a date filter — see docs.",
+        "mic",
+    ),
+    ("retained_recordings", "Retained Recordings", None, "waveform"),
+    ("quick_practices_completed", "Quick Practices Completed", None, "play"),
+]
+
+
 class LearningHistoryWindow(QMainWindow):
     """Milestone 8: a global learning-evidence center. Combines a learning
     log, lightweight summaries, transparent insights, and workflow
@@ -97,13 +127,25 @@ class LearningHistoryWindow(QMainWindow):
         self._recordings_dir = recordings_dir
         self._child_window: QWidget | None = None
 
-        central = QWidget(self)
+        central = GrainedDeskWidget(self)
+        apply_surface(central, "paper")
         outer_layout = QVBoxLayout(central)
+        outer_layout.setContentsMargins(SPACE_PAGE, SPACE_PAGE, SPACE_PAGE, SPACE_PAGE)
+        outer_layout.setSpacing(SPACE_SECTION)
+        apply_surface(self, "paper")
 
-        title_label = QLabel("Learning History & Insights")
-        theme.apply_role(title_label, "title")
-        outer_layout.addWidget(title_label)
+        header = theme.make_surface_header("Study Dossier — Learning History & Insights")
+        outer_layout.addLayout(header.top_bar)
 
+        # M13 Final Human-Gate Corrective (HG-08): a single rigid
+        # QHBoxLayout packing the material/date filters AND the three
+        # action buttons let the trailing "Export Learning Evidence..."
+        # button run off the window's right edge at a real screen's
+        # available width. Splitting the filters and the actions onto
+        # their own compact rows (rather than a FlowLayout -- which would
+        # also flip this whole window's height-for-width propagation and
+        # inflate the overall window height as an unrelated side effect)
+        # keeps each row's natural content short enough to always fit.
         filter_row = QHBoxLayout()
         filter_row.addWidget(QLabel("Material:"))
         self._material_combo = QComboBox()
@@ -125,42 +167,78 @@ class LearningHistoryWindow(QMainWindow):
         self._custom_end_edit.setDate(today)
         filter_row.addWidget(self._custom_start_edit)
         filter_row.addWidget(self._custom_end_edit)
+        outer_layout.addLayout(filter_row)
 
+        actions_row = QHBoxLayout()
+        actions_row.addStretch(1)
         self._apply_button = QPushButton("Apply")
         self._apply_button.clicked.connect(self._on_reload_clicked)
         theme.apply_role(self._apply_button, "secondary")
-        filter_row.addWidget(self._apply_button)
+        actions_row.addWidget(self._apply_button)
         self._quick_practice_button = QPushButton("Quick Practice...")
         self._quick_practice_button.clicked.connect(self._on_quick_practice_clicked)
         theme.apply_role(self._quick_practice_button, "secondary")
-        filter_row.addWidget(self._quick_practice_button)
+        actions_row.addWidget(self._quick_practice_button)
         self._export_button = QPushButton("Export Learning Evidence...")
         self._export_button.clicked.connect(self._on_export_clicked)
         theme.apply_role(self._export_button, "secondary")
-        filter_row.addWidget(self._export_button)
-        outer_layout.addLayout(filter_row)
+        actions_row.addWidget(self._export_button)
+        outer_layout.addLayout(actions_row)
 
         self._error_label = QLabel("")
         theme.apply_role(self._error_label, "error")
         self._error_label.setWordWrap(True)
         outer_layout.addWidget(self._error_label)
 
-        self._tabs = QTabWidget()
-        outer_layout.addWidget(self._tabs, 1)
+        # Left directory + right workspace (Acrobat-style section navigation)
+        body_splitter = QSplitter(Qt.Orientation.Horizontal)
+        body_splitter.setChildrenCollapsible(False)
 
-        self._tabs.addTab(self._build_overview_tab(), "Overview")
-        self._tabs.addTab(self._build_activity_tab(), "Activity")
-        self._tabs.addTab(self._build_sessions_tab(), "Sessions")
-        self._tabs.addTab(self._build_diagnoses_tab(), "Diagnoses")
-        self._tabs.addTab(self._build_quizzes_tab(), "Quizzes")
-        self._tabs.addTab(self._build_shadowing_recordings_tab(), "Shadowing & Recordings")
-        self._tabs.addTab(self._build_quick_practice_tab(), "Quick Practice")
+        # Left navigation directory
+        self._section_list = QListWidget()
+        # 168px with no wrapping truncated "Shadowing & Recordings" and forced
+        # an unwanted horizontal scrollbar. Wrapping (plus a modest width
+        # bump) lets every label read in full on two lines without reviving
+        # the old horizontal-tabs layout.
+        self._section_list.setMaximumWidth(190)
+        self._section_list.setMinimumWidth(150)
+        theme.configure_long_text_list(self._section_list)
+        apply_surface(self._section_list, "surface_soft")
+        apply_role(self._section_list, "nav_directory")
+        for section_name in (
+            "Overview",
+            "Activity",
+            "Sessions",
+            "Diagnoses",
+            "Quizzes",
+            "Shadowing & Recordings",
+            "Quick Practice",
+        ):
+            item = QListWidgetItem(section_name)
+            self._section_list.addItem(item)
+        self._section_list.currentRowChanged.connect(self._on_section_changed)
+        body_splitter.addWidget(self._section_list)
+
+        # Right section workspace (one page per directory entry)
+        self._section_stack = QStackedWidget()
+        self._section_stack.addWidget(self._build_overview_tab())
+        self._section_stack.addWidget(self._build_activity_tab())
+        self._section_stack.addWidget(self._build_sessions_tab())
+        self._section_stack.addWidget(self._build_diagnoses_tab())
+        self._section_stack.addWidget(self._build_quizzes_tab())
+        self._section_stack.addWidget(self._build_shadowing_recordings_tab())
+        self._section_stack.addWidget(self._build_quick_practice_tab())
+        body_splitter.addWidget(self._section_stack)
+
+        body_splitter.setSizes([180, 718])
+        outer_layout.addWidget(body_splitter, 1)
 
         self.setCentralWidget(central)
 
         self._refresh_material_combo(initial_material_id)
         self._update_custom_range_visibility()
         self._reload()
+        self._section_list.setCurrentRow(0)
 
     # ---- filters ----
 
@@ -210,6 +288,11 @@ class LearningHistoryWindow(QMainWindow):
     def _on_reload_clicked(self) -> None:
         self._reload()
 
+    def _on_section_changed(self, row: int) -> None:
+        """Switch the right workspace stack to the selected section page."""
+        if 0 <= row < self._section_stack.count():
+            self._section_stack.setCurrentIndex(row)
+
     # ---- reload ----
 
     def _reload(self) -> None:
@@ -235,15 +318,30 @@ class LearningHistoryWindow(QMainWindow):
         layout = QVBoxLayout(widget)
 
         stats_card, stats_column = theme.make_card()
-        self._overview_label = QLabel("")
-        self._overview_label.setWordWrap(True)
-        stats_column.addWidget(self._overview_label)
+        # A raw multi-line QLabel read like a debug/status report rather than
+        # a finished Study Dossier. A scan-oriented 2-column icon+metric tile
+        # grid keeps exactly the same data/semantics, just recomposed to read
+        # at a glance -- no new metrics, no score/ranking invented (M13
+        # Due-Frame-First Visual Polish, Axis 5).
+        self._overview_grid = QGridLayout()
+        self._overview_grid.setHorizontalSpacing(SPACE_NORMAL)
+        self._overview_grid.setVerticalSpacing(SPACE_NORMAL)
+        self._overview_metric_labels: dict[str, QLabel] = {}
+        for index, (key, name_text, tooltip, icon_name) in enumerate(_OVERVIEW_METRICS):
+            tile, value_label = theme.make_metric_tile(icon_name, name_text, tooltip)
+            row, col = divmod(index, 2)
+            self._overview_grid.addWidget(tile, row, col)
+            self._overview_metric_labels[key] = value_label
+        self._overview_grid.setColumnStretch(0, 1)
+        self._overview_grid.setColumnStretch(1, 1)
+        stats_column.addLayout(self._overview_grid)
         layout.addWidget(stats_card)
 
         continue_card, continue_column = theme.make_card(
             "Continue Learning — active sessions (always shown, regardless of filters)"
         )
         self._continue_learning_list = QListWidget()
+        theme.apply_role(self._continue_learning_list, "ruled_list")
         theme.configure_long_text_list(self._continue_learning_list)
         self._continue_learning_list.currentItemChanged.connect(self._on_continue_learning_selection_changed)
         continue_column.addWidget(self._continue_learning_list, 1)
@@ -271,6 +369,7 @@ class LearningHistoryWindow(QMainWindow):
             "Needs Attention — transparent reasons, not a ranking (always shown, all materials)"
         )
         self._needs_attention_list = QListWidget()
+        theme.apply_role(self._needs_attention_list, "ruled_list")
         theme.configure_long_text_list(self._needs_attention_list)
         self._needs_attention_list.itemDoubleClicked.connect(self._on_needs_attention_double_clicked)
         attention_column.addWidget(self._needs_attention_list, 1)
@@ -282,21 +381,21 @@ class LearningHistoryWindow(QMainWindow):
         self, conn: sqlite3.Connection, material_id: int | None, resolved_range: date_range_rules.ResolvedDateRange
     ) -> None:
         overview = history_svc.get_overview(conn, material_id, resolved_range)
-        lines = [
-            f"Materials Practiced: {overview.materials_practiced}",
-            f"Completed Sessions: {overview.completed_sessions}",
-            f"Active Sessions: {overview.active_sessions}",
-            f"Abandoned Sessions: {overview.abandoned_sessions}",
-            f"Completed Quizzes: {overview.completed_quizzes}",
-            f"Average Quiz Accuracy (across completed attempts): {_format_accuracy(overview.average_quiz_accuracy)}",
-            f"Session Diagnosis Evidence: {overview.session_diagnosis_evidence_count}",
-            f"Shadowing Practice Actions (cumulative; approximate under a date filter — see docs): "
-            f"{overview.shadowing_practice_count}",
-            f"Retained Recordings: {overview.retained_recording_count} "
-            f"({_format_duration_ms(overview.retained_recording_total_duration_ms)} total)",
-            f"Quick Practices Completed: {overview.quick_practices_completed}",
-        ]
-        self._overview_label.setText("\n".join(lines))
+        metric_values = {
+            "materials_practiced": str(overview.materials_practiced),
+            "completed_sessions": str(overview.completed_sessions),
+            "active_sessions": str(overview.active_sessions),
+            "abandoned_sessions": str(overview.abandoned_sessions),
+            "completed_quizzes": str(overview.completed_quizzes),
+            "avg_quiz_accuracy": _format_accuracy(overview.average_quiz_accuracy),
+            "session_diagnosis_evidence": str(overview.session_diagnosis_evidence_count),
+            "shadowing_practice_actions": str(overview.shadowing_practice_count),
+            "retained_recordings": f"{overview.retained_recording_count} "
+            f"({_format_duration_ms(overview.retained_recording_total_duration_ms)})",
+            "quick_practices_completed": str(overview.quick_practices_completed),
+        }
+        for key, value_label in self._overview_metric_labels.items():
+            value_label.setText(metric_values[key])
 
         self._continue_learning_entries = history_svc.list_continue_learning_sessions(conn)
         self._continue_learning_list.clear()
@@ -383,6 +482,7 @@ class LearningHistoryWindow(QMainWindow):
         self._activity_checkboxes: dict[str, QCheckBox] = {}
         for activity_type in _ACTIVITY_TYPES:
             checkbox = QCheckBox(activity_type.capitalize())
+            apply_role(checkbox, "ui_label")
             checkbox.setChecked(True)
             checkbox.toggled.connect(self._on_activity_filter_changed)
             self._activity_checkboxes[activity_type] = checkbox
@@ -391,6 +491,7 @@ class LearningHistoryWindow(QMainWindow):
 
         activity_card, activity_column = theme.make_card()
         self._activity_list = QListWidget()
+        theme.apply_role(self._activity_list, "ruled_list")
         theme.configure_long_text_list(self._activity_list)
         self._activity_list.itemDoubleClicked.connect(self._on_activity_item_double_clicked)
         activity_column.addWidget(self._activity_list, 1)
@@ -792,6 +893,18 @@ class LearningHistoryWindow(QMainWindow):
             "Quick Practice runs — Active/Completed/Abandoned kept visibly distinct, "
             "never counted as Intensive Sessions or Quiz Attempts (double-click opens the material)"
         )
+        # M13 Final Human-Gate Corrective (HG-08): this card's title is
+        # long enough on one unwrapped line to force this whole tab --
+        # and so the window itself -- wider than a real screen's available
+        # width, indirectly pushing the toolbar's trailing button off the
+        # window's right edge even after the toolbar's own layout was
+        # fixed. Wrapped locally rather than in `make_card()` itself: that
+        # shared helper's caption uses the same `role="caption"` as
+        # `make_metric_tile()`'s own label, and enabling word-wrap there
+        # was observed to corrupt that unrelated tile's text layout.
+        quick_practice_card_caption = column.itemAt(0).widget()
+        if isinstance(quick_practice_card_caption, QLabel):
+            quick_practice_card_caption.setWordWrap(True)
         self._quick_practice_list = QListWidget()
         theme.configure_long_text_list(self._quick_practice_list)
         self._quick_practice_list.itemDoubleClicked.connect(self._on_quick_practice_item_double_clicked)
@@ -801,6 +914,7 @@ class LearningHistoryWindow(QMainWindow):
         self._delete_quick_practice_button.clicked.connect(self._on_delete_quick_practice_clicked)
         self._delete_quick_practice_button.setEnabled(False)
         theme.apply_role(self._delete_quick_practice_button, "danger")
+        theme.set_button_icon(self._delete_quick_practice_button, "delete", color_token="danger")
         column.addWidget(self._delete_quick_practice_button)
         layout.addWidget(card, 1)
         return widget

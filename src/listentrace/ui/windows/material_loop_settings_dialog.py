@@ -62,6 +62,8 @@ class MaterialLoopSettingsDialog(QDialog):
         loop_grace_change_bus.material_override_changed.connect(self._on_material_override_changed_elsewhere)
 
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(theme.SPACE_SECTION, theme.SPACE_SECTION, theme.SPACE_SECTION, theme.SPACE_SECTION)
+        layout.setSpacing(theme.SPACE_NORMAL)
 
         explanation = QLabel(_EXPLANATION)
         explanation.setWordWrap(True)
@@ -70,10 +72,12 @@ class MaterialLoopSettingsDialog(QDialog):
         layout.addWidget(explanation)
 
         self._inherit_radio = QRadioButton()
+        apply_role(self._inherit_radio, "ui_label")
         self._inherit_radio.toggled.connect(self._on_inherit_toggled)
         layout.addWidget(self._inherit_radio)
 
         self._custom_radio = QRadioButton("Custom for this Material")
+        apply_role(self._custom_radio, "ui_label")
         self._custom_radio.toggled.connect(self._on_custom_toggled)
         layout.addWidget(self._custom_radio)
 

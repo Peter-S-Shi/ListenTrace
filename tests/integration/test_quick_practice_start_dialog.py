@@ -75,14 +75,41 @@ def test_selected_with_no_cues_shows_an_error_and_does_not_start(qapp, conn, tmp
 
 
 def test_recommended_preview_shows_reasons_for_qualifying_cues(qapp, conn, tmp_path):
+    from PySide6.QtWidgets import QLabel
+
     load_result = _import_material(conn, tmp_path)
     learning_repository.insert_annotations(
         conn, load_result.cues[1].id, [("misheard", "wrong")], load_result.cues[1].text[:7], 0, 7, None
     )
     dialog = QuickPracticeStartDialog(conn, load_result.material.id, load_result.material.title, load_result.cues)
     assert dialog._recommended_preview.count() > 0
-    texts = [dialog._recommended_preview.item(i).text() for i in range(dialog._recommended_preview.count())]
+    texts: list[str] = []
+    for i in range(dialog._recommended_preview.count()):
+        row = dialog._recommended_preview.itemWidget(dialog._recommended_preview.item(i))
+        texts.extend(label.text() for label in row.findChildren(QLabel))
     assert any("misheard" in t for t in texts)
+
+
+def test_recommended_preview_renders_each_reason_as_its_own_paper_tag(qapp, conn, tmp_path):
+    """M13 Axis 4 corrective: each recommendation reason is its own
+    `make_paper_tag()` label, not one plain comma-joined string."""
+    from PySide6.QtWidgets import QLabel
+
+    load_result = _import_material(conn, tmp_path)
+    learning_repository.insert_annotations(
+        conn, load_result.cues[1].id, [("misheard", "wrong")], load_result.cues[1].text[:7], 0, 7, None
+    )
+    dialog = QuickPracticeStartDialog(conn, load_result.material.id, load_result.material.title, load_result.cues)
+    assert dialog._recommended_preview.count() > 0
+    found_multi_reason_row = False
+    for i in range(dialog._recommended_preview.count()):
+        row = dialog._recommended_preview.itemWidget(dialog._recommended_preview.item(i))
+        tags = [w for w in row.findChildren(QLabel) if w.property("role") == "paper_tag"]
+        if len(tags) >= 2:
+            found_multi_reason_row = True
+        for tag in tags:
+            assert "," not in tag.text(), "each reason must be its own tag, not comma-joined"
+    assert found_multi_reason_row, "expected at least one recommended cue with multiple reason tags"
 
 
 def test_recommended_start_creates_a_session_with_the_chosen_count(qapp, conn, tmp_path):

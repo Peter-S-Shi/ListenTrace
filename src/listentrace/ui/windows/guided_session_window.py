@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import sqlite3
 from pathlib import Path
+from typing import Any
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QTextCursor
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
+    QFrame,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -16,6 +18,7 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QMessageBox,
     QPushButton,
+    QScrollArea,
     QSplitter,
     QStackedWidget,
     QTextEdit,
@@ -24,6 +27,7 @@ from PySide6.QtWidgets import (
 )
 
 from listentrace.application.dto.player_load import PlayerLoadResult
+from listentrace.application.dto.player_state import PlayerTick
 from listentrace.application.dto.practice_session_state import PracticeSessionState
 from listentrace.application.errors import (
     CueNotFoundError,
@@ -31,7 +35,6 @@ from listentrace.application.errors import (
     KeywordCaptureNotFoundError,
     SessionValidationError,
 )
-from listentrace.application.dto.player_state import PlayerTick
 from listentrace.application.services import label_preference_service
 from listentrace.application.services import loop_grace_service
 from listentrace.application.services import practice_session_service as svc
@@ -47,16 +50,27 @@ from listentrace.domain.services.text_range import whole_cue_range
 from listentrace.infrastructure.db.learning_repository import list_annotations_for_cue
 from listentrace.infrastructure.media.playback import PlaybackController
 from listentrace.ui import theme
-from listentrace.ui.annotation_highlighting import apply_range_highlighting
+from listentrace.ui.annotation_highlighting import UNKNOWN_LABEL_COLOR, apply_range_highlighting
 from listentrace.ui.text_offset_conversion import (
     SurrogatePairOffsetError,
     codepoint_index_to_qt_offset,
     qt_offset_to_codepoint_index,
 )
+from listentrace.ui.theme import (
+    SPACE_COMPACT,
+    SPACE_MEDIUM,
+    SPACE_NORMAL,
+    SPACE_PAGE,
+    SPACE_SECTION,
+    FlowLayout,
+    apply_role,
+    apply_surface,
+)
 from listentrace.ui.widgets.loop_grace_change_bus import loop_grace_change_bus
+from listentrace.ui.widgets.notebook_paper import GrainedDeskWidget, RuledTextEdit
 from listentrace.ui.widgets.recording_panel import RecordingPanel
 from listentrace.ui.windows.material_loop_settings_dialog import MaterialLoopSettingsDialog
-from listentrace.ui.windows.player_window import _OVERLAP_HIGHLIGHT, _color_badge_icon, _format_time
+from listentrace.ui.windows.player_window import _OVERLAP_HIGHLIGHT, _format_time
 
 _STAGE_TITLES: dict[str, str] = {
     StageKey.GLOBAL_COMPREHENSION.value: "Global Comprehension",
@@ -73,16 +87,137 @@ _STAGE1_PROMPTS: list[tuple[str, str]] = [
     ("result", "What is the result or outcome?"),
 ]
 
+# StageStepper: minimum height for each step QPushButton so the 22px badge,
+# label, internal margins, border, and focus ring are never vertically
+# clipped (see final Pre-HG2 corrective pass #6).
+_STEP_BUTTON_MIN_HEIGHT_PX = 44
+
+
+class StageStepper(QFrame):
+    """Session-local visual stepper indicating the 5 stages of guided intensive practice.
+
+    Each stage step is a QPushButton, giving native keyboard focus, Tab/Shift-Tab
+    traversal, Enter/Space activation, and the ability to be disabled (unreached
+    future stages are disabled so mouse AND keyboard cannot jump to them).
+    """
+
+    stage_clicked = Signal(str)
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setObjectName("stage_stepper")
+        self.setFrameShape(QFrame.Shape.NoFrame)
+        self._layout = QHBoxLayout(self)
+        self._layout.setContentsMargins(0, 0, 0, 0)
+        self._layout.setSpacing(SPACE_COMPACT)
+
+        self._step_buttons: dict[str, QPushButton] = {}
+        self._step_badges: dict[str, QLabel] = {}
+        self._step_labels: dict[str, QLabel] = {}
+
+        stage_meta = [
+            (StageKey.GLOBAL_COMPREHENSION.value, "1", "1. Global Gist"),
+            (StageKey.KEYWORD_CAPTURE.value, "2", "2. Keywords"),
+            (StageKey.TRANSCRIPT_DIAGNOSIS.value, "3", "3. Diagnosis"),
+            (StageKey.SHADOWING.value, "4", "4. Shadowing"),
+            (StageKey.FINAL_SUMMARY.value, "5", "5. Final Recall"),
+        ]
+
+        for key, num_str, title in stage_meta:
+            # Each stepper item is a QPushButton containing badge + label inside it.
+            # Using a QPushButton provides native: keyboard focus, Tab navigation,
+            # Enter/Space activation, and setEnabled() for blocking future stages.
+            btn = QPushButton()
+            btn.setObjectName(f"step_{key}")
+            btn.setFlat(True)
+            btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            btn.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+            # A QPushButton with a directly-assigned internal layout does not
+            # reliably size-hint tall enough to contain a 22px badge plus its
+            # margins/border/focus-ring -- it clipped the badge/label/border
+            # on every stage across the reported screenshots. An explicit
+            # minimum height makes the row's own height deterministic instead
+            # of depending on a QPushButton size-hint quirk.
+            btn.setMinimumHeight(_STEP_BUTTON_MIN_HEIGHT_PX)
+
+            inner_layout = QHBoxLayout()
+            inner_layout.setContentsMargins(8, 6, 8, 6)
+            inner_layout.setSpacing(6)
+
+            apply_role(btn, "stepper_item")
+
+            badge = QLabel(num_str)
+            badge.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            badge.setFixedSize(22, 22)
+            apply_role(badge, "stepper_item_badge")
+
+            lbl = QLabel(title)
+            apply_role(lbl, "stepper_item_label")
+
+            inner_layout.addWidget(badge)
+            inner_layout.addWidget(lbl)
+
+            container = QWidget()
+            container.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+            container.setLayout(inner_layout)
+
+            btn_layout = QHBoxLayout(btn)
+            btn_layout.setContentsMargins(0, 0, 0, 0)
+            btn_layout.addWidget(container)
+
+            btn.clicked.connect(lambda _checked=False, k=key: self.stage_clicked.emit(k))
+
+            self._step_buttons[key] = btn
+            self._step_badges[key] = badge
+            self._step_labels[key] = lbl
+            self._layout.addWidget(btn, 1)
+
+    def update_stepper(self, current_stage: str, stage_progress: dict[str, Any], read_only: bool) -> None:
+        for key, btn in self._step_buttons.items():
+            badge = self._step_badges[key]
+            label = self._step_labels[key]
+            idx_str = str(STAGE_ORDER.index(key) + 1)
+
+            progress = stage_progress.get(key)
+            status = progress.status if progress else StageStatus.NOT_STARTED.value
+
+            is_current = key == current_stage
+            is_completed = status == StageStatus.COMPLETED.value
+            is_skipped = status == StageStatus.SKIPPED.value
+
+            # Navigation safety: disable future unreached stages (NOT_STARTED and
+            # not the current stage).  read_only sessions disable all stages.
+            is_reachable = is_current or is_completed or is_skipped or (
+                status == StageStatus.IN_PROGRESS.value
+            )
+            btn.setEnabled(not read_only and is_reachable)
+
+            if is_current:
+                state, badge_text = "current", idx_str
+            elif is_completed:
+                state, badge_text = "completed", "✓"
+            elif is_skipped:
+                state, badge_text = "skipped", "–"
+            else:
+                state, badge_text = "not_started", idx_str
+
+            theme.apply_variant(btn, state=state)
+            theme.apply_variant(badge, state=state)
+            theme.apply_variant(label, state=state)
+            badge.setText(badge_text)
+
 
 class GuidedSessionWindow(QMainWindow):
-    """Milestone 5 guided intensive-listening session: five sequential stages built
-    on the verified Milestone 3 player and Milestone 4 transcript workspace.
+    """M13 Reconstructed Guided Intensive Practice Learning Workspace.
 
-    Reuses `PlayerSession`/`PlaybackController` for cue timing, loop, replay, and
-    playback-error handling, `ui.text_offset_conversion` for every Qt cursor
-    position, `ui.annotation_highlighting` for transcript highlight painting, and
-    `application.services.practice_session_service` for every lifecycle/stage/
-    diagnosis rule — none of that established logic is reimplemented here.
+    Target Architecture:
+    - Session Context Header + Session-Local Stage Stepper (1–5)
+    - Stage 1: Calm Global Gist Paper Card
+    - Stage 2: Keyword & Fragment Capture Workspace
+    - Stage 3: Two-Column Diagnosis Workspace (Cue Nav Left | Diagnosis Paper Canvas Right)
+    - Stage 4: Structured Shadowing Studio (Anchored Cue -> Recording Panel -> Takes -> Comparison)
+    - Stage 5: Dominant Ruled Notebook Final Recall Journal & Reference Drawer
+    - Bottom Action Grammar with Explainable Completion Checklist
     """
 
     def __init__(
@@ -99,7 +234,8 @@ class GuidedSessionWindow(QMainWindow):
         self._cues = load_result.cues
         self._session_id = session_id
         self.setWindowTitle(f"ListenTrace — Guided Practice — {self._material.title}")
-        self.resize(960, 760)
+        self.resize(1080, 750)
+        self.setMinimumSize(880, 600)
 
         self._playback = PlaybackController(self)
         grace_ms = loop_grace_service.effective_loop_end_grace_ms(connection, self._material.id)
@@ -122,23 +258,41 @@ class GuidedSessionWindow(QMainWindow):
         self._recording_panel = RecordingPanel(connection, recordings_dir, self)
         self._recording_panel.request_play_source.connect(self._on_recording_panel_request_play_source)
 
-        central = QWidget(self)
+        central = GrainedDeskWidget(self)
+        apply_surface(central, "paper")
         layout = QVBoxLayout(central)
+        layout.setContentsMargins(SPACE_PAGE, SPACE_PAGE, SPACE_PAGE, SPACE_PAGE)
+        layout.setSpacing(SPACE_SECTION)
+        apply_surface(self, "paper")
 
-        header_row = QHBoxLayout()
-        title_label = QLabel(self._material.title)
-        theme.apply_role(title_label, "title")
-        header_row.addWidget(title_label)
+        # -------------------------------------------------------------------
+        # 1. Header & Stage Stepper
+        # -------------------------------------------------------------------
+        header = theme.make_surface_header(self._material.title)
+        header_row = header.top_bar
         self._stage_progress_label = QLabel("")
-        theme.apply_role(self._stage_progress_label, "caption")
-        header_row.addWidget(self._stage_progress_label, 1)
+        apply_role(self._stage_progress_label, "caption")
+        header.title_row.addWidget(self._stage_progress_label, 1)
+
+        close_top_btn = QPushButton("Exit Session")
+        apply_role(close_top_btn, "quiet")
+        theme.set_button_icon(close_top_btn, "close", color_token="secondary")
+        close_top_btn.clicked.connect(self.close)
+        header_row.addWidget(close_top_btn)
         layout.addLayout(header_row)
 
+        self._stage_stepper = StageStepper(self)
+        self._stage_stepper.stage_clicked.connect(self._on_stepper_stage_clicked)
+        layout.addWidget(self._stage_stepper)
+
         self._status_label = QLabel("")
-        theme.apply_role(self._status_label, "error")
+        apply_role(self._status_label, "error")
         self._status_label.setWordWrap(True)
         layout.addWidget(self._status_label)
 
+        # -------------------------------------------------------------------
+        # 2. Stage Stack
+        # -------------------------------------------------------------------
         self._stack = QStackedWidget()
         self._stack.addWidget(self._build_stage1_panel())
         self._stack.addWidget(self._build_stage2_panel())
@@ -147,13 +301,12 @@ class GuidedSessionWindow(QMainWindow):
         self._stack.addWidget(self._build_stage5_panel())
         layout.addWidget(self._stack, 1)
 
-        # M12 Round 3/4 Completion Explainability Contract: a disabled `Complete
-        # Session` must never be an unexplained grey button -- this mirrors
-        # `rules.session_can_complete`'s per-stage predicate so the explanation
-        # can never drift from the actual enable/disable decision below.
+        # -------------------------------------------------------------------
+        # 3. Completion Checklist & Navigation Actions
+        # -------------------------------------------------------------------
         self._completion_status_label = QLabel("")
         self._completion_status_label.setWordWrap(True)
-        theme.apply_role(self._completion_status_label, "caption")
+        apply_role(self._completion_status_label, "caption")
         layout.addWidget(self._completion_status_label)
 
         nav_row = QHBoxLayout()
@@ -161,23 +314,24 @@ class GuidedSessionWindow(QMainWindow):
         self._back_button.clicked.connect(self._on_back_clicked)
         self._skip_button = QPushButton("Skip Stage")
         self._skip_button.clicked.connect(self._on_skip_stage_clicked)
-        self._continue_button = QPushButton("Save and Continue")
-        self._continue_button.clicked.connect(self._on_save_and_continue_clicked)
-        self._close_button = QPushButton("Close and Resume Later")
-        self._close_button.clicked.connect(self.close)
         self._abandon_button = QPushButton("Abandon Session")
         self._abandon_button.clicked.connect(self._on_abandon_clicked)
+
+        nav_row.addWidget(self._back_button)
+        nav_row.addWidget(self._skip_button)
+        nav_row.addWidget(self._abandon_button)
+        nav_row.addStretch(1)
+
+        self._close_button = QPushButton("Close and Resume Later")
+        self._close_button.clicked.connect(self.close)
+        self._continue_button = QPushButton("Save and Continue")
+        self._continue_button.clicked.connect(self._on_save_and_continue_clicked)
         self._complete_button = QPushButton("Complete Session")
         self._complete_button.clicked.connect(self._on_complete_session_clicked)
-        for button in (
-            self._back_button,
-            self._skip_button,
-            self._continue_button,
-            self._close_button,
-            self._abandon_button,
-            self._complete_button,
-        ):
-            nav_row.addWidget(button)
+
+        nav_row.addWidget(self._close_button)
+        nav_row.addWidget(self._continue_button)
+        nav_row.addWidget(self._complete_button)
         layout.addLayout(nav_row)
 
         self.setCentralWidget(central)
@@ -195,20 +349,24 @@ class GuidedSessionWindow(QMainWindow):
         self._initialized = True
 
     def _apply_presentation(self) -> None:
-        """Milestone 11 button-role assignment: `Save and Continue` is this
-        window's single primary action (the common forward step through
-        every stage); `Back`/`Skip Stage`/`Close and Resume Later` are
-        low-priority navigation; `Abandon Session` is destructive;
-        `Complete Session` is the positive completion action. Per-stage
-        action buttons (capture/diagnosis/shadowing) are assigned their own
-        roles where they are built, since they don't exist yet at this
-        point in `__init__`."""
-        theme.apply_role(self._back_button, "quiet")
-        theme.apply_role(self._skip_button, "quiet")
-        theme.apply_role(self._continue_button, "primary")
-        theme.apply_role(self._close_button, "quiet")
-        theme.apply_role(self._abandon_button, "danger")
-        theme.apply_role(self._complete_button, "success")
+        """Milestone 11 button-role assignment."""
+        apply_role(self._back_button, "quiet")
+        theme.set_button_icon(self._back_button, "back", color_token="secondary")
+        apply_role(self._skip_button, "quiet")
+        # M13 Due-Frame Polish, Axis 1: the due-frame board shows "Save &
+        # Continue" as an ordinary paper/no-fill blue-outline action, not
+        # the screen's one filled hero commit -- Guided Session has no
+        # solid-filled action evidenced anywhere on that board (removed
+        # the hero tag that had wrongly promoted this to look filled).
+        apply_role(self._continue_button, "primary")
+        theme.set_button_icon(self._continue_button, "save", color_token="accent")
+        apply_role(self._close_button, "quiet")
+        apply_role(self._abandon_button, "danger")
+        apply_role(self._complete_button, "success")
+        # M13 Due-Frame Polish, Axis 1: `success` has no filled variant --
+        # see its QSS rule -- so its icon must match the outline's own
+        # green text/border color, not a white on-fill tint.
+        theme.set_button_icon(self._complete_button, "motif_star", color_token="success")
 
     # ---- read-only / status helpers ----
 
@@ -219,6 +377,11 @@ class GuidedSessionWindow(QMainWindow):
         self._status_label.setText(message)
 
     # ---- navigation ----
+
+    def _on_stepper_stage_clicked(self, stage_key: str) -> None:
+        if self._current_stage == stage_key:
+            return
+        self._show_stage(stage_key)
 
     def _show_stage(self, stage_key: str) -> None:
         session = svc.get_session(self._connection, self._session_id)
@@ -241,13 +404,9 @@ class GuidedSessionWindow(QMainWindow):
                 return
 
         if self._initialized:
-            # Nothing to flush on the very first display: the outgoing stage's
-            # widgets haven't been populated with real data yet at that point.
             self._save_current_stage_inputs()
 
         if stage_key != StageKey.SHADOWING.value:
-            # Leaving Stage 4 (or navigating within the session generally) must
-            # not leave a capture running unattended and unstoppable.
             self._recording_panel.abort_active_recording()
 
         if session.status == SessionStatus.ACTIVE.value:
@@ -257,6 +416,9 @@ class GuidedSessionWindow(QMainWindow):
                 self._show_status(str(exc))
                 return
 
+        # A prior failed attempt may have left a validation error banner on
+        # screen; a successful stage transition means it's stale.
+        self._show_status("")
         self._current_stage = stage_key
         self._refresh_state()
 
@@ -272,6 +434,7 @@ class GuidedSessionWindow(QMainWindow):
         self._sync_playback_button_texts()
         self._update_progress_label(state)
         self._update_nav_buttons(state)
+        self._stage_stepper.update_stepper(self._current_stage, state.stage_progress, self._read_only())
 
     def _update_progress_label(self, state: PracticeSessionState) -> None:
         index = STAGE_ORDER.index(self._current_stage) + 1
@@ -284,10 +447,8 @@ class GuidedSessionWindow(QMainWindow):
         read_only = state.session.status != SessionStatus.ACTIVE.value
         index = STAGE_ORDER.index(self._current_stage)
         is_last_stage = index == len(STAGE_ORDER) - 1
-        # M12 Round 3 Completion/Explainability Contract: on Stage 5 there is no
-        # next stage to "Continue" to, and the shared label previously left
-        # learners unsure whether this action was still required at all.
-        self._continue_button.setText("Save Summary" if is_last_stage else "Save and Continue")
+
+        self._continue_button.setText("Save Summary" if is_last_stage else "Save and Continue ▶")
         self._back_button.setEnabled(index > 0)
         self._skip_button.setEnabled(not read_only)
         self._continue_button.setEnabled(not read_only)
@@ -302,25 +463,20 @@ class GuidedSessionWindow(QMainWindow):
             return
         resolved_statuses = (StageStatus.COMPLETED.value, StageStatus.SKIPPED.value)
         unresolved_titles = []
-        checklist_lines = []
         for stage_key in STAGE_ORDER:
             progress = state.stage_progress.get(stage_key)
             status = progress.status if progress is not None else StageStatus.NOT_STARTED.value
-            resolved = status in resolved_statuses
-            mark = "✓" if resolved else "✗"
-            checklist_lines.append(f"{mark} {_STAGE_TITLES[stage_key]}")
-            if not resolved:
+            if status not in resolved_statuses:
                 unresolved_titles.append(_STAGE_TITLES[stage_key])
         if unresolved_titles:
-            summary = "Complete Session needs: " + "; ".join(unresolved_titles) + "."
+            count = len(unresolved_titles)
+            names = ", ".join(unresolved_titles)
+            self._completion_status_label.setText(f"{count} stage{'s' if count > 1 else ''} remaining: {names}.")
         else:
-            summary = "Ready to complete."
-        self._completion_status_label.setText(summary + "  (" + " | ".join(checklist_lines) + ")")
+            self._completion_status_label.setText("All stages resolved — ready to complete.")
+
 
     def _save_current_stage_inputs(self) -> None:
-        # Checked live rather than via `self._state`, which may be stale if the
-        # session became read-only through some path other than this window's own
-        # complete/abandon handlers (e.g. closeEvent firing right after either).
         session = svc.get_session(self._connection, self._session_id)
         if session is None or session.status != SessionStatus.ACTIVE.value:
             return
@@ -330,8 +486,6 @@ class GuidedSessionWindow(QMainWindow):
             self._save_shadowing_note()
         elif self._current_stage == StageKey.FINAL_SUMMARY.value:
             self._save_stage5_inputs()
-        # Stage 2 (captures) and Stage 3 (diagnosis) persist immediately on each
-        # action; there is nothing pending to flush for them here.
 
     def _stage_has_evidence(self, stage_key: str) -> bool:
         if self._state is None:
@@ -384,8 +538,14 @@ class GuidedSessionWindow(QMainWindow):
         self._save_current_stage_inputs()
         try:
             svc.complete_stage(self._connection, self._session_id, stage)
-        except SessionValidationError:
-            pass  # Leaving the stage in_progress is fine — this is not an exam.
+        except SessionValidationError as exc:
+            # A failed completion attempt must never be silent, and must
+            # never advance -- discarding this and continuing anyway let a
+            # learner reach Stage 5 with Stages 3/4 never actually resolved
+            # (final Pre-HG2 corrective pass #4).
+            self._show_status(str(exc))
+            self._refresh_state()
+            return
         index = STAGE_ORDER.index(stage)
         if index < len(STAGE_ORDER) - 1:
             self._show_stage(STAGE_ORDER[index + 1])
@@ -433,9 +593,6 @@ class GuidedSessionWindow(QMainWindow):
     # ---- shared playback plumbing (Stages 3 and 4) ----
 
     def _on_open_loop_settings(self) -> None:
-        # Modeless: one shared dialog regardless of which stage's Loop
-        # Settings button opened it, since there is only one Material/
-        # PlayerSession for the whole window.
         if self._loop_settings_dialog is None:
             self._loop_settings_dialog = MaterialLoopSettingsDialog(
                 self._connection, self._material.id, self._material.title, self
@@ -463,22 +620,6 @@ class GuidedSessionWindow(QMainWindow):
             self._shadowing_play_button.setText(text)
 
     def _apply_player_tick(self, tick: PlayerTick) -> None:
-        # A Loop iteration completing is also `pause=True` (the same one-shot
-        # span primitive as Replay/Play-cue -- see player_session.py), but
-        # `restart_at_ms` means it is about to resume on its own:
-        # restart_span() owns its own pause-then-settle-then-resume sequence,
-        # and the "playback genuinely stopped" side effect (button labels)
-        # below does not apply to it. Shared by both tick sources: a position
-        # update, and the media's own natural end (see `_on_end_of_media`) --
-        # a Loop span whose effective completion end (logical end + grace)
-        # exceeds the Material's actual duration would otherwise never
-        # receive a position tick that reaches it. Comparison-replay
-        # bookkeeping deliberately stays out of this shared method: a tick-
-        # driven pause (the cue's own real end was reached) is a genuine
-        # finish; an EOF-driven one (the media ran out before that) is not --
-        # see `_on_position_changed`/`_on_end_of_media` below, which is also
-        # why `PlayerSession.on_media_ended()` still exists even though its
-        # `pause=True` outcome is treated differently here.
         if tick.restart_at_ms is not None:
             self._playback.restart_span(tick.restart_at_ms)
         elif tick.pause:
@@ -504,14 +645,6 @@ class GuidedSessionWindow(QMainWindow):
         if tick.restart_at_ms is None:
             self._sync_playback_button_texts()
         if self._comparison_replay_pending:
-            # The media ended before the one-shot replay's tick-based pause
-            # boundary was ever reached (e.g. the cue's end exceeds the
-            # media's actual duration) — the comparison can never finish
-            # normally; release it rather than leaving it stuck.
-            # PlayerSession's own state (_active_span etc.) is still cleaned
-            # up deterministically above, via on_media_ended -- this is only
-            # about what the source recording's playback outcome means to
-            # the learner.
             self._comparison_replay_pending = False
             self._recording_panel.notify_source_failed()
 
@@ -534,25 +667,45 @@ class GuidedSessionWindow(QMainWindow):
     # ---- Stage 1: Global Comprehension ----
 
     def _build_stage1_panel(self) -> QWidget:
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        apply_surface(scroll, "paper")
+
         panel, layout = theme.make_card()
-        layout.addWidget(
-            QLabel(
-                "Listen without the transcript. Answer what you can — an empty answer is fine, "
-                "but you'll need to explicitly skip this stage if you leave everything blank."
-            )
+        apply_surface(panel, "paper")
+
+        header = QLabel(
+            "Listen without the transcript. Answer what you can — an empty answer is fine, "
+            "but you'll need to explicitly skip this stage if you leave everything blank."
         )
+        header.setWordWrap(True)
+        apply_role(header, "subtitle")
+        layout.addWidget(header)
+
         self._stage1_lock_hint = QLabel("Read-only: the transcript has been revealed for this session.")
         self._stage1_lock_hint.setVisible(False)
+        apply_role(self._stage1_lock_hint, "caption")
         layout.addWidget(self._stage1_lock_hint)
+
         self._stage1_edits: dict[str, QTextEdit] = {}
-        for prompt_key, label_text in _STAGE1_PROMPTS:
-            layout.addWidget(QLabel(label_text))
+        for index, (prompt_key, label_text) in enumerate(_STAGE1_PROMPTS):
+            if index > 0:
+                # Canonical "unrelated group gap" (DESIGN.md §5.2) between one
+                # prompt+answer group and the next, replacing a local
+                # margin-top stylesheet hack on the label itself.
+                layout.addSpacing(SPACE_MEDIUM)
+            prompt_lbl = QLabel(label_text)
+            apply_role(prompt_lbl, "form_label")
+            layout.addWidget(prompt_lbl)
             edit = QTextEdit()
-            edit.setMaximumHeight(50)
+            edit.setMinimumHeight(60)
+            edit.setMaximumHeight(90)
             self._stage1_edits[prompt_key] = edit
             layout.addWidget(edit)
+
         layout.addStretch(1)
-        return panel
+        scroll.setWidget(panel)
+        return scroll
 
     def _populate_stage1(self, state: PracticeSessionState) -> None:
         responses = state.stage_responses.get(StageKey.GLOBAL_COMPREHENSION.value, {})
@@ -579,14 +732,19 @@ class GuidedSessionWindow(QMainWindow):
 
     def _build_stage2_panel(self) -> QWidget:
         panel, layout = theme.make_card()
-        layout.addWidget(
-            QLabel(
-                "Capture any keywords, names, numbers, or fragments you catch — spelling doesn't "
-                "need to be exact. At least one capture is required to complete this stage."
-            )
+        apply_surface(panel, "paper")
+
+        header = QLabel(
+            "Capture any keywords, names, numbers, or fragments you catch — spelling doesn't "
+            "need to be exact. At least one capture is required to complete this stage."
         )
+        header.setWordWrap(True)
+        apply_role(header, "subtitle")
+        layout.addWidget(header)
+
         self._stage2_lock_hint = QLabel("Read-only: the transcript has been revealed for this session.")
         self._stage2_lock_hint.setVisible(False)
+        apply_role(self._stage2_lock_hint, "caption")
         layout.addWidget(self._stage2_lock_hint)
 
         add_row = QHBoxLayout()
@@ -594,42 +752,69 @@ class GuidedSessionWindow(QMainWindow):
         for capture_type in KeywordCaptureType:
             self._capture_type_combo.addItem(capture_type.value.replace("_", " "), capture_type.value)
         self._capture_text_edit = QLineEdit()
-        self._capture_add_button = QPushButton("Add")
+        self._capture_text_edit.setPlaceholderText("Enter keyword or fragment...")
+        self._capture_add_button = QPushButton("+ Add Capture")
         self._capture_add_button.clicked.connect(self._on_add_capture_clicked)
-        theme.apply_role(self._capture_add_button, "secondary")
+        apply_role(self._capture_add_button, "secondary")
+
         add_row.addWidget(self._capture_type_combo)
         add_row.addWidget(self._capture_text_edit, 1)
         add_row.addWidget(self._capture_add_button)
         layout.addLayout(add_row)
 
+        # Capture list + empty-state hint overlay (the hint is shown when the list is empty)
+        list_container = QWidget()
+        list_container_layout = QVBoxLayout(list_container)
+        list_container_layout.setContentsMargins(0, 0, 0, 0)
+        list_container_layout.setSpacing(0)
+
         self._capture_list = QListWidget()
+        apply_role(self._capture_list, "ruled_list")
         self._capture_list.currentItemChanged.connect(self._on_capture_selected)
-        layout.addWidget(self._capture_list, 1)
+        list_container_layout.addWidget(self._capture_list, 1)
+
+        # Empty state: previously the hint sat underneath a full-height blank
+        # list, leaving most of the stage a meaningless empty region instead
+        # of the hint owning the space. Now the list is hidden/collapsed
+        # while empty and the hint centers itself in the space instead.
+        self._capture_empty_hint = QLabel("No captures yet — type a keyword or fragment above and click Add Capture.")
+        self._capture_empty_hint.setWordWrap(True)
+        self._capture_empty_hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        apply_role(self._capture_empty_hint, "caption")
+        self._capture_empty_hint.setVisible(True)
+        list_container_layout.addWidget(self._capture_empty_hint, 1)
+
+        layout.addWidget(list_container, 1)
 
         buttons_row = QHBoxLayout()
         self._capture_update_button = QPushButton("Update Selected")
         self._capture_update_button.clicked.connect(self._on_update_capture_clicked)
         self._capture_update_button.setEnabled(False)
-        theme.apply_role(self._capture_update_button, "secondary")
+        apply_role(self._capture_update_button, "secondary")
+
         self._capture_delete_button = QPushButton("Delete Selected")
         self._capture_delete_button.clicked.connect(self._on_delete_capture_clicked)
         self._capture_delete_button.setEnabled(False)
-        theme.apply_role(self._capture_delete_button, "danger")
+        apply_role(self._capture_delete_button, "danger")
+        theme.set_button_icon(self._capture_delete_button, "delete", color_token="danger")
+
         self._capture_move_up_button = QPushButton("Move Up")
         self._capture_move_up_button.clicked.connect(self._on_move_capture_up_clicked)
         self._capture_move_up_button.setEnabled(False)
-        theme.apply_role(self._capture_move_up_button, "quiet")
+        apply_role(self._capture_move_up_button, "quiet")
+        theme.set_button_icon(self._capture_move_up_button, "up", color_token="secondary")
+
         self._capture_move_down_button = QPushButton("Move Down")
         self._capture_move_down_button.clicked.connect(self._on_move_capture_down_clicked)
         self._capture_move_down_button.setEnabled(False)
-        theme.apply_role(self._capture_move_down_button, "quiet")
-        for button in (
-            self._capture_update_button,
-            self._capture_delete_button,
-            self._capture_move_up_button,
-            self._capture_move_down_button,
-        ):
-            buttons_row.addWidget(button)
+        apply_role(self._capture_move_down_button, "quiet")
+        theme.set_button_icon(self._capture_move_down_button, "down", color_token="secondary")
+
+        buttons_row.addWidget(self._capture_update_button)
+        buttons_row.addWidget(self._capture_delete_button)
+        buttons_row.addStretch(1)
+        buttons_row.addWidget(self._capture_move_up_button)
+        buttons_row.addWidget(self._capture_move_down_button)
         layout.addLayout(buttons_row)
         return panel
 
@@ -643,6 +828,14 @@ class GuidedSessionWindow(QMainWindow):
             self._capture_list.addItem(item)
         self._capture_list.blockSignals(False)
 
+        # Show empty-state hint only when there are no captures yet; hide/
+        # collapse the list so the hint owns the space instead of sitting
+        # beneath a large meaningless blank list region.
+        has_captures = self._capture_list.count() > 0
+        self._capture_empty_hint.setVisible(not has_captures)
+        self._capture_list.setVisible(has_captures)
+        self._capture_list.setMaximumHeight(16777215 if has_captures else 0)
+
         locked = state.session.transcript_revealed_at is not None
         enabled = state.session.status == SessionStatus.ACTIVE.value and not locked
         self._stage2_locked = not enabled
@@ -654,6 +847,7 @@ class GuidedSessionWindow(QMainWindow):
         self._capture_delete_button.setEnabled(False)
         self._capture_move_up_button.setEnabled(False)
         self._capture_move_down_button.setEnabled(False)
+
 
     def _on_capture_selected(self, current: QListWidgetItem, previous: QListWidgetItem) -> None:
         if current is None:
@@ -747,69 +941,103 @@ class GuidedSessionWindow(QMainWindow):
     # ---- Stage 3: Transcript Comparison & Error Diagnosis ----
 
     def _build_stage3_panel(self) -> QWidget:
-        # Milestone 11: the cue list and the diagnosis workspace are two
-        # card-framed panels in a resizable QSplitter, mirroring
-        # PlayerWindow's workspace-panel treatment (see player_window.py's
-        # _build_workspace_panel) rather than a fixed 1:1 QHBoxLayout.
+        # Two-Region Diagnosis Workspace: Cue Nav Left | Diagnosis Paper Canvas Right
         left_frame, left_column = theme.make_card()
-        left_column.addWidget(QLabel("Cues:"))
+        apply_surface(left_frame, "paper")
+
+        cues_hdr = QLabel("CUES & AUDIO")
+        # M13 Due-Frame Polish, Axis 3: the due-frame board renders every
+        # Stage 3 panel header (this one, "Transcript & Diagnosis
+        # Notebook") in blue-ink section-header style, not plain caption.
+        apply_role(cues_hdr, "section_header")
+        left_column.addWidget(cues_hdr)
+
         self._diagnosis_cue_list = QListWidget()
-        # Milestone 11: wrap long cue text instead of growing an unnecessary
-        # horizontal scrollbar, matching PlayerWindow's cue list treatment.
+        apply_role(self._diagnosis_cue_list, "ruled_list")
         self._diagnosis_cue_list.setWordWrap(True)
         self._diagnosis_cue_list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self._diagnosis_cue_list.currentItemChanged.connect(self._on_diagnosis_cue_selected)
         left_column.addWidget(self._diagnosis_cue_list, 1)
 
-        transport_row = QHBoxLayout()
+        transport_card, transport_layout = theme.make_card()
+        apply_surface(transport_card, "paper")
+
+        t_row = QHBoxLayout()
         self._diagnosis_play_button = QPushButton("Play")
         self._diagnosis_play_button.clicked.connect(self._on_diagnosis_play_clicked)
-        theme.apply_role(self._diagnosis_play_button, "secondary")
+        apply_role(self._diagnosis_play_button, "secondary")
+
         self._diagnosis_replay_button = QPushButton("Replay Cue")
         self._diagnosis_replay_button.clicked.connect(self._on_diagnosis_replay_clicked)
-        theme.apply_role(self._diagnosis_replay_button, "secondary")
+        apply_role(self._diagnosis_replay_button, "secondary")
+
         self._diagnosis_loop_button = QPushButton("Loop Cue")
         self._diagnosis_loop_button.clicked.connect(self._on_diagnosis_loop_clicked)
-        theme.apply_role(self._diagnosis_loop_button, "secondary")
+        apply_role(self._diagnosis_loop_button, "secondary")
+
+        t_row.addWidget(self._diagnosis_play_button)
+        t_row.addWidget(self._diagnosis_replay_button)
+        t_row.addWidget(self._diagnosis_loop_button)
+        transport_layout.addLayout(t_row)
+
+        t_util_row = QHBoxLayout()
         self._diagnosis_loop_settings_button = QPushButton("Loop Settings...")
         self._diagnosis_loop_settings_button.clicked.connect(self._on_open_loop_settings)
-        theme.apply_role(self._diagnosis_loop_settings_button, "secondary")
+        apply_role(self._diagnosis_loop_settings_button, "quiet")
+
         self._diagnosis_time_label = QLabel("00:00 / 00:00")
-        for button in (
-            self._diagnosis_play_button,
-            self._diagnosis_replay_button,
-            self._diagnosis_loop_button,
-            self._diagnosis_loop_settings_button,
-        ):
-            transport_row.addWidget(button)
-        transport_row.addWidget(self._diagnosis_time_label)
-        left_column.addLayout(transport_row)
+        apply_role(self._diagnosis_time_label, "monospace")
+
+        t_util_row.addWidget(self._diagnosis_loop_settings_button)
+        t_util_row.addStretch(1)
+        t_util_row.addWidget(self._diagnosis_time_label)
+        transport_layout.addLayout(t_util_row)
+
+        left_column.addWidget(transport_card)
 
         right_frame, right_column = theme.make_card()
-        right_column.addWidget(QLabel("Transcript (select text to diagnose):"))
+        apply_surface(right_frame, "paper")
+
+        diag_hdr = QLabel("TRANSCRIPT & ERROR DIAGNOSIS (select text to diagnose):")
+        apply_role(diag_hdr, "section_header")
+        right_column.addWidget(diag_hdr)
+
         self._diagnosis_transcript_view = QTextEdit()
         self._diagnosis_transcript_view.setReadOnly(True)
-        self._diagnosis_transcript_view.setMaximumHeight(80)
+        self._diagnosis_transcript_view.setMinimumHeight(75)
+        self._diagnosis_transcript_view.setMaximumHeight(110)
         right_column.addWidget(self._diagnosis_transcript_view)
 
-        label_row = QHBoxLayout()
+        # M13 Axis 7: a rigid fixed-column grid clips/hard-packs whichever
+        # label lands in a too-narrow column once the Axis-6 display font
+        # widened these checkbox labels -- a wrapping FlowLayout (the same
+        # shared primitive Quick Practice's recommendation-reason tags use)
+        # reflows however many labels actually fit the real available width
+        # onto each line instead of a column count baked in ahead of time.
+        label_grid_widget = QWidget()
+        label_grid = FlowLayout(label_grid_widget, h_spacing=SPACE_SECTION, v_spacing=SPACE_NORMAL)
         self._diagnosis_label_checkboxes: dict[str, QCheckBox] = {}
         for label in AnnotationLabel:
             checkbox = QCheckBox(label.value.replace("_", " "))
+            apply_role(checkbox, "ui_label")
             checkbox.stateChanged.connect(self._on_diagnosis_label_checkbox_changed)
             self._diagnosis_label_checkboxes[label.value] = checkbox
-            label_row.addWidget(checkbox)
-        right_column.addLayout(label_row)
+            label_grid.addWidget(checkbox)
+        right_column.addWidget(label_grid_widget)
 
         heard_as_row = QHBoxLayout()
-        heard_as_row.addWidget(QLabel("Heard as:"))
+        heard_lbl = QLabel("Heard as:")
+        apply_role(heard_lbl, "ui_label")
+        heard_as_row.addWidget(heard_lbl)
         self._diagnosis_heard_as_edit = QLineEdit()
         self._diagnosis_heard_as_edit.setEnabled(False)
         heard_as_row.addWidget(self._diagnosis_heard_as_edit)
         right_column.addLayout(heard_as_row)
 
         note_row = QHBoxLayout()
-        note_row.addWidget(QLabel("Note:"))
+        note_lbl = QLabel("Note:")
+        apply_role(note_lbl, "ui_label")
+        note_row.addWidget(note_lbl)
         self._diagnosis_note_edit = QLineEdit()
         note_row.addWidget(self._diagnosis_note_edit)
         right_column.addLayout(note_row)
@@ -817,35 +1045,72 @@ class GuidedSessionWindow(QMainWindow):
         diag_buttons_row = QHBoxLayout()
         self._save_diagnosis_button = QPushButton("Save Diagnosis")
         self._save_diagnosis_button.clicked.connect(self._on_save_diagnosis_clicked)
-        theme.apply_role(self._save_diagnosis_button, "secondary")
+        apply_role(self._save_diagnosis_button, "secondary")
+        theme.set_button_icon(self._save_diagnosis_button, "save", color_token="secondary")
+
         self._delete_diagnosis_button = QPushButton("Delete")
         self._delete_diagnosis_button.clicked.connect(self._on_delete_diagnosis_clicked)
         self._delete_diagnosis_button.setEnabled(False)
-        theme.apply_role(self._delete_diagnosis_button, "danger")
+        apply_role(self._delete_diagnosis_button, "danger")
+        theme.set_button_icon(self._delete_diagnosis_button, "delete", color_token="danger")
+
         self._no_difficulty_button = QPushButton("No Notable Difficulty")
         self._no_difficulty_button.clicked.connect(self._on_no_difficulty_clicked)
-        theme.apply_role(self._no_difficulty_button, "secondary")
+        apply_role(self._no_difficulty_button, "secondary")
+        theme.set_button_icon(self._no_difficulty_button, "check", color_token="secondary")
+
         diag_buttons_row.addWidget(self._save_diagnosis_button)
         diag_buttons_row.addWidget(self._delete_diagnosis_button)
         diag_buttons_row.addWidget(self._no_difficulty_button)
         right_column.addLayout(diag_buttons_row)
 
-        right_column.addWidget(QLabel("Session diagnosis on this cue:"))
+        diag_evidence_lbl = QLabel("Session diagnosis on this cue:")
+        apply_role(diag_evidence_lbl, "ui_label")
+        right_column.addWidget(diag_evidence_lbl)
         self._diagnosis_list = QListWidget()
-        self._diagnosis_list.setMaximumHeight(100)
+        apply_role(self._diagnosis_list, "ruled_list")
+        # M13 Final Human-Gate Corrective (HG-03): 85 was sized for the
+        # pre-Axis-4 plain-text-row era; a single `DiagnosisNoteRow` chip
+        # alone can need more than that once its text wraps, silently
+        # clipping the row's own content before any scrolling happens.
+        # `theme.ruled_list_ensure_visible_rows()` (called after each
+        # repopulation below) raises the real floor to match current
+        # content; this cap just keeps the panel from growing unbounded.
+        self._diagnosis_list.setMaximumHeight(160)
         self._diagnosis_list.currentItemChanged.connect(self._on_diagnosis_selected)
         right_column.addWidget(self._diagnosis_list)
 
-        right_column.addWidget(QLabel("Existing material annotations (reference):"))
+        ref_lbl = QLabel("Existing material annotations (reference):")
+        apply_role(ref_lbl, "ui_label")
+        right_column.addWidget(ref_lbl)
         self._diagnosis_reference_list = QListWidget()
-        self._diagnosis_reference_list.setMaximumHeight(80)
+        apply_role(self._diagnosis_reference_list, "ruled_list")
+        self._diagnosis_reference_list.setMaximumHeight(65)
         right_column.addWidget(self._diagnosis_reference_list)
+
+        # M13 Final Human-Gate Corrective (item 3): the diagnosis-label
+        # FlowLayout now correctly reports its real, content-driven
+        # height-for-width (fixed above), but the right card's total
+        # content -- transcript, 5 wrapping diagnosis-label choices,
+        # heard-as/note/buttons, and two evidence lists -- genuinely needs
+        # more height than a small/laptop-class screen's available work
+        # area leaves for this window, regardless of layout efficiency.
+        # A QScrollArea (the same pattern Stage 1/5 already use) keeps
+        # every control fully reachable and un-clipped at any practical
+        # window size instead of silently compressing children below
+        # their real minimum size, which is what was clipping the second
+        # row of diagnosis-label choices.
+        right_scroll = QScrollArea()
+        right_scroll.setWidgetResizable(True)
+        right_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        apply_surface(right_scroll, "paper")
+        right_scroll.setWidget(right_frame)
 
         splitter = QSplitter(Qt.Orientation.Horizontal)
         splitter.setChildrenCollapsible(False)
         splitter.addWidget(left_frame)
-        splitter.addWidget(right_frame)
-        splitter.setSizes([400, 500])
+        splitter.addWidget(right_scroll)
+        splitter.setSizes([380, 560])
         return splitter
 
     def _populate_stage3(self, state: PracticeSessionState) -> None:
@@ -898,11 +1163,17 @@ class GuidedSessionWindow(QMainWindow):
         self._diagnosis_list.clear()
         for item_evidence in evidence:
             heard_as_suffix = f" (heard as: {item_evidence.heard_as})" if item_evidence.heard_as else ""
-            list_item = QListWidgetItem(f"[{item_evidence.label_key}] {item_evidence.selected_text}{heard_as_suffix}")
-            list_item.setIcon(_color_badge_icon(colors.get(item_evidence.label_key, "#CCCCCC")))
+            list_item = QListWidgetItem()
             list_item.setData(Qt.ItemDataRole.UserRole, item_evidence.id)
             self._diagnosis_list.addItem(list_item)
+            row = theme.DiagnosisNoteRow(
+                f"[{item_evidence.label_key}] {item_evidence.selected_text}{heard_as_suffix}",
+                colors.get(item_evidence.label_key, UNKNOWN_LABEL_COLOR),
+            )
+            list_item.setSizeHint(theme.ruled_list_row_size_hint(row))
+            self._diagnosis_list.setItemWidget(list_item, row)
         self._diagnosis_list.blockSignals(False)
+        theme.ruled_list_ensure_visible_rows(self._diagnosis_list, visible_rows=1)
 
         self._diagnosis_reference_list.clear()
         if cue.id is not None:
@@ -1061,74 +1332,113 @@ class GuidedSessionWindow(QMainWindow):
     # ---- Stage 4: Sentence-Level Shadowing ----
 
     def _build_stage4_panel(self) -> QWidget:
-        panel, layout = theme.make_card()
-        layout.addWidget(
-            QLabel("Shadow each cue: listen, then repeat aloud. Mark it practiced when you're satisfied, or skip it.")
-        )
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        apply_surface(scroll, "paper")
+
+        panel = QWidget()
+        apply_surface(panel, "paper")
+        layout = QVBoxLayout(panel)
+        layout.setContentsMargins(SPACE_COMPACT, SPACE_COMPACT, SPACE_COMPACT, SPACE_COMPACT)
+        layout.setSpacing(SPACE_NORMAL)
+
+        # 1. Source Cue Card
+        cue_card, cue_layout = theme.make_card()
+        apply_surface(cue_card, "paper")
+
+        cue_header_row = QHBoxLayout()
+        prompt_lbl = QLabel("Shadow each cue: listen, then repeat aloud.")
+        apply_role(prompt_lbl, "subtitle")
+        cue_header_row.addWidget(prompt_lbl)
+        cue_header_row.addStretch(1)
 
         self._shadowing_progress_label = QLabel("")
-        theme.apply_role(self._shadowing_progress_label, "caption")
-        layout.addWidget(self._shadowing_progress_label)
+        apply_role(self._shadowing_progress_label, "caption")
+        cue_header_row.addWidget(self._shadowing_progress_label)
+        cue_layout.addLayout(cue_header_row)
 
         self._shadowing_cue_label = QLabel("")
         self._shadowing_cue_label.setWordWrap(True)
-        layout.addWidget(self._shadowing_cue_label)
+        apply_role(self._shadowing_cue_label, "dominant_cue")
+        cue_layout.addWidget(self._shadowing_cue_label)
 
         transport_row = QHBoxLayout()
         self._shadowing_previous_button = QPushButton("Previous Cue")
         self._shadowing_previous_button.clicked.connect(self._on_shadowing_previous_clicked)
-        theme.apply_role(self._shadowing_previous_button, "secondary")
-        self._shadowing_next_button = QPushButton("Next Cue")
-        self._shadowing_next_button.clicked.connect(self._on_shadowing_next_clicked)
-        theme.apply_role(self._shadowing_next_button, "secondary")
+        apply_role(self._shadowing_previous_button, "secondary")
+        theme.set_button_icon(self._shadowing_previous_button, "back", color_token="secondary")
+
         self._shadowing_play_button = QPushButton("Play")
         self._shadowing_play_button.clicked.connect(self._on_shadowing_play_clicked)
-        theme.apply_role(self._shadowing_play_button, "secondary")
+        apply_role(self._shadowing_play_button, "secondary")
+
         self._shadowing_replay_button = QPushButton("Replay Cue")
         self._shadowing_replay_button.clicked.connect(self._on_shadowing_replay_clicked)
-        theme.apply_role(self._shadowing_replay_button, "secondary")
+        apply_role(self._shadowing_replay_button, "secondary")
+
         self._shadowing_loop_button = QPushButton("Loop Cue")
         self._shadowing_loop_button.clicked.connect(self._on_shadowing_loop_clicked)
-        theme.apply_role(self._shadowing_loop_button, "secondary")
+        apply_role(self._shadowing_loop_button, "secondary")
+
+        self._shadowing_next_button = QPushButton("Next Cue")
+        self._shadowing_next_button.clicked.connect(self._on_shadowing_next_clicked)
+        apply_role(self._shadowing_next_button, "secondary")
+        theme.set_button_icon(self._shadowing_next_button, "forward", color_token="secondary")
+
         self._shadowing_loop_settings_button = QPushButton("Loop Settings...")
         self._shadowing_loop_settings_button.clicked.connect(self._on_open_loop_settings)
-        theme.apply_role(self._shadowing_loop_settings_button, "secondary")
+        apply_role(self._shadowing_loop_settings_button, "quiet")
+
         self._shadowing_time_label = QLabel("00:00 / 00:00")
-        for button in (
-            self._shadowing_previous_button,
-            self._shadowing_next_button,
-            self._shadowing_play_button,
-            self._shadowing_replay_button,
-            self._shadowing_loop_button,
-            self._shadowing_loop_settings_button,
-        ):
-            transport_row.addWidget(button)
+        apply_role(self._shadowing_time_label, "monospace")
+
+        transport_row.addWidget(self._shadowing_previous_button)
+        transport_row.addWidget(self._shadowing_play_button)
+        transport_row.addWidget(self._shadowing_replay_button)
+        transport_row.addWidget(self._shadowing_loop_button)
+        transport_row.addWidget(self._shadowing_next_button)
+        transport_row.addWidget(self._shadowing_loop_settings_button)
+        transport_row.addStretch(1)
         transport_row.addWidget(self._shadowing_time_label)
-        layout.addLayout(transport_row)
+        cue_layout.addLayout(transport_row)
+        layout.addWidget(cue_card)
+
+        # 2. Integrated Recording Studio
+        layout.addWidget(self._recording_panel)
+
+        # 3. Actions & Notes Card
+        action_card, action_layout = theme.make_card()
+        apply_surface(action_card, "paper")
+
+        self._shadowing_note_edit = QLineEdit()
+        self._shadowing_note_edit.setPlaceholderText("Optional reflection note for this cue...")
+        action_layout.addWidget(self._shadowing_note_edit)
 
         action_row = QHBoxLayout()
         self._mark_practiced_button = QPushButton("Mark Practiced")
         self._mark_practiced_button.clicked.connect(self._on_mark_practiced_clicked)
-        theme.apply_role(self._mark_practiced_button, "secondary")
+        apply_role(self._mark_practiced_button, "secondary")
+        theme.set_button_icon(self._mark_practiced_button, "check", color_token="secondary")
+
         self._skip_cue_button = QPushButton("Skip Cue")
         self._skip_cue_button.clicked.connect(self._on_skip_shadowing_cue_clicked)
-        theme.apply_role(self._skip_cue_button, "quiet")
+        apply_role(self._skip_cue_button, "quiet")
+
         self._skip_remaining_button = QPushButton("Skip Remaining Cues")
         self._skip_remaining_button.clicked.connect(self._on_skip_remaining_shadowing_clicked)
-        theme.apply_role(self._skip_remaining_button, "quiet")
+        apply_role(self._skip_remaining_button, "quiet")
+
         action_row.addWidget(self._mark_practiced_button)
         action_row.addWidget(self._skip_cue_button)
         action_row.addWidget(self._skip_remaining_button)
-        layout.addLayout(action_row)
+        action_row.addStretch(1)
+        action_layout.addLayout(action_row)
 
-        self._shadowing_note_edit = QLineEdit()
-        self._shadowing_note_edit.setPlaceholderText("Optional note for this cue")
-        layout.addWidget(self._shadowing_note_edit)
-
-        layout.addWidget(self._recording_panel)
-
+        layout.addWidget(action_card)
         layout.addStretch(1)
-        return panel
+
+        scroll.setWidget(panel)
+        return scroll
 
     def _populate_stage4(self, state: PracticeSessionState) -> None:
         read_only = state.session.status != SessionStatus.ACTIVE.value
@@ -1226,11 +1536,6 @@ class GuidedSessionWindow(QMainWindow):
         self._sync_playback_button_texts()
 
     def _on_recording_panel_request_play_source(self) -> None:
-        """The recording panel's "Compare" action asks for one source-cue
-        replay; we drive it with the same one-shot `replay_cue` mechanism as
-        the Replay Cue button, and tell the panel once it naturally finishes
-        (via the `_comparison_replay_pending` flag checked in
-        `_on_position_changed`)."""
         if self._shadowing_index is None:
             return
         self._comparison_replay_pending = True
@@ -1286,21 +1591,30 @@ class GuidedSessionWindow(QMainWindow):
     # ---- Stage 5: Final Recall ----
 
     def _build_stage5_panel(self) -> QWidget:
-        panel, layout = theme.make_card()
-        layout.addWidget(
-            QLabel("Transcript hidden. Summarize the material in two or three sentences in the target language.")
+        panel, layout = theme.make_notebook_surface(
+            "Stage 5: Final Recall Journal",
+            context_label=None,  # The spiral bar shows no "Study Dossier" stamp here
         )
-        self._final_summary_edit = QTextEdit()
-        self._final_summary_edit.setMaximumHeight(100)
-        layout.addWidget(self._final_summary_edit)
+        desc_label = QLabel("Transcript hidden. Summarize the material in two or three sentences in the target language.")
+        desc_label.setWordWrap(True)
+        apply_role(desc_label, "subtitle")
+        layout.addWidget(desc_label)
 
-        layout.addWidget(QLabel("Your Stage 1/2 evidence (for reference — no transcript text shown):"))
+        self._final_summary_edit = RuledTextEdit()
+        self._final_summary_edit.setMinimumHeight(150)
+        self._final_summary_edit.setMaximumHeight(240)
+        layout.addWidget(self._final_summary_edit, 1)
+
+        ref_title = QLabel("Your Stage 1/2 evidence (for reference — no transcript text shown):")
+        apply_role(ref_title, "caption")
+        layout.addWidget(ref_title)
+
         self._stage5_reference_view = QTextEdit()
         self._stage5_reference_view.setReadOnly(True)
         self._stage5_reference_view.setMaximumHeight(100)
         layout.addWidget(self._stage5_reference_view)
-        layout.addStretch(1)
         return panel
+
 
     def _populate_stage5(self, state: PracticeSessionState) -> None:
         responses = state.stage_responses.get(StageKey.FINAL_SUMMARY.value, {})

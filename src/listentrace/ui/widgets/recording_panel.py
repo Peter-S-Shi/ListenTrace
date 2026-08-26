@@ -99,13 +99,16 @@ class RecordingPanel(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
 
         device_row = QHBoxLayout()
-        device_row.addWidget(QLabel("Microphone:"))
+        mic_lbl = QLabel("Microphone:")
+        theme.apply_role(mic_lbl, "ui_label")
+        device_row.addWidget(mic_lbl)
         self._device_combo = QComboBox()
         self._device_combo.currentIndexChanged.connect(self._on_device_selected)
         device_row.addWidget(self._device_combo, 1)
         self._refresh_devices_button = QPushButton("Refresh")
         self._refresh_devices_button.clicked.connect(self.refresh_devices)
         theme.apply_role(self._refresh_devices_button, "quiet")
+        theme.set_button_icon(self._refresh_devices_button, "refresh", color_token="secondary")
         device_row.addWidget(self._refresh_devices_button)
         layout.addLayout(device_row)
 
@@ -117,10 +120,17 @@ class RecordingPanel(QWidget):
         record_row = QHBoxLayout()
         self._start_recording_button = QPushButton("Start Recording")
         self._start_recording_button.clicked.connect(self._on_start_recording_clicked)
-        theme.apply_role(self._start_recording_button, "secondary")
+        # M13 Due-Frame Polish, Axis 1: the due-frame boards show Start
+        # Recording as the one solid-filled action on this surface -- the
+        # genuine "launch a real-world capture" commit, not an ordinary
+        # in-flow action.
+        self._start_recording_button.setProperty("hero", "true")
+        theme.apply_role(self._start_recording_button, "primary")
+        theme.set_button_icon(self._start_recording_button, "record", color_token="ink_on_accent")
         self._stop_recording_button = QPushButton("Stop Recording")
         self._stop_recording_button.clicked.connect(self._on_stop_recording_clicked)
         theme.apply_role(self._stop_recording_button, "secondary")
+        theme.set_button_icon(self._stop_recording_button, "stop", color_token="secondary")
         record_row.addWidget(self._start_recording_button)
         record_row.addWidget(self._stop_recording_button)
         layout.addLayout(record_row)
@@ -129,16 +139,37 @@ class RecordingPanel(QWidget):
         # whether a capture is currently in progress -- distinct from the
         # per-take "ready"/"failed" labels in the takes list below.
         self._recording_state_label = QLabel("")
-        theme.apply_role(self._recording_state_label, "caption")
+        theme.apply_role(self._recording_state_label, "ui_label")
         layout.addWidget(self._recording_state_label)
 
-        layout.addWidget(QLabel("Takes for this cue:"))
+        takes_lbl = QLabel("Takes for this cue:")
+        theme.apply_role(takes_lbl, "ui_label")
+        layout.addWidget(takes_lbl)
         self._takes_list = QListWidget()
         theme.configure_long_text_list(self._takes_list)
         self._takes_list.currentItemChanged.connect(lambda *_: self._update_take_buttons())
         layout.addWidget(self._takes_list)
 
-        take_row = QHBoxLayout()
+        # M13 corrective: an empty take list should not consume a large blank
+        # region of the stage — show a calm inline hint and cap the list's
+        # height until there is something to scroll through.
+        self._takes_empty_label = QLabel("Record your first take to begin.")
+        theme.apply_role(self._takes_empty_label, "ui_label")
+        self._takes_empty_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(self._takes_empty_label)
+
+        # M13 Axis 8: a wrapping FlowLayout, not a rigid single QHBoxLayout
+        # row -- Axis 8's Quick Practice structural migration hosts this
+        # panel in a narrower left-bottom processing column than the
+        # standalone full-width Shadowing Practice window it was originally
+        # sized for, and 4 buttons (one with quite long copy) no longer fit
+        # one line there. Reflowing (same fix already proven for the
+        # diagnosis-label grids in Axis 7) benefits every host --
+        # Shadowing/Guided Session Stage 4 still render one full-width line
+        # at their normal widths, Quick Practice's narrower column wraps
+        # instead of clipping/needing a horizontal scrollbar.
+        take_row_widget = QWidget()
+        take_row = theme.FlowLayout(take_row_widget, h_spacing=theme.SPACE_NORMAL, v_spacing=theme.SPACE_COMPACT)
         self._play_take_button = QPushButton("Play Take")
         self._play_take_button.clicked.connect(self._on_play_take_clicked)
         theme.apply_role(self._play_take_button, "secondary")
@@ -148,9 +179,11 @@ class RecordingPanel(QWidget):
         self._delete_take_button = QPushButton("Delete Take")
         self._delete_take_button.clicked.connect(self._on_delete_take_clicked)
         theme.apply_role(self._delete_take_button, "danger")
+        theme.set_button_icon(self._delete_take_button, "delete", color_token="danger")
         self._delete_cue_takes_button = QPushButton("Delete All Takes for This Cue")
         self._delete_cue_takes_button.clicked.connect(self._on_delete_all_takes_for_cue_clicked)
         theme.apply_role(self._delete_cue_takes_button, "danger")
+        theme.set_button_icon(self._delete_cue_takes_button, "delete", color_token="danger")
         for button in (
             self._play_take_button,
             self._compare_button,
@@ -158,7 +191,7 @@ class RecordingPanel(QWidget):
             self._delete_cue_takes_button,
         ):
             take_row.addWidget(button)
-        layout.addLayout(take_row)
+        layout.addWidget(take_row_widget)
 
         self.refresh_devices()
         self._update_recording_buttons()
@@ -392,6 +425,10 @@ class RecordingPanel(QWidget):
             item = QListWidgetItem(label)
             item.setData(Qt.ItemDataRole.UserRole, take.id)
             self._takes_list.addItem(item)
+        has_takes = bool(self._takes)
+        self._takes_empty_label.setVisible(not has_takes)
+        self._takes_list.setVisible(has_takes)
+        self._takes_list.setMaximumHeight(16777215 if has_takes else 0)
         self._update_take_buttons()
 
     def _selected_take(self) -> Recording | None:

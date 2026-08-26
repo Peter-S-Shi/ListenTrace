@@ -4,11 +4,13 @@ import sqlite3
 from pathlib import Path
 
 from PySide6.QtWidgets import (
+    QFrame,
     QHBoxLayout,
     QLabel,
     QMainWindow,
     QMessageBox,
     QPushButton,
+    QScrollArea,
     QVBoxLayout,
     QWidget,
 )
@@ -20,6 +22,8 @@ from listentrace.application.services import recording_service
 from listentrace.application.services.player_session import PlayerSession
 from listentrace.infrastructure.media.playback import PlaybackController
 from listentrace.ui import theme
+from listentrace.ui.widgets.notebook_paper import GrainedDeskWidget
+from listentrace.ui.theme import SPACE_COMPACT, SPACE_NORMAL, SPACE_PAGE, SPACE_SECTION, apply_role, apply_surface
 from listentrace.ui.widgets.loop_grace_change_bus import loop_grace_change_bus
 from listentrace.ui.widgets.recording_panel import RecordingPanel, recording_change_bus
 from listentrace.ui.windows.material_loop_settings_dialog import MaterialLoopSettingsDialog
@@ -27,12 +31,13 @@ from listentrace.ui.windows.player_window import _format_time
 
 
 class ShadowingPracticeWindow(QMainWindow):
-    """Milestone 7 standalone entry point: cue-by-cue shadowing and recording on
-    one material, with no `PracticeSession` involved (recordings created here
-    have `practice_session_id = None`). Reuses `PlayerSession`/
-    `PlaybackController` for source cue navigation/playback exactly like
-    `GuidedSessionWindow` Stage 4, and the same `RecordingPanel` — the recording/
-    playback/comparison/persistence/deletion logic is not reimplemented here.
+    """M13 Reconstructed Standalone Shadowing Studio.
+
+    Standalone entry point: cue-by-cue shadowing and recording studio:
+    - Top Context & Progress Header
+    - Anchored Source Cue Card & Cue Transport Bar
+    - Dedicated Recording Studio Panel with multi-take history & 500ms sequential comparison
+    - Material-wide Recording Management Action Footer
     """
 
     def __init__(
@@ -49,7 +54,8 @@ class ShadowingPracticeWindow(QMainWindow):
         self._material = load_result.material
         self._cues = load_result.cues
         self.setWindowTitle(f"ListenTrace — Shadowing Practice — {self._material.title}")
-        self.resize(820, 680)
+        self.resize(880, 720)
+        self.setMinimumSize(760, 560)
 
         self._playback = PlaybackController(self)
         grace_ms = loop_grace_service.effective_loop_end_grace_ms(connection, self._material.id)
@@ -66,77 +72,121 @@ class ShadowingPracticeWindow(QMainWindow):
                     break
         self._comparison_replay_pending = False
 
-        central = QWidget(self)
-        layout = QVBoxLayout(central)
+        self._recording_panel = RecordingPanel(connection, recordings_dir, self)
+        self._recording_panel.request_play_source.connect(self._on_recording_panel_request_play_source)
 
-        header_row = QHBoxLayout()
-        title_label = QLabel(self._material.title)
-        theme.apply_role(title_label, "title")
-        header_row.addWidget(title_label)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        apply_surface(scroll, "paper")
+
+        central = GrainedDeskWidget()
+        apply_surface(central, "paper")
+        layout = QVBoxLayout(central)
+        layout.setContentsMargins(SPACE_PAGE, SPACE_PAGE, SPACE_PAGE, SPACE_PAGE)
+        layout.setSpacing(SPACE_SECTION)
+
+        # -------------------------------------------------------------------
+        # 1. Header & Navigation Context
+        # -------------------------------------------------------------------
+        header = theme.make_surface_header(self._material.title)
+        header_row = header.top_bar
         self._progress_label = QLabel("")
-        theme.apply_role(self._progress_label, "caption")
-        header_row.addWidget(self._progress_label, 1)
+        apply_role(self._progress_label, "caption")
+        header.title_row.addWidget(self._progress_label, 1)
+
+        close_top_btn = QPushButton("Exit Studio")
+        apply_role(close_top_btn, "quiet")
+        theme.set_button_icon(close_top_btn, "close", color_token="secondary")
+        close_top_btn.clicked.connect(self.close)
+        header_row.addWidget(close_top_btn)
         layout.addLayout(header_row)
 
         self._status_label = QLabel("")
-        theme.apply_role(self._status_label, "error")
+        apply_role(self._status_label, "error")
         self._status_label.setWordWrap(True)
         layout.addWidget(self._status_label)
 
-        practice_card, practice_column = theme.make_card()
+        # -------------------------------------------------------------------
+        # 2. Anchored Source Cue Card & Cue Transport Bar
+        # -------------------------------------------------------------------
+        cue_card, cue_layout = theme.make_card()
+        apply_surface(cue_card, "paper")
+
+        cue_hdr = QLabel("SOURCE CUE CONTEXT & AUDIO:")
+        apply_role(cue_hdr, "ui_label")
+        cue_layout.addWidget(cue_hdr)
+
         self._cue_label = QLabel("")
         self._cue_label.setWordWrap(True)
-        practice_column.addWidget(self._cue_label)
+        apply_role(self._cue_label, "dominant_cue")
+        cue_layout.addWidget(self._cue_label)
 
         transport_row = QHBoxLayout()
         self._previous_button = QPushButton("Previous Cue")
         self._previous_button.clicked.connect(self._on_previous_clicked)
-        theme.apply_role(self._previous_button, "secondary")
-        self._next_button = QPushButton("Next Cue")
-        self._next_button.clicked.connect(self._on_next_clicked)
-        theme.apply_role(self._next_button, "secondary")
+        apply_role(self._previous_button, "secondary")
+        theme.set_button_icon(self._previous_button, "back", color_token="secondary")
+
         self._play_button = QPushButton("Play")
         self._play_button.clicked.connect(self._on_play_clicked)
-        theme.apply_role(self._play_button, "secondary")
+        apply_role(self._play_button, "secondary")
+
         self._replay_button = QPushButton("Replay Cue")
         self._replay_button.clicked.connect(self._on_replay_clicked)
-        theme.apply_role(self._replay_button, "secondary")
+        apply_role(self._replay_button, "secondary")
+
         self._loop_button = QPushButton("Loop Cue")
         self._loop_button.clicked.connect(self._on_loop_clicked)
-        theme.apply_role(self._loop_button, "secondary")
+        apply_role(self._loop_button, "secondary")
+
+        self._next_button = QPushButton("Next Cue")
+        self._next_button.clicked.connect(self._on_next_clicked)
+        apply_role(self._next_button, "secondary")
+        theme.set_button_icon(self._next_button, "forward", color_token="secondary")
+
         self._loop_settings_button = QPushButton("Loop Settings...")
         self._loop_settings_button.clicked.connect(self._on_open_loop_settings)
-        theme.apply_role(self._loop_settings_button, "secondary")
+        apply_role(self._loop_settings_button, "quiet")
+
         self._time_label = QLabel("00:00 / 00:00")
-        for widget in (
-            self._previous_button,
-            self._next_button,
-            self._play_button,
-            self._replay_button,
-            self._loop_button,
-            self._loop_settings_button,
-        ):
-            transport_row.addWidget(widget)
+        apply_role(self._time_label, "monospace")
+
+        transport_row.addWidget(self._previous_button)
+        transport_row.addWidget(self._play_button)
+        transport_row.addWidget(self._replay_button)
+        transport_row.addWidget(self._loop_button)
+        transport_row.addWidget(self._next_button)
+        transport_row.addWidget(self._loop_settings_button)
+        transport_row.addStretch(1)
         transport_row.addWidget(self._time_label)
-        practice_column.addLayout(transport_row)
+        cue_layout.addLayout(transport_row)
+        layout.addWidget(cue_card)
 
-        self._recording_panel = RecordingPanel(connection, recordings_dir, self)
-        self._recording_panel.request_play_source.connect(self._on_recording_panel_request_play_source)
-        practice_column.addWidget(self._recording_panel, 1)
-        layout.addWidget(practice_card, 1)
+        # -------------------------------------------------------------------
+        # 3. Recording Studio Panel
+        # -------------------------------------------------------------------
+        layout.addWidget(self._recording_panel, 1)
 
+        # -------------------------------------------------------------------
+        # 4. Footer Actions
+        # -------------------------------------------------------------------
         bottom_row = QHBoxLayout()
         self._delete_material_recordings_button = QPushButton("Delete All Recordings for This Material")
         self._delete_material_recordings_button.clicked.connect(self._on_delete_material_recordings_clicked)
-        theme.apply_role(self._delete_material_recordings_button, "danger")
+        apply_role(self._delete_material_recordings_button, "danger")
+        theme.set_button_icon(self._delete_material_recordings_button, "delete", color_token="danger")
+
         self._close_button = QPushButton("Close")
         self._close_button.clicked.connect(self.close)
-        theme.apply_role(self._close_button, "quiet")
+        apply_role(self._close_button, "quiet")
+
         bottom_row.addWidget(self._delete_material_recordings_button)
+        bottom_row.addStretch(1)
         bottom_row.addWidget(self._close_button)
         layout.addLayout(bottom_row)
 
-        self.setCentralWidget(central)
+        scroll.setWidget(central)
+        self.setCentralWidget(scroll)
 
         self._playback.position_changed.connect(self._on_position_changed)
         self._playback.playback_error.connect(self._on_playback_error)
@@ -243,9 +293,6 @@ class ShadowingPracticeWindow(QMainWindow):
             widget.setEnabled(enabled)
 
     def _on_play_clicked(self) -> None:
-        # M12 Round 1 Playback Contract: Shadowing is cue-oriented, so Play
-        # must default to cue-scoped playback (this cue only) -- previously
-        # this just resumed/started whole-media continuous playback.
         if self._playback.is_playing:
             self._playback.pause()
             self._sync_play_button_text()
@@ -284,12 +331,6 @@ class ShadowingPracticeWindow(QMainWindow):
         self._sync_play_button_text()
 
     def _apply_player_tick(self, tick: PlayerTick) -> None:
-        # See player_window.py's _apply_player_tick for why restart_at_ms
-        # (a Loop iteration restarting on its own) must not run the ordinary
-        # "playback genuinely stopped" side effect below. Shared by both tick
-        # sources: a position update, and the media's own natural end (see
-        # _on_end_of_media). Comparison-replay bookkeeping deliberately stays
-        # out of this shared method -- see _on_position_changed/_on_end_of_media.
         if tick.restart_at_ms is not None:
             self._playback.restart_span(tick.restart_at_ms)
         elif tick.pause:

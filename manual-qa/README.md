@@ -1,8 +1,9 @@
 # ListenTrace Manual QA
 
 Retroactive full-product manual QA baseline (Milestone 12.1-A). This is a
-living artifact: it audits the product as it exists today (post-Milestone 11,
-pre-Milestone 12), not a reconstruction of each past milestone's own testing.
+living artifact: it established the pre-M12 baseline, was exercised in Human
+QA Round 1 (Phase 12-A), and will be run in full in Milestone 12 Phase 12-B
+against the final Notebook Study Desk UI reconstructed in Milestone 13.
 
 ## Purpose
 
@@ -95,15 +96,16 @@ read it directly.
 - Nothing here is auto-committed or auto-pushed by design.
 
 ## Using this for Hardening and regression
-
-- Entering Milestone 12: run the full questionnaire once as the initial
-  system audit; failed/blocked items and notable subjective feedback (Module
-  14) become the M12 defect inventory / `HARDENING_BACKLOG.md` input per
-  `ROADMAP.md`'s M12.1 policy.
-- After a repair batch: only re-run the affected modules/items, not the
-  whole questionnaire, unless the change is broad.
-- Before a release candidate: run the full questionnaire again as the final
-  regression pass; keep the internal, detailed version for that. A simplified
+ 
+ - Milestone 12 Phase 12-A: Human QA Round 1 used this questionnaire to surface
+   systemic findings, resolved in Batches A-C, History Deletion, and Loop End Grace.
+ - Milestone 12 Phase 12-B: run the full questionnaire as the full manual regression
+   pass against the finalized post-M13 UI; failed/blocked items become the Phase 12-B
+   defect inventory.
+ - After a repair batch: only re-run the affected modules/items, not the
+   whole questionnaire, unless the change is broad.
+ - Before a release candidate: run the full questionnaire again as the final
+   regression pass; keep the internal, detailed version for that. A simplified
   external-tester version may be derived from it later (see the source
   prompt's "future maintenance" section) but is not part of this baseline.
 - When product behavior changes: update only the affected module(s) in the

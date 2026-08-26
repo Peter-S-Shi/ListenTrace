@@ -75,6 +75,155 @@ def test_stage_progress_label_updates_on_navigation(qapp, conn, tmp_path, monkey
     window.close()
 
 
+def test_save_and_continue_does_not_advance_when_stage1_completion_fails(qapp, conn, tmp_path, monkeypatch):
+    """Final Pre-HG2 corrective #4 (P0): `complete_stage()` failing must never
+    be silently swallowed and advanced past -- that discarded the domain
+    validation contract and let a learner "complete" a session none of whose
+    stages were actually resolved."""
+    question_calls = []
+    monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: question_calls.append(1) or QMessageBox.StandardButton.Yes)
+    window, _, session_id = _open_guided_window(conn, tmp_path)
+
+    # Stage 1 left entirely empty -- stage1_can_complete() requires at least
+    # one non-whitespace response.
+    window._on_save_and_continue_clicked()
+
+    assert window._current_stage == "global_comprehension"
+    assert window._stack.currentIndex() == 0
+    state = svc.load_session_state(conn, session_id)
+    assert state.stage_progress["global_comprehension"].status != "completed"
+    assert window._status_label.text() != ""
+    assert question_calls == [], "must not have navigated far enough to trigger the Stage 3 reveal confirmation"
+    window.close()
+
+
+def test_stale_status_banner_clears_on_legal_stage_advance(qapp, conn, tmp_path, monkeypatch):
+    """Player/M13 Notebook Study Desk pass, spec §15: a validation error banner
+    left over from a failed attempt must not still be visible after the
+    learner supplies valid evidence and legally advances."""
+    window, _, _ = _open_guided_window(conn, tmp_path)
+
+    # Stage 1 left empty -- fails, banner is set.
+    window._on_save_and_continue_clicked()
+    assert window._status_label.text() != ""
+
+    # Now supply valid data and legally advance.
+    window._stage1_edits["where"].setPlainText("A cafe")
+    window._on_save_and_continue_clicked()
+
+    assert window._current_stage == "keyword_capture"
+    assert window._status_label.text() == ""
+    window.close()
+
+
+def test_save_and_continue_does_not_advance_when_stage2_completion_fails(qapp, conn, tmp_path, monkeypatch):
+    question_calls = []
+    monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: question_calls.append(1) or QMessageBox.StandardButton.Yes)
+    window, _, session_id = _open_guided_window(conn, tmp_path)
+
+    window._stage1_edits["where"].setPlainText("A cafe")
+    window._on_save_and_continue_clicked()  # -> stage2
+    assert window._current_stage == "keyword_capture"
+
+    # No captures added -- stage2_can_complete() requires at least one.
+    window._on_save_and_continue_clicked()
+
+    assert window._current_stage == "keyword_capture"
+    assert window._stack.currentIndex() == 1
+    state = svc.load_session_state(conn, session_id)
+    assert state.stage_progress["keyword_capture"].status != "completed"
+    assert state.session.transcript_revealed_at is None, "transcript must not be revealed as a side effect of a failed advance"
+    assert question_calls == [], "must not have reached the Stage 3 reveal confirmation"
+    window.close()
+
+
+def test_save_and_continue_does_not_advance_when_stage3_completion_fails(qapp, conn, tmp_path, monkeypatch):
+    monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.StandardButton.Yes)
+    window, _, session_id = _open_guided_window(conn, tmp_path)
+
+    window._stage1_edits["where"].setPlainText("A cafe")
+    window._on_save_and_continue_clicked()  # -> stage2
+    window._capture_type_combo.setCurrentIndex(0)
+    window._capture_text_edit.setText("bonjour")
+    window._on_add_capture_clicked()
+    window._on_save_and_continue_clicked()  # -> stage3 (reveal confirmed)
+    assert window._current_stage == "transcript_diagnosis"
+
+    # No diagnosis evidence recorded and no explicit "No Notable Difficulty"
+    # outcome -- stage3_can_complete() requires one or the other.
+    window._on_save_and_continue_clicked()
+
+    assert window._current_stage == "transcript_diagnosis"
+    assert window._stack.currentIndex() == 2
+    state = svc.load_session_state(conn, session_id)
+    assert state.stage_progress["transcript_diagnosis"].status != "completed"
+    window.close()
+
+
+def test_save_and_continue_does_not_advance_when_stage4_has_unresolved_cues(qapp, conn, tmp_path, monkeypatch):
+    monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.StandardButton.Yes)
+    window, _, session_id = _open_guided_window(conn, tmp_path)
+
+    window._stage1_edits["where"].setPlainText("A cafe")
+    window._on_save_and_continue_clicked()  # -> stage2
+    window._capture_type_combo.setCurrentIndex(0)
+    window._capture_text_edit.setText("bonjour")
+    window._on_add_capture_clicked()
+    window._on_save_and_continue_clicked()  # -> stage3
+    window._on_no_difficulty_clicked()
+    window._on_save_and_continue_clicked()  # -> stage4
+    assert window._current_stage == "shadowing"
+
+    # No cue marked practiced or skipped -- stage4_can_complete() requires
+    # every timed cue resolved (this material has 2 cues).
+    window._on_save_and_continue_clicked()
+
+    assert window._current_stage == "shadowing"
+    assert window._stack.currentIndex() == 3
+    state = svc.load_session_state(conn, session_id)
+    assert state.stage_progress["shadowing"].status != "completed"
+    window.close()
+
+
+def test_save_and_continue_valid_flow_reaches_complete_session(qapp, conn, tmp_path, monkeypatch):
+    """The counterpart to the four failure-path tests above: a fully legal
+    Stage 1 -> 5 walk must still enable Complete Session end to end."""
+    monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.StandardButton.Yes)
+    monkeypatch.setattr(QMessageBox, "information", lambda *a, **k: None)
+    window, _, session_id = _open_guided_window(conn, tmp_path)
+
+    window._stage1_edits["where"].setPlainText("A cafe")
+    window._on_save_and_continue_clicked()  # -> stage2
+    window._capture_type_combo.setCurrentIndex(0)
+    window._capture_text_edit.setText("bonjour")
+    window._on_add_capture_clicked()
+    window._on_save_and_continue_clicked()  # -> stage3
+    window._on_no_difficulty_clicked()
+    window._on_save_and_continue_clicked()  # -> stage4
+    window._on_skip_remaining_shadowing_clicked()
+    window._on_save_and_continue_clicked()  # -> stage5
+    assert window._current_stage == "final_summary"
+
+    window._final_summary_edit.setPlainText("Short summary of what I understood.")
+    window._on_save_and_continue_clicked()
+
+    state = svc.load_session_state(conn, session_id)
+    for stage_key in (
+        "global_comprehension",
+        "keyword_capture",
+        "transcript_diagnosis",
+        "shadowing",
+        "final_summary",
+    ):
+        assert state.stage_progress[stage_key].status in ("completed", "skipped"), stage_key
+    assert window._complete_button.isEnabled() is True
+
+    window._on_complete_session_clicked()
+    state = svc.load_session_state(conn, session_id)
+    assert state.session.status == "completed"
+    window.close()
+
+
 def test_transcript_reveal_requires_confirmation_and_locks_stage1_2(qapp, conn, tmp_path, monkeypatch):
     monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.StandardButton.Yes)
 
@@ -103,7 +252,11 @@ def test_reveal_confirmation_declined_stays_on_stage2(qapp, conn, tmp_path, monk
     monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.StandardButton.No)
 
     window, _, session_id = _open_guided_window(conn, tmp_path)
+    window._stage1_edits["where"].setPlainText("A cafe")
     window._on_save_and_continue_clicked()  # -> stage 2
+    window._capture_type_combo.setCurrentIndex(0)
+    window._capture_text_edit.setText("bonjour")
+    window._on_add_capture_clicked()
     window._on_save_and_continue_clicked()  # attempts -> stage 3, declined
 
     assert window._current_stage == "keyword_capture"
@@ -138,11 +291,29 @@ def test_m4_annotation_semantics_reused_misheard_requires_heard_as(qapp, conn, t
     window._diagnosis_heard_as_edit.setText("Bonjoor")
     window._on_save_diagnosis_clicked()
     assert window._diagnosis_list.count() == 1
-    badge_color = window._diagnosis_list.item(0).icon().pixmap(12, 12).toImage().pixelColor(0, 0)
+    row = window._diagnosis_list.itemWidget(window._diagnosis_list.item(0))
     from listentrace.application.services import label_preference_service
 
     expected = label_preference_service.get_label_preferences(conn)["misheard"]
-    assert badge_color.name() == QColor(expected).name()
+    assert QColor(row.color_hex).name() == QColor(expected).name()
+    window.close()
+
+
+def test_one_diagnosis_evidence_object_produces_exactly_one_diagnosis_list_row(qapp, conn, tmp_path, monkeypatch):
+    """M13 Axis 4 corrective: `_refresh_diagnosis_cue_panels()` previously called
+    `self._diagnosis_list.addItem(list_item)` both before building the
+    `DiagnosisNoteRow` and again after `setItemWidget()`, double-inserting the
+    same evidence object into the list."""
+    monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.StandardButton.Yes)
+    window, _, session_id = _open_guided_window(conn, tmp_path)
+    window._show_stage("transcript_diagnosis")
+    window._diagnosis_cue_list.setCurrentRow(0)
+
+    window._diagnosis_label_checkboxes["keyword"].setChecked(True)
+    window._on_save_diagnosis_clicked()
+
+    assert window._diagnosis_list.count() == 1
+
     window.close()
 
 
@@ -226,7 +397,11 @@ def test_stage5_summary_save_and_continue_enables_complete_button(qapp, conn, tm
 
 def test_complete_button_disabled_reason_is_visible_and_accurate(qapp, conn, tmp_path, monkeypatch):
     """M12 Round 3 Completion/Explainability Contract: a disabled `Complete
-    Session` must show an inspectable reason, not just render grey."""
+    Session` must show an inspectable reason, not just render grey.
+
+    M13 corrective pass (#8): the footer was compressed from a loud
+    full-checklist inline string into a concise unresolved-stage summary —
+    the reason must still be visible and accurate, just quieter."""
     monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.StandardButton.Yes)
     window, _, _ = _open_guided_window(conn, tmp_path)
 
@@ -240,13 +415,11 @@ def test_complete_button_disabled_reason_is_visible_and_accurate(qapp, conn, tmp
     window._on_skip_stage_clicked()  # -> stage5
 
     assert "Final Recall" in window._completion_status_label.text()
-    assert "Global Comprehension" not in window._completion_status_label.text().split("(")[0]
+    assert "Global Comprehension" not in window._completion_status_label.text()
 
     window._final_summary_edit.setPlainText("Short summary.")
     window._on_save_and_continue_clicked()
-    assert window._completion_status_label.text() == "Ready to complete.  (✓ Global Comprehension | " \
-        "✓ Keyword & Fragment Capture | ✓ Transcript Comparison & Error Diagnosis | " \
-        "✓ Sentence-Level Shadowing | ✓ Final Recall)"
+    assert window._completion_status_label.text() == "All stages resolved — ready to complete."
     window.close()
 
 

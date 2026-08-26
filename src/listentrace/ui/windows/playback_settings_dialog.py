@@ -36,6 +36,8 @@ class PlaybackSettingsDialog(QDialog):
         self.setWindowTitle("Playback Settings")
 
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(theme.SPACE_SECTION, theme.SPACE_SECTION, theme.SPACE_SECTION, theme.SPACE_SECTION)
+        layout.setSpacing(theme.SPACE_NORMAL)
 
         title = QLabel("Default Loop End Grace")
         theme.apply_role(title, "title")

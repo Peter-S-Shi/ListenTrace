@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPlainTextEdit,
     QPushButton,
+    QScrollArea,
     QTabWidget,
     QVBoxLayout,
     QWidget,
@@ -81,7 +82,7 @@ _SCOPE_LABELS = [
     ("Selected Materials", SCOPE_SELECTED_MATERIALS),
 ]
 
-_CHECKBOX_GRID_COLUMNS = 4
+_CHECKBOX_GRID_COLUMNS = 1
 
 _STALE_PREVIEW_MESSAGE = (
     'Selections changed since this preview was generated — click "Generate Preview" again '
@@ -107,18 +108,47 @@ class ExportDialog(QDialog):
         initial_material_id: int | None = None,
     ) -> None:
         super().__init__(parent)
+        # Native maximize (and minimize) button -- this is a large, densely
+        # scrollable workspace, not a small fixed dialog; the platform
+        # window chrome should offer the same maximize affordance as any
+        # other resizable window instead of a custom in-app control.
+        self.setWindowFlags(self.windowFlags() | Qt.WindowType.WindowMinMaxButtonsHint)
         self.setWindowTitle("Export Learning Evidence")
-        self.resize(760, 640)
+        # A compact starting size -- the outer scroll area (below) decouples
+        # the dialog's actual minimum geometry from this content's natural
+        # size, so this is a sensible default, not a content-driven minimum.
+        self.resize(680, 560)
+        self.setMinimumSize(480, 360)
         self._connection = connection
         self._bundle: ExportBundle | None = None
         self._markdown_text: str | None = None
         self._json_text: str | None = None
         self._evaluation_text: str | None = None
 
-        layout = QVBoxLayout(self)
+        outer_layout = QVBoxLayout(self)
+        outer_layout.setContentsMargins(0, 0, 0, 0)
+        outer_layout.setSpacing(0)
+
+        # Outer vertical scroll workspace -- on a short/small window every
+        # region from Scope through Close must stay reachable by scrolling
+        # instead of some controls falling below the viewport. Horizontal
+        # scrolling is only a fallback (AsNeeded), never the primary
+        # mechanism -- the compact checkbox/action grids below are what
+        # actually keep normal practical widths free of it.
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        outer_layout.addWidget(scroll, 1)
+
+        content = QWidget()
+        layout = QVBoxLayout(content)
+        layout.setContentsMargins(theme.SPACE_MEDIUM, theme.SPACE_MEDIUM, theme.SPACE_MEDIUM, theme.SPACE_MEDIUM)
+        layout.setSpacing(theme.SPACE_NORMAL)
+        scroll.setWidget(content)
 
         # ---- scope ----
-        scope_card, scope_column = theme.make_card("Scope")
+        scope_card, scope_column = theme.make_card("Scope", decorated=False)
         scope_row = QHBoxLayout()
         scope_row.addWidget(QLabel("Scope:"))
         self._scope_combo = QComboBox()
@@ -143,13 +173,23 @@ class ExportDialog(QDialog):
         layout.addWidget(scope_card, 1)
 
         # ---- date range ----
-        date_row = QHBoxLayout()
-        date_row.addWidget(QLabel("Date Range:"))
+        # Split into a preset row and its own custom-dates row (rather than
+        # one long horizontal row) -- the label, combo, and two date pickers
+        # together were wide enough on their own to dictate the dialog's
+        # minimum width; the custom row is only visible for Custom Range
+        # anyway, so it costs nothing when hidden.
+        date_column = QVBoxLayout()
+        date_preset_row = QHBoxLayout()
+        date_preset_row.addWidget(QLabel("Date Range:"))
         self._preset_combo = QComboBox()
         for label, _ in _PRESET_LABELS:
             self._preset_combo.addItem(label)
         self._preset_combo.currentIndexChanged.connect(self._update_custom_range_visibility)
-        date_row.addWidget(self._preset_combo)
+        date_preset_row.addWidget(self._preset_combo)
+        date_preset_row.addStretch(1)
+        date_column.addLayout(date_preset_row)
+
+        date_custom_row = QHBoxLayout()
         self._custom_start_edit = QDateEdit()
         self._custom_start_edit.setCalendarPopup(True)
         self._custom_end_edit = QDateEdit()
@@ -157,36 +197,52 @@ class ExportDialog(QDialog):
         today = QDate.currentDate()
         self._custom_start_edit.setDate(today.addDays(-30))
         self._custom_end_edit.setDate(today)
-        date_row.addWidget(self._custom_start_edit)
-        date_row.addWidget(self._custom_end_edit)
-        layout.addLayout(date_row)
+        date_custom_row.addWidget(self._custom_start_edit)
+        date_custom_row.addWidget(self._custom_end_edit)
+        date_custom_row.addStretch(1)
+        date_column.addLayout(date_custom_row)
+        layout.addLayout(date_column)
 
         # ---- evidence categories ----
         # Milestone 11: a fixed-column grid instead of a single-row QHBoxLayout
         # -- a dozen checkboxes in one row forced the whole dialog to grow far
-        # wider than any reasonable window, rather than wrapping.
-        categories_card, categories_column = theme.make_card("Evidence categories")
+        # wider than any reasonable window, rather than wrapping. A plain
+        # QCheckBox(text) has no word-wrap support at all (same limitation
+        # Quiz's answer options hit), so the longest labels here ("Quiz
+        # questions and answers (raw text)") still dictated the dialog's
+        # minimum width on their own -- each row now pairs a bare checkbox
+        # with a separately word-wrapped QLabel instead.
+        categories_card, categories_column = theme.make_card("Evidence categories", decorated=False)
         categories_grid = QGridLayout()
         self._category_checkboxes: dict[str, QCheckBox] = {}
         for index, category in enumerate(export_privacy.EVIDENCE_CATEGORIES):
-            checkbox = QCheckBox(_CATEGORY_LABELS[category])
-            checkbox.setChecked(category in export_privacy.DEFAULT_CATEGORIES)
+            checked = category in export_privacy.DEFAULT_CATEGORIES
+            row, checkbox = self._make_wrapping_checkbox_row(_CATEGORY_LABELS[category], checked)
             self._category_checkboxes[category] = checkbox
-            categories_grid.addWidget(checkbox, index // _CHECKBOX_GRID_COLUMNS, index % _CHECKBOX_GRID_COLUMNS)
+            categories_grid.addWidget(row, index // _CHECKBOX_GRID_COLUMNS, index % _CHECKBOX_GRID_COLUMNS)
         categories_column.addLayout(categories_grid)
         layout.addWidget(categories_card)
 
         # ---- privacy review ----
-        privacy_card, privacy_column = theme.make_card(
-            "Privacy review — include these fields (unchecked fields are redacted, not omitted)"
-        )
+        # The card title itself ("Privacy review — include these fields
+        # (unchecked fields are redacted, not omitted)") was one long
+        # unwrapped caption line forcing ~980px of width on its own --
+        # matching the wireframe's own composition, the explanatory
+        # sentence is a separate word-wrapped body line under a short
+        # "Privacy Review" title instead.
+        privacy_card, privacy_column = theme.make_card("Privacy Review", decorated=False)
+        privacy_explanation = QLabel("Include these fields (unchecked fields are redacted, not omitted):")
+        privacy_explanation.setWordWrap(True)
+        theme.apply_role(privacy_explanation, "caption")
+        privacy_column.addWidget(privacy_explanation)
+
         privacy_grid = QGridLayout()
         self._privacy_checkboxes: dict[str, QCheckBox] = {}
         for index, field_key in enumerate(export_privacy.PRIVACY_FIELDS):
-            checkbox = QCheckBox(_PRIVACY_LABELS[field_key])
-            checkbox.setChecked(field_key in export_privacy.DEFAULT_PRIVACY_FIELDS)
+            checked = field_key in export_privacy.DEFAULT_PRIVACY_FIELDS
+            row, checkbox = self._make_wrapping_checkbox_row(_PRIVACY_LABELS[field_key], checked)
             self._privacy_checkboxes[field_key] = checkbox
-            privacy_grid.addWidget(checkbox, index // _CHECKBOX_GRID_COLUMNS, index % _CHECKBOX_GRID_COLUMNS)
+            privacy_grid.addWidget(row, index // _CHECKBOX_GRID_COLUMNS, index % _CHECKBOX_GRID_COLUMNS)
         privacy_column.addLayout(privacy_grid)
 
         always_excluded = QLabel(
@@ -221,7 +277,18 @@ class ExportDialog(QDialog):
         layout.addWidget(self._preview_tabs, 2)
 
         # ---- save / copy ----
-        actions_row = QHBoxLayout()
+        # A single six-wide row forced the whole dialog to stay as wide as
+        # six buttons side by side. A 2+-column grid still sums each
+        # column's own widest button -- and "Save Evaluation Template..."
+        # (~338px) and "Copy Evaluation Template" (~302px) are wide enough
+        # that whichever two columns they land in still forces ~500-650px
+        # total, however they're paired. A single column -- each of the six
+        # actions on its own row, grouped Save-then-Copy per format -- is
+        # the arrangement that actually removes the width pressure: the
+        # minimum width becomes the one widest button alone, not a sum of
+        # two, while still being a compact multi-row layout rather than one
+        # six-wide row.
+        actions_grid = QGridLayout()
         self._save_markdown_button = QPushButton("Save Markdown...")
         self._save_markdown_button.clicked.connect(self._on_save_markdown_clicked)
         self._save_json_button = QPushButton("Save JSON...")
@@ -234,18 +301,28 @@ class ExportDialog(QDialog):
         self._copy_json_button.clicked.connect(self._on_copy_json_clicked)
         self._copy_template_button = QPushButton("Copy Evaluation Template")
         self._copy_template_button.clicked.connect(self._on_copy_template_clicked)
-        for button in (
+        save_buttons = (self._save_markdown_button, self._save_json_button, self._save_template_button)
+        copy_buttons = (self._copy_markdown_button, self._copy_json_button, self._copy_template_button)
+        ordered_buttons = (
             self._save_markdown_button,
-            self._save_json_button,
-            self._save_template_button,
             self._copy_markdown_button,
+            self._save_json_button,
             self._copy_json_button,
+            self._save_template_button,
             self._copy_template_button,
-        ):
+        )
+        for row, button in enumerate(ordered_buttons):
+            actions_grid.addWidget(button, row, 0)
+        actions_grid.setColumnStretch(0, 1)
+        for button in save_buttons:
             button.setEnabled(False)
             theme.apply_role(button, "secondary")
-            actions_row.addWidget(button)
-        layout.addLayout(actions_row)
+            theme.set_button_icon(button, "save", color_token="secondary")
+        for button in copy_buttons:
+            button.setEnabled(False)
+            theme.apply_role(button, "secondary")
+            theme.set_button_icon(button, "copy", color_token="secondary")
+        layout.addLayout(actions_grid)
 
         self._status_label = QLabel("")
         theme.apply_role(self._status_label, "caption")
@@ -277,6 +354,33 @@ class ExportDialog(QDialog):
             checkbox.toggled.connect(self._invalidate_preview)
         for checkbox in self._privacy_checkboxes.values():
             checkbox.toggled.connect(self._invalidate_preview)
+
+    # ---- layout helpers ----
+
+    @staticmethod
+    def _make_wrapping_checkbox_row(text: str, checked: bool) -> tuple[QWidget, QCheckBox]:
+        """A bare `QCheckBox` paired with a separate word-wrapped `QLabel`.
+
+        `QCheckBox` has no word-wrap support, so a long product label (e.g.
+        "Quiz questions and answers (raw text)") forces the whole row's
+        width instead of wrapping onto a second line. Clicking the label
+        toggles the checkbox too, so the click target is unchanged for the
+        learner even though the text moved out of the checkbox itself.
+        """
+        row = QWidget()
+        row_layout = QHBoxLayout(row)
+        row_layout.setContentsMargins(0, 0, 0, 0)
+        row_layout.setSpacing(theme.SPACE_COMPACT)
+        checkbox = QCheckBox()
+        checkbox.setChecked(checked)
+        theme.apply_role(checkbox, "ui_label")
+        label = QLabel(text)
+        label.setWordWrap(True)
+        theme.apply_role(label, "ui_label")
+        label.mousePressEvent = lambda _event, box=checkbox: box.toggle()
+        row_layout.addWidget(checkbox, 0)
+        row_layout.addWidget(label, 1)
+        return row, checkbox
 
     # ---- scope / date range wiring ----
 

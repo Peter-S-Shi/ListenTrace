@@ -30,15 +30,17 @@ class ImportDialog(QDialog):
         self.imported_material_id: int | None = None
 
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(theme.SPACE_SECTION, theme.SPACE_SECTION, theme.SPACE_SECTION, theme.SPACE_SECTION)
+        layout.setSpacing(theme.SPACE_NORMAL)
 
-        form_card, form_column = theme.make_card()
+        form_card, form_column = theme.make_card(decorated=False)
 
         self._media_edit = QLineEdit()
-        form_column.addLayout(self._path_row("Media file:", self._media_edit, self._browse_media))
+        form_column.addLayout(self._path_row("Media file:", self._media_edit, self._browse_media, "video"))
 
         self._subtitle_edit = QLineEdit()
         form_column.addLayout(
-            self._path_row("Subtitle file (SRT/WebVTT):", self._subtitle_edit, self._browse_subtitle)
+            self._path_row("Subtitle file (SRT/WebVTT):", self._subtitle_edit, self._browse_subtitle, "subtitle")
         )
 
         self._title_edit = QLineEdit()
@@ -62,6 +64,7 @@ class ImportDialog(QDialog):
         button_row = QHBoxLayout()
         import_button = QPushButton("Import")
         import_button.clicked.connect(self._on_import_clicked)
+        import_button.setProperty("hero", "true")
         theme.apply_role(import_button, "primary")
         cancel_button = QPushButton("Cancel")
         cancel_button.clicked.connect(self.reject)
@@ -70,13 +73,16 @@ class ImportDialog(QDialog):
         button_row.addWidget(cancel_button)
         layout.addLayout(button_row)
 
-    def _path_row(self, label_text: str, line_edit: QLineEdit, on_browse) -> QHBoxLayout:
+    def _path_row(self, label_text: str, line_edit: QLineEdit, on_browse, icon_name: str) -> QHBoxLayout:
         row = QHBoxLayout()
+        row.setSpacing(theme.SPACE_COMPACT)
+        row.addWidget(theme.make_icon_label(icon_name))
         row.addWidget(QLabel(label_text))
         row.addWidget(line_edit)
         browse_button = QPushButton("Browse...")
         browse_button.clicked.connect(on_browse)
         theme.apply_role(browse_button, "secondary")
+        theme.set_button_icon(browse_button, "browse", color_token="secondary")
         row.addWidget(browse_button)
         return row
 

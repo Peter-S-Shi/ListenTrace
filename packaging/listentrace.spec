@@ -31,7 +31,13 @@ a = Analysis(
     # file icon -- it does not make the .ico available to the *running*
     # app. Copy it into the onedir root so ui.theme.get_app_icon() can find
     # it next to ListenTrace.exe at runtime (frozen-build search path).
-    datas=[(str(PACKAGING_DIR / "assets" / "listentrace.ico"), ".")],
+    datas=[
+        (str(PACKAGING_DIR / "assets" / "listentrace.ico"), "."),
+        # M13 Stage B functional icon system: ui.theme.get_icon() searches
+        # next to the exe at runtime (see _icons_search_dirs()), mirroring
+        # the .ico lookup above.
+        (str(SRC_DIR / "listentrace" / "ui" / "icons"), "icons"),
+    ],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
