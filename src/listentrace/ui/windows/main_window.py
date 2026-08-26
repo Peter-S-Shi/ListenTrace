@@ -79,6 +79,7 @@ class _DossierRow(QFrame):
 
     def __init__(self, label: str, parent: QWidget | None = None) -> None:
         super().__init__(parent)
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         apply_role(self, "dossier_meta_row")
         row_layout = QHBoxLayout(self)
         row_layout.setContentsMargins(0, 4, 0, 4)

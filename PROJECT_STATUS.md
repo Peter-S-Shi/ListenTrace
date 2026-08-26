@@ -21,7 +21,7 @@ The remote repository exists, is private, and uses `main` as its default branch.
 | Desktop shell | All 16 surfaces reconstructed and aligned to M13 Design System (Professional Blue `#2563EB`, Dark Focus `#0F172A`, Paper Study `#FDFBF7`/`#1B1E25`, Ruled notebook lists, clear Primary/Secondary/Quiet/Danger action grammar) |
 | Presentation / theme system | Milestone 13 Design System: `src/listentrace/ui/theme.py` — unified tokens, dynamic QSS generation, surface/role helpers (`apply_surface`, `apply_role`), paper & notebook styling (`make_notebook_surface`, `make_card`), and WCAG contrast compliance |
 | Database schema | Schema version 12 (stable, zero domain regression during M13/M14) |
-| Automated tests | **899 passed** — 100% green regression and integration test suite |
+| Automated tests | **900 passed** — 100% green regression and integration test suite |
 | Build and packaging | Phase A complete; Phase C2 pending after Milestone 14 |
 
 ## Current Lifecycle Phase
@@ -43,11 +43,12 @@ The user's first Human QA Round 1 full manual-acceptance pass was resolved throu
 Milestone 13 (Advanced UI/UX Reconstruction) reconstructed all 16 production surfaces into the modern Notebook Study Desk design language, passed the Product Owner Human Visual Gate, and was merged into `main`.
 
 **Milestone 14 Phase 0 (Baseline Reconciliation & Immediate Correctives)** is complete:
-- Canonical lifecycle documentation reconciled.
+- Canonical lifecycle documentation reconciled (M12 Completed -> M13 Completed -> M14 Current -> Phase C2 -> Phase D).
 - Interface-sound system explicitly excluded from product/design specs.
 - Material Study Dossier in `MainWindow` aligned to approved wireframe (structured 7-row ruled metadata panel with blue ink labels, spiral dots, and action suite).
 - Global Settings consolidated under Library sidebar `Settings...` with categorized `Playback` and `Label Colors` tabs; redundant Player entry point removed.
-- Cue selection clearing via right-click context menu implemented; selection box border clipping normalized; automated test suite expanded to 899 passing tests.
+- Live label color preference propagation across open Player surfaces implemented and verified via `label_color_change_bus`.
+- Cue selection clearing via right-click context menu implemented; selection box border clipping normalized; automated test suite expanded to 900 passing tests.
 
 ## Current Release Scope
 
@@ -80,7 +81,7 @@ Functional feature completion was reached after Milestone 10: every planned loca
 
 ## Verification Status
 
-- **Automated tests**: **899 passing** as of Milestone 14 Phase 0. 100% green suite.
+- **Automated tests**: **900 passing** as of Milestone 14 Phase 0. 100% green suite.
 - **Manual GUI QA / Human Visual Gate**: the user has completed Human QA Round 1 (Phase 12-A), the retroactive M12.1-A baseline, the 3-material Loop End Grace calibration retest, and the **Milestone 13 Product Owner Human Visual Gate (PASS)**. Human QA Round 2's full-questionnaire pass against the final post-M13 UI is scheduled for Milestone 14.
 - **Packaged preflight**: Phase C1 complete (development machine only) — see `ROADMAP.md`.
 - **Migration**: schema version 12, every migration 1→12 covered by an automated upgrade test with real data present.

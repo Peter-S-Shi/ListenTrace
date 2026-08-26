@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import sqlite3
 
@@ -28,6 +28,7 @@ from listentrace.domain.services.loop_grace_policy import (
     LOOP_END_GRACE_STEP_MS,
 )
 from listentrace.ui import theme
+from listentrace.ui.widgets.label_color_change_bus import label_color_change_bus
 from listentrace.ui.widgets.loop_grace_change_bus import loop_grace_change_bus
 
 _PLAYBACK_EXPLANATION = (
@@ -234,6 +235,7 @@ class SettingsDialog(QDialog):
             return
         button.setText(hex_color)
         button.setStyleSheet(f"background-color: {hex_color}; font-weight: bold;")
+        label_color_change_bus.label_colors_changed.emit()
 
     def showEvent(self, event) -> None:  # noqa: D102 - Qt override
         super().showEvent(event)

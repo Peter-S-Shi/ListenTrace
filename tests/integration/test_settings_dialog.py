@@ -62,3 +62,49 @@ def test_settings_dialog_label_colors_category(qapp, conn):
     dialog.show()  # triggers showEvent refresh
     assert dialog._color_buttons["keyword"].text() == "#123456"
     dialog.close()
+
+
+def test_settings_label_color_live_propagation_to_open_player(qapp, conn, tmp_path):
+    import struct
+    import wave
+    from listentrace.application.services.material_import_service import import_material
+    from listentrace.application.services.player_loading_service import load_material_for_player
+    from listentrace.ui.widgets.label_color_change_bus import label_color_change_bus
+    from listentrace.ui.windows.player_window import PlayerWindow
+
+    media_path = tmp_path / "sample_audio.wav"
+    with wave.open(str(media_path), "w") as wf:
+        wf.setnchannels(1)
+        wf.setsampwidth(2)
+        wf.setframerate(8000)
+        wf.writeframes(struct.pack("<h", 0) * 8000 * 2)
+
+    srt_path = tmp_path / "sample_audio.srt"
+    srt_path.write_text("1\n00:00:00,000 --> 00:00:01,000\nFirst line of dialogue\n", encoding="utf-8")
+
+    import_res = import_material(conn, media_path, srt_path, "Test Live Color")
+    load_res = load_material_for_player(conn, import_res.material_id)
+
+    player = PlayerWindow(load_res, conn)
+    player.show()
+    qapp.processEvents()
+
+    # Select cue 0 and save a keyword annotation
+    player._cue_list.setCurrentRow(0)
+    player._label_checkboxes["keyword"].setChecked(True)
+    player._on_save_annotation_clicked()
+    assert player._annotation_list.count() == 1
+    row_widget = player._annotation_list.itemWidget(player._annotation_list.item(0))
+    initial_color = label_preference_service.get_label_preferences(conn)["keyword"]
+    assert row_widget.color_hex == initial_color
+
+    # Update color via settings dialog workflow
+    NEW_COLOR = "#00FFAA"
+    label_preference_service.update_label_color(conn, "keyword", NEW_COLOR)
+    label_color_change_bus.label_colors_changed.emit()
+    qapp.processEvents()
+
+    # Verify annotation badge in open Player updated live without switching cues or reopening
+    assert row_widget.color_hex == NEW_COLOR
+
+    player.close()

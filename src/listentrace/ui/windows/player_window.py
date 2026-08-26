@@ -63,6 +63,7 @@ from listentrace.ui.text_offset_conversion import (
     qt_offset_to_codepoint_index,
 )
 from listentrace.ui.theme import SPACE_COMPACT, SPACE_NORMAL, SPACE_PAGE, SPACE_SECTION, apply_role, apply_surface
+from listentrace.ui.widgets.label_color_change_bus import label_color_change_bus
 from listentrace.ui.widgets.loop_grace_change_bus import loop_grace_change_bus
 from listentrace.ui.widgets.notebook_paper import GrainedDeskWidget, RuledPaperFrame, RuledTextEdit
 from listentrace.ui.windows.label_color_dialog import LabelColorDialog
@@ -232,6 +233,7 @@ class PlayerWindow(QMainWindow):
         self._loop_settings_dialog: MaterialLoopSettingsDialog | None = None
         loop_grace_change_bus.global_default_changed.connect(self._on_loop_grace_global_default_changed)
         loop_grace_change_bus.material_override_changed.connect(self._on_loop_grace_material_override_changed)
+        label_color_change_bus.label_colors_changed.connect(self._on_label_colors_changed)
 
         central = GrainedDeskWidget()
         apply_surface(central, "paper")
@@ -1090,6 +1092,9 @@ class PlayerWindow(QMainWindow):
     def _on_loop_grace_material_override_changed(self, material_id: int) -> None:
         if material_id == self._material.id:
             self._refresh_loop_end_grace()
+
+    def _on_label_colors_changed(self) -> None:
+        self._refresh_annotation_presentation()
 
     def _refresh_loop_end_grace(self) -> None:
         grace_ms = loop_grace_service.effective_loop_end_grace_ms(self._connection, self._material.id)

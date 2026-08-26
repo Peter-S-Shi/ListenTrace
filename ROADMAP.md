@@ -394,10 +394,6 @@ Do not claim presentation completion before M11 is implemented and accepted.
 
 ---
 
-# Milestone 12 — Product Hardening & Full Manual Acceptance
-
-## Goal
-
 # Milestone 12 — Pre-UI Product Hardening (Completed)
 
 ## Goal
@@ -549,7 +545,7 @@ Represents all validation already performed on the development machine, formerly
 
 ## Phase C2 — Clean-Machine Acceptance (Pending)
 
-The remaining final environment-validation gate, occurring **after Milestone 11 — UI/UX Presentation Refresh and Milestone 12 — Product Hardening & Full Manual Acceptance** so the final hardened, final-UI release candidate is what gets tested, not an earlier presentation layer or an unaudited product.
+The remaining final environment-validation gate, occurring **after Milestone 14 — Final Product Hardening & Full Manual Regression** so the final hardened, final-UI release candidate is what gets tested, not an earlier presentation layer or an unaudited product.
 
 Target baseline: Windows 11 x64, Home or Pro, standard non-N edition, normal Windows system updates, no Python installation, no Git, no IDE, no PyInstaller, no Inno Setup, no project source tree, no developer virtual environment, and no manually installed FFmpeg or codec pack required for ListenTrace.
 
@@ -560,7 +556,7 @@ C2 validates the actual packaged release candidate. At minimum:
 - **Data**: fresh schema creation, legacy database upgrade, persistence after restart, upgrade-install preservation, uninstall preservation.
 - **Core workflows**: Material import, Player, Transcript Workspace, Intensive Practice, Quiz, Shadowing/Recording, Learning History, Export, Quick Practice.
 
-Phase C2 is a release gate: it must not be marked completed until a genuinely appropriate clean environment has actually been used. If C2 discovers a release-blocking defect: `C2 failure -> return to an M12 corrective batch -> regression -> repeat C2`. C2 is an environment and packaged-artifact acceptance gate — it does not replace Milestone 12's product-wide audit.
+Phase C2 is a release gate: it must not be marked completed until a genuinely appropriate clean environment has actually been used. If C2 discovers a release-blocking defect: `C2 failure -> return to an M14 corrective batch -> regression -> repeat C2`. C2 is an environment and packaged-artifact acceptance gate — it does not replace Milestone 14's product-wide hardening and full manual regression.
 
 ## Phase D — v1.0 Release Candidate (Pending)
 
@@ -581,13 +577,13 @@ Completion of:
 - final v1.0 release decision;
 - tag/release preparation where approved.
 
-Phase D planning and preparation may proceed earlier where useful, but **Phase D cannot be completed, v1.0 cannot be tagged or released, and final Release Ready status cannot be claimed until Milestone 12 and Phase C2 have both passed.** If a blocking problem is discovered during Phase D, return to an M12 corrective batch, rerun affected regression, and repeat any invalidated C2/Phase D checks.
+Phase D planning and preparation may proceed earlier where useful, but **Phase D cannot be completed, v1.0 cannot be tagged or released, and final Release Ready status cannot be claimed until Milestone 14 and Phase C2 have both passed.** If a blocking problem is discovered during Phase D, return to an M14 corrective batch, rerun affected regression, and repeat any invalidated C2/Phase D checks.
 
 ---
 
 # v1.0 — Current Version Complete
 
-This state means: the approved v1.0 scope is implemented; Functional Feature Freeze was respected; M11 presentation convergence is complete; M12 product hardening and manual acceptance passed; C2 clean-machine acceptance passed; Phase D release-candidate checks passed; the release artifact, documentation, known limitations, and repository state are finalized. This does **not** describe the project as permanently complete — see Maintenance and Next-Version Planning, below.
+This state means: the approved v1.0 scope is implemented; Functional Feature Freeze was respected; M11 presentation refresh and M13 UI reconstruction are complete; M14 product hardening and manual regression passed; C2 clean-machine acceptance passed; Phase D release-candidate checks passed; the release artifact, documentation, known limitations, and repository state are finalized. This does **not** describe the project as permanently complete — see Maintenance and Next-Version Planning, below.
 
 # Maintenance / v1.0.x
 
@@ -673,19 +669,19 @@ The deferred assisted-feature ideas ("Deferred Beyond v1.0 — Optional Assisted
 
 - Product name: ListenTrace
 - Local-first desktop product
-- User supplies media and matching transcript or subtitles
-- Timed subtitles provide the full experience
+- User supplies media and matching transcript or timed subtitles
+- Timed subtitles (.srt, .vtt) provide the primary structured learning experience
 - Listening failure categories are semantic labels, not colors
 - User owns saved word and chunk content
 - Structured export precedes embedded online evaluation
-- Original user media should remain outside the application database
+- Original user media remains outside the application database, referenced in place, never modified or deleted
+- Desktop media playback backend: PySide6 Qt Multimedia with bundled FFmpeg backend
+- Audio recording format: 16-bit PCM WAV captured locally to `%APPDATA%\ListenTrace\recordings`
+- Target desktop OS: Windows 10/11 x64 (per-user installation via Inno Setup and portable zip)
+- Interface sound policy: decorative UI audio explicitly excluded; authentic learning audio fully preserved
 
 # Decisions Still Open
 
-- Final media playback backend
-- Minimum supported desktop operating systems
-- Whether plain-text transcripts are included in the first usable release
-- Whether imported media is referenced in place or optionally copied
-- Audio recording format and retention defaults
-- Initial accessibility and localization targets
-- Update strategy (auto-update) — packaging itself was decided and validated in Post-M10 Phase A; see `packaging/README.md`
+- Future platform packaging (macOS, Linux) — deferred beyond v1.0
+- Long-term auto-update service integration — deferred beyond v1.0
+- Multi-language interface localization — English UI baseline established for v1.0; additional locales deferred beyond v1.0
