@@ -360,7 +360,7 @@ M11 must preserve Functional Feature Freeze. It must not introduce new learning 
 
 ## Dependencies
 
-Requires the functionally complete, feature-frozen application from Milestones 1-10. Milestone 12 — Product Hardening & Full Manual Acceptance (below) follows M11's Presentation Complete Gate; Phase C2 — Clean-Machine Acceptance (see "v1.0 Release Engineering" below) occurs only after M12, so the actual hardened, final-UI release is what gets clean-machine-validated, not an earlier presentation layer.
+Requires the functionally complete, feature-frozen application from Milestones 1-10. Milestone 12 (Pre-UI Product Hardening), Milestone 13 (Advanced UI/UX Reconstruction), and Milestone 14 (Final Product Hardening & Full Manual Regression) follow M11's Presentation Complete Gate; Phase C2 — Clean-Machine Acceptance (see "v1.0 Release Engineering" below) occurs only after Milestone 14, so the actual hardened, final-UI release is what gets clean-machine-validated, not an earlier presentation layer or unaudited build.
 
 ## Closeout Summary
 
@@ -491,7 +491,7 @@ Not a numbered milestone. There is no current implementation plan, and it is not
 
 # v1.0 Release Engineering
 
-Release engineering began once Milestone 10 was accepted and functional feature development entered freeze, organized into phases: A (packaging spike), B (targeted technical release hardening), C1 (release preflight), C2 (clean-machine acceptance), D (release candidate) — interleaved with Milestones 11 and 12 in the Canonical v1.0 Sequence, below. This section was previously named "Post-M10 — Release Engineering and v1.0 Delivery"; it is renamed here only because Milestone 11 now exists after M10, which made a "Post-M10" heading historically awkward — the Phase A/B/C history and decisions below are preserved, not rewritten. Phase A's packaging decisions are locked, Phase B's hardening pass is complete, and Phase C1's development-machine preflight is complete (see below). Phase C2 — Clean-Machine Acceptance is pending and now occurs after both Milestone 11 (presentation) and Milestone 12 (product-wide hardening), not directly after M11. A v1.0 release date is still not chosen.
+Release engineering began once Milestone 10 was accepted and functional feature development entered freeze, organized into phases: A (packaging spike), B (targeted technical release hardening), C1 (release preflight), C2 (clean-machine acceptance), D (release candidate) — interleaved with Milestones 11, 12, 13, and 14 in the Canonical v1.0 Sequence, below. This section was previously named "Post-M10 — Release Engineering and v1.0 Delivery"; it is renamed here only because Milestone 11 now exists after M10, which made a "Post-M10" heading historically awkward — the Phase A/B/C history and decisions below are preserved, not rewritten. Phase A's packaging decisions are locked, Phase B's hardening pass is complete, and Phase C1's development-machine preflight is complete (see below). Phase C2 — Clean-Machine Acceptance is pending and occurs after Milestone 14 (Final Product Hardening & Full Manual Regression). A v1.0 release date is still not chosen.
 
 ## Phase A — Packaging Spike (Completed)
 
@@ -510,7 +510,7 @@ See `packaging/README.md` for the full build recipe and `ARCHITECTURE.md`'s "Res
 
 ## Phase B — Targeted Technical Release Hardening (Completed)
 
-Phase B was a targeted technical release-hardening pass completed before the final UI and product-wide acceptance stages. It addressed confirmed technical risks, but it does not replace Milestone 12's final, system-wide Product Hardening & Full Manual Acceptance milestone, below — Phase B is not reopened merely because M12 now exists. Corrective work for:
+Phase B was a targeted technical release-hardening pass completed before the final UI and product-wide acceptance stages. It addressed confirmed technical risks, but it does not replace the subsequent hardening passes in Milestone 12 and Milestone 14 — Phase B is not reopened merely because later hardening milestones exist. Corrective work for:
 
 - startup and shutdown failures: startup fixed — `QApplication` is now constructed before anything else that could fail, so a startup failure can always show a friendly dialog instead of the process silently terminating; unhandled exceptions during normal use are now logged via a global crash-logging hook. Shutdown audited directly (closeout pass) and found already correct: no explicit database-connection close exists anywhere, which is safe because every write already commits synchronously in SQLite's default (non-WAL) journal mode; a normal window close really aborts an in-progress recording through the real service path, not just in a mocked test; re-opening the database afterward reads back exactly what was left, with nothing dangling for startup crash-recovery to find;
 - missing or moved media: verified already solid — every material-opening entry point already pre-flight-checks the media and subtitle paths with a friendly error;
@@ -530,7 +530,7 @@ See `ARCHITECTURE.md`'s "Resolved in Post-M10 Phase B" section and `packaging/RE
 
 ## Phase C1 — Development-Machine Release Preflight (Completed)
 
-Represents all validation already performed on the development machine, formerly recorded as the single Phase C. Not to be confused with Milestone 12's Product Hardening & Full Manual Acceptance, below — C1 is packaged-build preflight evidence, not a product-wide audit. Covers:
+Represents all validation already performed on the development machine, formerly recorded as the single Phase C. Not to be confused with product-wide hardening and full manual regression (Milestones 12 and 14) — C1 is packaged-build preflight evidence, not a product-wide audit. Covers:
 
 - install, launch, upgrade, and uninstall: a fresh silent install, a reinstall over the same install (upgrade-in-place via the same AppId), a silent uninstall, each launch in between, all completed cleanly;
 - data preservation: a real material row survived install → data creation → reinstall → uninstall intact;

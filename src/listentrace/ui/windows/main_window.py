@@ -35,6 +35,7 @@ from listentrace.application.services import quiz_service
 from listentrace.application.services.player_loading_service import load_material_for_player
 from listentrace.domain.enums.material_status import MaterialStatus
 from listentrace.infrastructure.db.migrations import current_version
+from listentrace.ui import theme
 from listentrace.ui.theme import (
     SPACE_COMPACT,
     SPACE_NORMAL,
@@ -324,11 +325,15 @@ class MainWindow(QMainWindow):
         self._detail_label.setVisible(False)
         dossier_meta_layout.addWidget(self._detail_label)
 
-        detail_scroll = QScrollArea()
-        detail_scroll.setWidgetResizable(True)
-        detail_scroll.setFrameShape(QFrame.Shape.NoFrame)
-        detail_scroll.setWidget(self._dossier_meta_widget)
-        dossier_inner_layout.addWidget(detail_scroll, 1)
+        # Direct layout ownership for scan-at-a-glance dossier metadata
+        dossier_inner_layout.addWidget(self._dossier_meta_widget)
+
+        # Visual Separator between Dossier Metadata and Action Launchpad
+        divider = QFrame()
+        divider.setFrameShape(QFrame.Shape.HLine)
+        divider.setFrameShadow(QFrame.Shadow.Plain)
+        divider.setStyleSheet(f"background-color: {theme.css('notebook_rule_blue')}; max-height: 1px; margin: {SPACE_COMPACT}px 0px;")
+        dossier_inner_layout.addWidget(divider)
 
         # Action Suite with Strict Hierarchy
         action_suite_box = QVBoxLayout()
@@ -403,7 +408,14 @@ class MainWindow(QMainWindow):
         action_suite_box.addLayout(danger_row)
 
         dossier_inner_layout.addLayout(action_suite_box)
-        self._content_splitter.addWidget(dossier_card)
+        dossier_inner_layout.addStretch(1)
+
+        dossier_scroll = QScrollArea()
+        dossier_scroll.setWidgetResizable(True)
+        dossier_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        dossier_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        dossier_scroll.setWidget(dossier_card)
+        self._content_splitter.addWidget(dossier_scroll)
 
         # Configure Splitter Ratios (List 10 : Inspector 12)
         self._content_splitter.setStretchFactor(0, 10)
