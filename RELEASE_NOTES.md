@@ -1,14 +1,40 @@
 # ListenTrace v1.0.0 — Release Notes (Draft, Milestone 15.3)
 
-**Status: draft, prepared during Milestone 15.3 (Release Candidate Closure & Delivery) preparation.**
-No `v1.0.0` tag or GitHub Release has been created yet — that remains a Product Owner decision after
-independent pre-merge review. This document is written for the Product Owner and, eventually, real
-users; it is not itself a release announcement.
+**Status: draft, prepared during Milestone 15.3 (Release Candidate Closure & Delivery), which is now
+complete.** No `v1.0.0` tag or GitHub Release has been created yet — that remains a Product Owner
+decision after independent pre-merge review of PR #4. This document is written for the Product Owner
+and, eventually, real users; it is not itself a release announcement.
 
-Candidate under preparation: version `1.0.0`, source commit `661bca47ce93f1a12a6a17c66f1ed6065d816e43`,
-canonical artifact bundle `ListenTrace-1.0.0-candidate-661bca47ce93f1a12a6a17c66f1ed6065d816e43`
-(portable ZIP, Inno Setup installer `ListenTrace-Setup-1.0.0.exe`, `SHA256SUMS.txt`, `provenance.json`),
-produced by the Milestone 15.1 GitHub Actions release-candidate pipeline.
+## Validated release payload (locked)
+
+**The canonical v1.0.0 release payload is the exact Milestone 15.2 human-validated candidate, and only
+that candidate** — version `1.0.0`, source commit `661bca47ce93f1a12a6a17c66f1ed6065d816e43`, artifact
+bundle `ListenTrace-1.0.0-candidate-661bca47ce93f1a12a6a17c66f1ed6065d816e43` (`ListenTrace-Setup-1.0.0.exe`,
+`ListenTrace-1.0.0-win64-portable.zip`, `SHA256SUMS.txt`, `provenance.json`), produced by the Milestone
+15.1 GitHub Actions release-candidate pipeline and installed/exercised end-to-end on a genuinely clean
+Windows 11 VM during Milestone 15.2.
+
+**Test what we ship; ship what we tested.** Later docs-only commits on this branch (including this M15.3
+closure work) intentionally advance the branch HEAD past `661bca47...` for governance/documentation
+purposes, and each such commit's own CI run produces its own workflow artifact bundle under a different
+commit SHA. Those later, automatically generated bundles are **not** a substitute release payload — no
+product/application code changed after `661bca47...`, so rebuilding merely to match SHAs would trade a
+human-validated binary for an unvalidated one for no real benefit. When the Product Owner is ready to
+tag and publish `v1.0.0`, the release payload attached to that tag/Release must be the `661bca47...`
+artifact bundle specifically, not whatever the merge commit's own CI run happens to produce.
+
+Checksums (downloaded and independently re-verified with `sha256sum` against the GitHub Actions
+artifact for workflow run `33005303492`, which built commit `661bca47...`):
+
+```
+71cdf8c8b1d6167042153ae5861123bf51abf29bea8584e6e88363a998513200  ListenTrace-1.0.0-win64-portable.zip
+d174cf0304675979d908c4f9abeff951b393a4525928882cf4fd83a8480135d7  ListenTrace-Setup-1.0.0.exe
+```
+
+`provenance.json` for this build records `product: ListenTrace`, `version: 1.0.0`,
+`commit: 661bca47ce93f1a12a6a17c66f1ed6065d816e43`, `workflow_run_id: 33005303492`, and
+`automated_tests: {passed: 972, result: pass}` — consistent with the Milestone 15.2 candidate under
+test and with this closure's own final full-suite result (see "Final Verification", below).
 
 ## What ListenTrace v1.0.0 is
 
@@ -42,8 +68,12 @@ Decisions", "Known Limitations", and "Unknown or Unverified" sections for the co
 maintained list; the summary below is what's most relevant to someone deciding whether to install this
 release.
 
-- **The installer and executable are unsigned.** Windows SmartScreen will likely show an
-  "unrecognized app" warning on first run. Code signing is not addressed in v1.0.0.
+- **The installer and executable are unsigned** (Product Owner decision: unsigned v1.0 is approved;
+  code signing is not a v1.0 blocker and no signing infrastructure has been built). Windows SmartScreen
+  **may** show an "unrecognized app" warning on first run for some users, depending on download source,
+  file reputation, and Mark-of-the-Web context — the Milestone 15.2 clean-machine acceptance install
+  did not itself encounter a SmartScreen block, so this is a possible, not certain, first-run
+  experience. Known limitation, not a release blocker.
 - **No automatic update checking.** ListenTrace does not check for or notify about newer versions in
   this release; this is a deliberately deferred feature for the first v1.0.x maintenance update, not an
   oversight.
@@ -71,7 +101,9 @@ release.
 ## Privacy
 
 No account, no network dependency, no telemetry. All application data (database, recordings, logs)
-lives under `%APPDATA%\ListenTrace` and is never read, copied, or transmitted by ListenTrace itself.
+lives under `%APPDATA%\ListenTrace`. ListenTrace necessarily reads its own local application data to
+function (to display your library, history, and practice evidence) — what it does not do is upload,
+copy elsewhere, or transmit that data anywhere; nothing leaves your machine.
 Uninstalling removes only the installed program files — your data is never deleted by install, upgrade,
 or uninstall.
 
