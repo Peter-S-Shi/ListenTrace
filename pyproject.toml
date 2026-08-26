@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "listentrace"
-version = "0.1.0"
+version = "1.0.0"
 description = "Local-first desktop application for transcript-guided foreign-language listening practice."
 readme = "README.md"
 requires-python = ">=3.10"

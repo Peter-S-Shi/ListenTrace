@@ -13,7 +13,7 @@
 ; newer installer upgrades in place rather than installing side-by-side.
 
 #define MyAppName "ListenTrace"
-#define MyAppVersion "0.1.0"
+#define MyAppVersion "1.0.0"
 #define MyAppExeName "ListenTrace.exe"
 
 [Setup]
