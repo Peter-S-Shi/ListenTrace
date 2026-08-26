@@ -214,14 +214,15 @@ here:
   manifest opt-in is necessary but not sufficient on its own; this is a
   documented, accepted limitation, not an open task).
 - Clean-machine verification of anything in this file — every validation
-  here (build, launch, install, uninstall, the long-path reproduction) ran
-  on this development machine, which already has Python and other developer
-  tooling installed (Phase C1 — Development-Machine Release Preflight,
-  completed). Genuinely clean-machine testing (no preinstalled Python,
-  fresh user account, non-English paths) is Milestone 15.2's job, follows
-  the now-completed Milestone 14 merge, and remains pending/not started so
-  it tests the final hardened, final-UI release candidate rather than an
-  earlier presentation layer or unaudited product.
+  in this directory (build, launch, install, uninstall, the long-path
+  reproduction) ran on this development machine, which already has Python
+  and other developer tooling installed (Phase C1 — Development-Machine
+  Release Preflight, completed). Genuinely clean-machine testing (no
+  preinstalled Python, fresh user account) was a separate job, Milestone
+  15.2, which has since **completed with PASS / Product Owner Accepted**
+  on a clean Windows 11 VM — see `PROJECT_STATUS.md` and `ROADMAP.md` for
+  that evidence. Phase A/C1 in this directory remain development-machine
+  evidence; Milestone 15.2 is the genuinely clean-machine acceptance.
 - Everything else Phase B fixed lives in application code, not this
   directory (migration atomicity, startup-crash ordering, crash logging,
   large-history indexes) — see `ARCHITECTURE.md`'s "Resolved in Post-M10

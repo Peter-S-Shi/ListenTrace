@@ -589,7 +589,7 @@ The canonical v1.0.0 release payload is, and remains, the exact Milestone 15.2 h
 
 This state means: the approved v1.0 scope is implemented; Functional Feature Freeze was respected; M11 presentation refresh and M13 UI reconstruction are complete; M14 product hardening and manual regression passed; Milestone 15.2 clean-machine acceptance passed; Milestone 15.3 release-candidate checks passed; the release artifact, documentation, known limitations, and repository state are finalized. This does **not** describe the project as permanently complete — see Maintenance and Next-Version Planning, below.
 
-**Status: not yet declared.** Every engineering/acceptance gate above (M11–M14, Milestone 15.1/15.2/15.3) is complete. What remains is the Product Owner's own publication sequence — merging PR #4, authorizing/creating the `v1.0.0` tag, and authorizing/publishing the GitHub Release using the validated `661bca47...` payload — none of which this milestone's engineering work performs. `v1.0 — Current Version Complete` should be declared only once those actions are actually true, not in anticipation of them.
+**Status: not yet declared.** Every engineering/acceptance gate above (M11–M14, Milestone 15.1/15.2/15.3) is complete, and PR #4 is Ready for Review but not yet merged. What remains is the Product Owner's own publication sequence — verifying the merged `main` HEAD once PR #4 is merged, authorizing/creating the `v1.0.0` tag, and authorizing/publishing the GitHub Release using the validated `661bca47...` payload — none of which this milestone's engineering work performs. `v1.0 — Current Version Complete` should be declared only once those actions are actually true, not in anticipation of them.
 
 # Maintenance / v1.0.x
 

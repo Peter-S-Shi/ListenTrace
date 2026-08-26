@@ -44,14 +44,13 @@ Milestone 14 — Final Product Hardening & Full Manual Regression is **complete,
 
 ## v1.0 Release Status
 
-**Not yet Current Version Complete.** Every engineering/acceptance gate is done — Milestones 1–15 are all complete, accepted, and merged (or, for 1–10, implemented and accepted as the frozen functional scope). What remains is the Product Owner's own publication sequence, none of which this session performs:
+**Not yet Current Version Complete.** Every engineering/acceptance gate is done — Milestones 1–15 are all complete, accepted, and merged (or, for 1–10, implemented and accepted as the frozen functional scope). PR #4 is Ready for Review and has not yet been merged. What remains is the Product Owner's own publication sequence, none of which this session performs:
 
-1. Merge PR #4 into `main`.
-2. Verify the merged `main` HEAD.
-3. Authorize/create the `v1.0.0` tag.
-4. Authorize/publish the GitHub Release, attaching the **validated `661bca47...` payload** (`ListenTrace-Setup-1.0.0.exe`, `ListenTrace-1.0.0-win64-portable.zip`, `SHA256SUMS.txt`, `provenance.json`) — not whatever a later merge commit's own CI run produces.
-5. Declare `v1.0 — Current Version Complete` only once steps 1–4 are actually true.
-6. Then, and only then, begin Portfolio Packaging.
+1. Verify the merged `main` HEAD once PR #4 is merged.
+2. Authorize/create the `v1.0.0` tag.
+3. Authorize/publish the GitHub Release, attaching the **validated `661bca47...` payload** (`ListenTrace-Setup-1.0.0.exe`, `ListenTrace-1.0.0-win64-portable.zip`, `SHA256SUMS.txt`, `provenance.json`) — not whatever a later merge commit's own CI run produces.
+4. Declare `v1.0 — Current Version Complete` only once steps 1–3 are actually true.
+5. Then, and only then, begin Portfolio Packaging.
 
 No `v1.0.0` tag or GitHub Release exists yet. Portfolio Packaging has not begun.
 
