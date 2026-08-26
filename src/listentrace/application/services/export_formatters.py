@@ -191,12 +191,12 @@ def _render_material_markdown(material: dict) -> list[str]:
         if not rows:
             lines.append("_No shadowing practice in scope._")
         else:
-            lines.append("| Transcript excerpt | Practice count | Last practiced |")
-            lines.append("|---|---|---|")
+            lines.append("| Transcript excerpt | Practice count | Last practiced | Note |")
+            lines.append("|---|---|---|---|")
             for row in rows:
                 lines.append(
                     f"| {escape_markdown_line(row['transcript_excerpt'] or '')} | {row['practice_count']} | "
-                    f"{row['last_practiced_at']} |"
+                    f"{row['last_practiced_at']} | {escape_markdown_line(row.get('note') or '')} |"
                 )
         lines.append("")
 
@@ -281,15 +281,44 @@ def _quiz_learner_answer_text(question: dict) -> str:
     return "(no answer)"
 
 
+# Which prompt payload key holds the human-readable proposition/blank being
+# judged, per question type — `audio_transcript_choice` is deliberately
+# absent (its `choices` list is fully represented by the learner/correct
+# answer lines already; listing every distractor would just restate the
+# JSON schema, not add evidence meaning).
+def _quiz_prompt_lines(question: dict) -> list[str]:
+    question_type = question["question_type"]
+    prompt = question.get("prompt") or {}
+
+    if question_type == "keyword_recognition":
+        target = prompt.get("target_text")
+        return [f"    - Prompt (target text judged): {escape_markdown_line(target)}"] if target else []
+
+    if question_type in ("dictation", "review_missed") and prompt.get("mode") == "blank":
+        masked = prompt.get("masked_text")
+        if not masked:
+            return []
+        lines = [f"    - Prompt (masked): {escape_markdown_line(masked)}"]
+        if question_type == "review_missed":
+            if prompt.get("label_key"):
+                lines.append(f"    - Diagnosis label: {escape_markdown_line(str(prompt['label_key']))}")
+            if prompt.get("heard_as"):
+                lines.append(f"    - Heard as: {escape_markdown_line(prompt['heard_as'])}")
+        return lines
+
+    return []
+
+
 def _render_quiz_question_markdown(question: dict) -> list[str]:
     is_correct = (question.get("learner_answer") or {}).get("is_correct")
     correctness = "correct" if is_correct else ("incorrect" if is_correct is False else "n/a")
     lines = [
         f"  - Q{question['position']} ({question['question_type']}) [{correctness}]: "
         f"{escape_markdown_line(question['source_cue_text'] or '')}",
-        f"    - Learner answer: {escape_markdown_line(_quiz_learner_answer_text(question))}",
-        f"    - Correct answer: {escape_markdown_line(_quiz_correct_answer_text(question))}",
     ]
+    lines.extend(_quiz_prompt_lines(question))
+    lines.append(f"    - Learner answer: {escape_markdown_line(_quiz_learner_answer_text(question))}")
+    lines.append(f"    - Correct answer: {escape_markdown_line(_quiz_correct_answer_text(question))}")
     return lines
 
 

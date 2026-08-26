@@ -229,6 +229,132 @@ def test_render_markdown_quiz_qa_choice_question_shows_readable_choice_text():
     assert "She sells seashells" in md
 
 
+def _quiz_material(question: dict) -> dict:
+    return {
+        "title": "Lesson",
+        "material_id": 1,
+        "quiz_attempts": [
+            {
+                "attempt_id": 1,
+                "quiz_mode": question["question_type"],
+                "completed_at": "2026-07-24 12:00:00",
+                "correct_count": 1,
+                "actual_count": 1,
+                "accuracy": 1.0,
+                "questions": [question],
+            }
+        ],
+    }
+
+
+# ---- Quiz prompt parity (M14 Human QA R2 export-parity corrective 2) ----
+
+
+def test_render_markdown_keyword_recognition_question_includes_prompt_target_text():
+    question = {
+        "position": 1,
+        "question_type": "keyword_recognition",
+        "source_cue_text": "It was overcast that morning",
+        "prompt": {"target_text": "gonna rain", "choices": ["No", "Yes"]},
+        "correct_answer": {"correct_choice_index": 1, "target_text": "gonna rain", "expected": True},
+        "learner_answer": {"raw_answer_text": None, "selected_choice_index": 1, "is_correct": True},
+    }
+    md = fmt.render_markdown(_bundle([_quiz_material(question)]))
+    assert "gonna rain" in md
+
+
+def test_render_markdown_dictation_blank_question_includes_masked_prompt():
+    question = {
+        "position": 1,
+        "question_type": "dictation",
+        "source_cue_text": "I am going to school",
+        "prompt": {"mode": "blank", "masked_text": "I am ___ to school", "blank_start": 5, "blank_end": 10},
+        "correct_answer": {"answer_text": "going", "normalized_answer_text": "going"},
+        "learner_answer": {"raw_answer_text": "going", "selected_choice_index": None, "is_correct": True},
+    }
+    md = fmt.render_markdown(_bundle([_quiz_material(question)]))
+    assert "Prompt (masked)" in md
+    assert "I am" in md and "to school" in md
+
+
+def test_render_markdown_review_missed_question_shows_masked_prompt_and_diagnosis_context():
+    question = {
+        "position": 1,
+        "question_type": "review_missed",
+        "source_cue_text": "I am going to school",
+        "prompt": {
+            "mode": "blank",
+            "masked_text": "I am ___ to school",
+            "blank_start": 5,
+            "blank_end": 10,
+            "label_key": "connected_speech",
+            "heard_as": "gonna",
+        },
+        "correct_answer": {"answer_text": "going", "normalized_answer_text": "going"},
+        "learner_answer": {"raw_answer_text": "gonna", "selected_choice_index": None, "is_correct": False},
+    }
+    md = fmt.render_markdown(_bundle([_quiz_material(question)]))
+    assert "Prompt (masked)" in md
+    assert "I am" in md and "to school" in md
+    assert "connected" in md and "speech" in md
+    assert "gonna" in md
+
+
+def test_render_markdown_review_missed_redacted_heard_as_stays_redacted():
+    question = {
+        "position": 1,
+        "question_type": "review_missed",
+        "source_cue_text": "I am walking to the store",
+        "prompt": {
+            "mode": "blank",
+            "masked_text": "I am ___ to the store",
+            "blank_start": 5,
+            "blank_end": 12,
+            "label_key": "connected_speech",
+            "heard_as": "[redacted]",
+        },
+        "correct_answer": {"answer_text": "walking", "normalized_answer_text": "walking"},
+        "learner_answer": {"raw_answer_text": "walking", "selected_choice_index": None, "is_correct": True},
+    }
+    md = fmt.render_markdown(_bundle([_quiz_material(question)]))
+    assert "redacted" in md
+    assert "gonna" not in md
+
+
+def test_render_markdown_quiz_qa_json_round_trips_prompt_field_unchanged():
+    question = {
+        "position": 1,
+        "question_type": "keyword_recognition",
+        "source_cue_text": "It was going to rain",
+        "prompt": {"target_text": "going to", "choices": ["No", "Yes"]},
+        "correct_answer": {"correct_choice_index": 1, "target_text": "going to", "expected": True},
+        "learner_answer": {"raw_answer_text": None, "selected_choice_index": 1, "is_correct": True},
+    }
+    bundle = _bundle([_quiz_material(question)])
+    js = json.loads(fmt.render_json(bundle))
+    assert js["materials"][0]["quiz_attempts"][0]["questions"][0]["prompt"] == question["prompt"]
+
+
+# ---- Shadowing note parity ----
+
+
+def test_render_markdown_shadowing_evidence_includes_note():
+    material = {
+        "title": "Lesson",
+        "material_id": 1,
+        "shadowing_evidence": [
+            {
+                "transcript_excerpt": "hello there",
+                "practice_count": 3,
+                "last_practiced_at": "2026-07-24 12:00:00",
+                "note": "still working on the vowel sound",
+            }
+        ],
+    }
+    md = fmt.render_markdown(_bundle([material]))
+    assert "still working on the vowel sound" in md
+
+
 # ---- Diagnosis/annotation note parity ----
 
 
@@ -330,7 +456,9 @@ def test_render_markdown_has_a_visible_marker_for_every_known_material_key():
         "session_diagnosis_history": "MARKERDIAGNOSISNOTE",
         "current_material_annotations": "MARKERANNOTATIONNOTE",
         "quiz_attempts": "MARKERQUIZLEARNERANSWER",
+        "quiz_prompt": "MARKERQUIZMASKEDPROMPT",
         "shadowing_evidence": "MARKERSHADOWINGEXCERPT",
+        "shadowing_note": "MARKERSHADOWINGNOTE",
         "retained_recordings": 424242,
         "cue_notes": "MARKERCUENOTE",
         "vocabulary_and_saved_chunks": "MARKERVOCABTEXT",
@@ -384,7 +512,7 @@ def test_render_markdown_has_a_visible_marker_for_every_known_material_key():
                         "position": 1,
                         "question_type": "dictation",
                         "source_cue_text": "x",
-                        "prompt": {"masked_text": "x"},
+                        "prompt": {"mode": "blank", "masked_text": marker_by_key["quiz_prompt"], "blank_start": 0, "blank_end": 1},
                         "correct_answer": {"answer_text": "x"},
                         "learner_answer": {
                             "raw_answer_text": marker_by_key["quiz_attempts"],
@@ -400,6 +528,7 @@ def test_render_markdown_has_a_visible_marker_for_every_known_material_key():
                 "transcript_excerpt": marker_by_key["shadowing_evidence"],
                 "practice_count": 1,
                 "last_practiced_at": "2026-07-24 12:00:00",
+                "note": marker_by_key["shadowing_note"],
             }
         ],
         "retained_recordings": [
