@@ -158,7 +158,18 @@ class RecordingPanel(QWidget):
         self._takes_empty_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(self._takes_empty_label)
 
-        take_row = QHBoxLayout()
+        # M13 Axis 8: a wrapping FlowLayout, not a rigid single QHBoxLayout
+        # row -- Axis 8's Quick Practice structural migration hosts this
+        # panel in a narrower left-bottom processing column than the
+        # standalone full-width Shadowing Practice window it was originally
+        # sized for, and 4 buttons (one with quite long copy) no longer fit
+        # one line there. Reflowing (same fix already proven for the
+        # diagnosis-label grids in Axis 7) benefits every host --
+        # Shadowing/Guided Session Stage 4 still render one full-width line
+        # at their normal widths, Quick Practice's narrower column wraps
+        # instead of clipping/needing a horizontal scrollbar.
+        take_row_widget = QWidget()
+        take_row = theme.FlowLayout(take_row_widget, h_spacing=theme.SPACE_NORMAL, v_spacing=theme.SPACE_COMPACT)
         self._play_take_button = QPushButton("Play Take")
         self._play_take_button.clicked.connect(self._on_play_take_clicked)
         theme.apply_role(self._play_take_button, "secondary")
@@ -180,7 +191,7 @@ class RecordingPanel(QWidget):
             self._delete_cue_takes_button,
         ):
             take_row.addWidget(button)
-        layout.addLayout(take_row)
+        layout.addWidget(take_row_widget)
 
         self.refresh_devices()
         self._update_recording_buttons()

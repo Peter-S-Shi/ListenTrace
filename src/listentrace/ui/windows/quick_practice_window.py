@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
     QPushButton,
     QRadioButton,
     QScrollArea,
+    QSplitter,
     QStackedWidget,
     QTextEdit,
     QVBoxLayout,
@@ -58,6 +59,7 @@ from listentrace.ui.theme import (
     FlowLayout,
     apply_role,
     apply_surface,
+    apply_variant,
 )
 from listentrace.ui.widgets.loop_grace_change_bus import loop_grace_change_bus
 from listentrace.ui.widgets.recording_panel import RecordingPanel
@@ -75,17 +77,110 @@ _RECALL_LABELS: list[tuple[str, str]] = [
     (RecallResult.MISSED.value, "Missed"),
 ]
 
+# M13 Axis 8: the real, existing 4-step micro-cycle -- names used by the
+# persistent stepper only. No new step is invented; this mirrors
+# `_STEP_*` exactly.
+_STEPPER_LABELS: list[tuple[int, str]] = [
+    (_STEP_LISTEN_RECALL, "1. Listen / Recall"),
+    (_STEP_DIAGNOSE, "2. Diagnose"),
+    (_STEP_REPLAY, "3. Replay / Shadow"),
+    (_STEP_SUMMARY, "4. Summary"),
+]
+
+# Right support column pages -- fewer pages than steps, since Diagnose and
+# Replay/Shadow deliberately share one "diagnosis evidence" reference page
+# (the same real data stays visible and unduplicated across both steps).
+_SUPPORT_PAGE_PRE_REVEAL = 0
+_SUPPORT_PAGE_DIAGNOSIS_EVIDENCE = 1
+_SUPPORT_PAGE_SUMMARY = 2
+
+
+class QuickPracticeStepper(QFrame):
+    """A non-interactive 4-step visual progress indicator (M13 Axis 8).
+
+    Visually mirrors Guided Session's `StageStepper` pill/badge/label
+    grammar (same `stepper_item_badge`/`stepper_item_label` `QLabel`
+    roles, same current/completed/not_started color language) but is
+    deliberately built from plain `QFrame` pills (`role=
+    "stepper_item_static"`), not `QPushButton`s -- Quick Practice's
+    real product behavior is strictly forward-only with no arbitrary
+    stage jump, so this stepper has no click target, no focus ring, and
+    emits no signal. `update_stepper()` is the single state-refresh seam;
+    its `current_step` argument must always come from the window's real
+    `_step`.
+    """
+
+    _PILL_MIN_HEIGHT_PX = 40
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setFrameShape(QFrame.Shape.NoFrame)
+        row = QHBoxLayout(self)
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(SPACE_COMPACT)
+
+        self._pills: dict[int, QFrame] = {}
+        self._badges: dict[int, QLabel] = {}
+        self._labels: dict[int, QLabel] = {}
+
+        for step, title in _STEPPER_LABELS:
+            pill = QFrame()
+            pill.setMinimumHeight(self._PILL_MIN_HEIGHT_PX)
+            apply_role(pill, "stepper_item_static")
+            inner = QHBoxLayout(pill)
+            inner.setContentsMargins(8, 6, 8, 6)
+            inner.setSpacing(6)
+
+            badge = QLabel(str(step + 1))
+            badge.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            badge.setFixedSize(22, 22)
+            apply_role(badge, "stepper_item_badge")
+
+            label = QLabel(title)
+            apply_role(label, "stepper_item_label")
+
+            inner.addWidget(badge)
+            inner.addWidget(label)
+
+            self._pills[step] = pill
+            self._badges[step] = badge
+            self._labels[step] = label
+            row.addWidget(pill, 1)
+
+    def update_stepper(self, current_step: int) -> None:
+        for step, pill in self._pills.items():
+            badge = self._badges[step]
+            label = self._labels[step]
+            if step < current_step:
+                state, badge_text = "completed", "✓"
+            elif step == current_step:
+                state, badge_text = "current", str(step + 1)
+            else:
+                state, badge_text = "not_started", str(step + 1)
+            apply_variant(pill, state=state)
+            apply_variant(badge, state=state)
+            apply_variant(label, state=state)
+            badge.setText(badge_text)
+
 
 class QuickPracticeWindow(QMainWindow):
-    """M13 Reconstructed Quick Practice Workspace.
+    """M13 Axis 8 Reconstructed Quick Practice Workspace.
 
-    Compact, forward-only cue practice micro-cycle:
-    - Anchored Cue Context & Navigation Header
-    - Step 1: Listen & Self-Assessment Recall Card
-    - Step 2: Reveal & Error Diagnosis Workspace
-    - Step 3: Replay & Shadowing Recording Studio
-    - Step 4: Run Summary Dossier
-    - Hero Primary Progression Action bar
+    One stable left-two/right-one notebook workspace whose internal
+    content changes by step, instead of four separate centered form
+    cards:
+    - Header + persistent 4-step stepper (Listen/Recall, Diagnose,
+      Replay/Shadow, Summary)
+    - Left-top: persistent cue/listening context (cue count, transport,
+      transcript once revealed)
+    - Left-bottom: the active step's processing/work area
+    - Right: labels/diagnosis/evidence support, stable across steps
+    - Footer: primary progression action
+
+    The underlying compact, forward-only cue practice state machine
+    (`_STEP_LISTEN_RECALL` -> `_STEP_DIAGNOSE` -> `_STEP_REPLAY` ->
+    `_STEP_SUMMARY`) is unchanged from the pre-Axis-8 implementation --
+    this Axis changes composition and presentation only.
     """
 
     def __init__(
@@ -103,8 +198,8 @@ class QuickPracticeWindow(QMainWindow):
         self._full_cue_index_by_id = {cue.id: index for index, cue in enumerate(load_result.cues) if cue.id is not None}
         self._session_id = quick_practice_session_id
         self.setWindowTitle(f"ListenTrace — Quick Practice — {self._material.title}")
-        self.resize(920, 700)
-        self.setMinimumSize(780, 560)
+        self.resize(1040, 720)
+        self.setMinimumSize(880, 600)
 
         self._playback = PlaybackController(self)
         grace_ms = loop_grace_service.effective_loop_end_grace_ms(connection, self._material.id)
@@ -125,52 +220,98 @@ class QuickPracticeWindow(QMainWindow):
 
         central = GrainedDeskWidget(self)
         apply_surface(central, "paper")
-        layout = QVBoxLayout(central)
-        layout.setContentsMargins(SPACE_PAGE, SPACE_PAGE, SPACE_PAGE, SPACE_PAGE)
-        layout.setSpacing(SPACE_SECTION)
+        root_layout = QVBoxLayout(central)
+        root_layout.setContentsMargins(SPACE_PAGE, SPACE_PAGE, SPACE_PAGE, SPACE_PAGE)
+        root_layout.setSpacing(SPACE_SECTION)
         apply_surface(self, "paper")
 
         # -------------------------------------------------------------------
-        # 1. Header & Micro-cycle Context
+        # 1. Header
         # -------------------------------------------------------------------
         header = theme.make_surface_header(self._material.title)
         header_row = header.top_bar
-        self._progress_label = QLabel("")
-        apply_role(self._progress_label, "caption")
-        header.title_row.addWidget(self._progress_label, 1)
+        header.title_row.addStretch(1)
 
         close_top_btn = QPushButton("Exit")
         apply_role(close_top_btn, "quiet")
         theme.set_button_icon(close_top_btn, "close", color_token="secondary")
         close_top_btn.clicked.connect(self.close)
         header_row.addWidget(close_top_btn)
-        layout.addLayout(header_row)
+        root_layout.addLayout(header_row)
 
         self._status_label = QLabel("")
         apply_role(self._status_label, "error")
         self._status_label.setWordWrap(True)
-        layout.addWidget(self._status_label)
+        root_layout.addWidget(self._status_label)
 
         # -------------------------------------------------------------------
-        # 2. Main Micro-Cycle Working Stage Stack
+        # 2. Persistent 4-step progress stepper -- a distinct dimension from
+        #    cue progress ("Cue n of N"), never collapsed into one label.
         # -------------------------------------------------------------------
-        self._stack = QStackedWidget()
-        self._stack.addWidget(self._build_listen_recall_panel())
-        self._stack.addWidget(self._build_diagnose_panel())
-        self._stack.addWidget(self._build_replay_panel())
-        self._stack.addWidget(self._build_summary_panel())
-        # M13 corrective: keep the active step card top-centered at a
-        # comfortable working width rather than stretching a small task over
-        # the full window, and keep the progression action directly below it
-        # (see step_column below) instead of far away at the window edge.
-        self._stack.setMaximumWidth(600)
+        self._stepper = QuickPracticeStepper(self)
+        root_layout.addWidget(self._stepper)
 
-        step_column = QVBoxLayout()
-        step_column.addWidget(self._stack, 1)
+        self._progress_label = QLabel("")
+        apply_role(self._progress_label, "caption")
+        root_layout.addWidget(self._progress_label)
 
         # -------------------------------------------------------------------
-        # 3. Action Footer — spatially connected to the active step card,
-        #    not stretched across the full window width.
+        # 3. Stable Left-two / Right-one Workspace
+        # -------------------------------------------------------------------
+        self._workspace_splitter = QSplitter(Qt.Orientation.Horizontal)
+        self._workspace_splitter.setChildrenCollapsible(False)
+
+        left_widget = QWidget()
+        left_layout = QVBoxLayout(left_widget)
+        left_layout.setContentsMargins(0, 0, 0, 0)
+        left_layout.setSpacing(SPACE_SECTION)
+
+        left_layout.addWidget(self._build_cue_context_card())
+
+        self._work_stack = QStackedWidget()
+        self._work_stack.addWidget(self._build_listen_recall_work())
+        self._work_stack.addWidget(self._build_diagnose_work())
+        self._work_stack.addWidget(self._build_replay_work())
+        self._work_stack.addWidget(self._build_summary_work())
+        left_layout.addWidget(self._work_stack, 1)
+
+        left_scroll = QScrollArea()
+        left_scroll.setWidgetResizable(True)
+        left_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        left_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        left_scroll.setWidget(left_widget)
+        self._workspace_splitter.addWidget(left_scroll)
+
+        right_widget = QWidget()
+        right_layout = QVBoxLayout(right_widget)
+        right_layout.setContentsMargins(0, 0, 0, 0)
+        right_layout.setSpacing(SPACE_SECTION)
+
+        self._support_stack = QStackedWidget()
+        self._support_stack.addWidget(self._build_pre_reveal_support())
+        self._support_stack.addWidget(self._build_diagnosis_evidence_support())
+        self._support_stack.addWidget(self._build_summary_support())
+        right_layout.addWidget(self._support_stack, 1)
+
+        right_scroll = QScrollArea()
+        right_scroll.setWidgetResizable(True)
+        right_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        right_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        right_scroll.setWidget(right_widget)
+        self._workspace_splitter.addWidget(right_scroll)
+
+        # Left-two / Right-one, per the frozen Axis-8 composition. An
+        # explicit initial `setSizes()` (not stretch factors alone) is
+        # required here -- without it, right-column QLabels with word wrap
+        # compute their wrapped height against a not-yet-settled splitter
+        # width on the very first layout pass and clip a line of text.
+        self._workspace_splitter.setStretchFactor(0, 2)
+        self._workspace_splitter.setStretchFactor(1, 1)
+        self._workspace_splitter.setSizes([680, 340])
+        root_layout.addWidget(self._workspace_splitter, 1)
+
+        # -------------------------------------------------------------------
+        # 4. Persistent Action Footer
         # -------------------------------------------------------------------
         nav_row = QHBoxLayout()
         nav_row.addStretch(1)
@@ -185,13 +326,7 @@ class QuickPracticeWindow(QMainWindow):
         self._step_action_button.setProperty("hero", "true")
         apply_role(self._step_action_button, "primary")
         nav_row.addWidget(self._step_action_button)
-        step_column.addLayout(nav_row)
-
-        centered_row = QHBoxLayout()
-        centered_row.addStretch(1)
-        centered_row.addLayout(step_column, 0)
-        centered_row.addStretch(1)
-        layout.addLayout(centered_row, 1)
+        root_layout.addLayout(nav_row)
 
         self.setCentralWidget(central)
 
@@ -252,15 +387,25 @@ class QuickPracticeWindow(QMainWindow):
     def _is_last_item(self) -> bool:
         return self._state is not None and self._index == len(self._state.items) - 1
 
+    def _support_page_for_step(self, step: int) -> int:
+        if step == _STEP_LISTEN_RECALL:
+            return _SUPPORT_PAGE_PRE_REVEAL
+        if step in (_STEP_DIAGNOSE, _STEP_REPLAY):
+            return _SUPPORT_PAGE_DIAGNOSIS_EVIDENCE
+        return _SUPPORT_PAGE_SUMMARY
+
     def _render_current_step(self) -> None:
         if self._state is None:
             return
         total = len(self._state.items)
+        self._stepper.update_stepper(self._step)
         if self._step == _STEP_SUMMARY:
             self._progress_label.setText(f"Quick Practice — {self._state.session.status.upper()}")
         else:
             self._progress_label.setText(f"Cue {self._index + 1} of {total}")
-        self._stack.setCurrentIndex(self._step)
+        self._work_stack.setCurrentIndex(self._step)
+        self._support_stack.setCurrentIndex(self._support_page_for_step(self._step))
+        self._populate_cue_context()
         self._sync_playback_button_texts()
         if self._step == _STEP_LISTEN_RECALL:
             self._populate_listen_recall()
@@ -420,9 +565,158 @@ class QuickPracticeWindow(QMainWindow):
         elif self._step == _STEP_REPLAY:
             self._on_finish_item_clicked()
 
-    # ---- Step 1+2: Listen & Recall ----
+    # ---- Left-top: persistent cue / listening context ----
 
-    def _build_listen_recall_panel(self) -> QWidget:
+    def _build_cue_context_card(self) -> QWidget:
+        """The left-top persistent region (A8-03): cue identity, listening
+        controls, and the transcript once revealed. One shared transport
+        row (not per-step duplicates) -- `_listen_*`/`_replay_*` attribute
+        names below are preserved aliases onto these same buttons, kept
+        only because they're still the names the pre-Axis-8 test suite and
+        `_sync_playback_button_texts`/`_set_playback_controls_enabled`
+        already key off of.
+        """
+        card, layout = theme.make_card()
+        apply_surface(card, "paper")
+
+        transport_row = QHBoxLayout()
+        self._transport_play_button = QPushButton("Play")
+        self._transport_play_button.clicked.connect(self._on_play_clicked)
+        apply_role(self._transport_play_button, "secondary")
+
+        self._transport_replay_button = QPushButton("Replay Cue")
+        self._transport_replay_button.clicked.connect(self._on_replay_clicked)
+        apply_role(self._transport_replay_button, "secondary")
+
+        self._transport_loop_button = QPushButton("Loop Cue")
+        self._transport_loop_button.clicked.connect(self._on_loop_clicked)
+        apply_role(self._transport_loop_button, "secondary")
+
+        self._transport_loop_settings_button = QPushButton("Loop Settings...")
+        self._transport_loop_settings_button.clicked.connect(self._on_open_loop_settings)
+        apply_role(self._transport_loop_settings_button, "quiet")
+
+        self._transport_time_label = QLabel("00:00 / 00:00")
+        apply_role(self._transport_time_label, "monospace")
+
+        # Preserved aliases (see docstring above) -- same widgets, both names.
+        self._listen_play_button = self._transport_play_button
+        self._listen_replay_button = self._transport_replay_button
+        self._listen_loop_button = self._transport_loop_button
+        self._listen_loop_settings_button = self._transport_loop_settings_button
+        self._listen_time_label = self._transport_time_label
+        self._replay_play_button = self._transport_play_button
+        self._replay_replay_button = self._transport_replay_button
+        self._replay_loop_button = self._transport_loop_button
+        self._replay_loop_settings_button = self._transport_loop_settings_button
+        self._replay_time_label = self._transport_time_label
+
+        for button in (
+            self._transport_play_button,
+            self._transport_replay_button,
+            self._transport_loop_button,
+            self._transport_loop_settings_button,
+        ):
+            transport_row.addWidget(button)
+        transport_row.addStretch(1)
+        transport_row.addWidget(self._transport_time_label)
+        layout.addLayout(transport_row)
+
+        # Transcript reference -- hidden pre-reveal (Step 1's "listen
+        # without transcript" design intent), shown from Step 2 onward.
+        # A8-03/A8-06: the single shared reference area for Diagnose AND
+        # Replay/Shadow, so shadowing the cue never needs a second,
+        # duplicated cue-text label the way the pre-Axis-8 Step 3 card had.
+        self._diagnosis_transcript_view = QTextEdit()
+        self._diagnosis_transcript_view.setReadOnly(True)
+        self._diagnosis_transcript_view.setMinimumHeight(70)
+        self._diagnosis_transcript_view.setMaximumHeight(110)
+        layout.addWidget(self._diagnosis_transcript_view)
+
+        return card
+
+    def _populate_cue_context(self) -> None:
+        cue = self._current_cue()
+        transcript_visible = self._step in (_STEP_DIAGNOSE, _STEP_REPLAY)
+        self._diagnosis_transcript_view.setVisible(transcript_visible)
+        transport_visible = self._step != _STEP_SUMMARY
+        for widget in (
+            self._transport_play_button,
+            self._transport_replay_button,
+            self._transport_loop_button,
+            self._transport_loop_settings_button,
+            self._transport_time_label,
+        ):
+            widget.setVisible(transport_visible)
+
+        if transcript_visible and cue is not None:
+            item_state = self._current_item_state()
+            self._diagnosis_transcript_view.setPlainText(cue.text)
+            if item_state is not None:
+                self._current_diagnosis_evidence = item_state.diagnosis
+                colors = label_preference_service.get_label_preferences(self._connection)
+                apply_range_highlighting(
+                    self._diagnosis_transcript_view, cue.text, item_state.diagnosis, colors, _OVERLAP_HIGHLIGHT
+                )
+        elif not transcript_visible:
+            self._diagnosis_transcript_view.clear()
+
+        self._set_playback_controls_enabled(transport_visible and cue is not None and self._playback_usable)
+
+    # ---- Right support column ----
+
+    def _build_pre_reveal_support(self) -> QWidget:
+        """A restrained, intentional empty state (A8-03) -- Step 1
+        genuinely has no diagnosis/evidence data yet (the transcript
+        hasn't even been revealed), so this deliberately stays calm
+        rather than inventing content to fill the column."""
+        panel, layout = theme.make_card("Evidence & Diagnosis")
+        apply_surface(panel, "paper")
+        hint = QLabel("Diagnosis and evidence will appear here once you reveal the transcript.")
+        hint.setWordWrap(True)
+        apply_role(hint, "caption")
+        layout.addWidget(hint)
+        layout.addStretch(1)
+        return panel
+
+    def _build_diagnosis_evidence_support(self) -> QWidget:
+        """Shared by Diagnose and Replay/Shadow (A8-06 continuity) -- the
+        same real evidence stays visible and unduplicated across both
+        steps rather than being rebuilt or shown only once."""
+        panel, layout = theme.make_card("Evidence & Diagnosis")
+        apply_surface(panel, "paper")
+
+        self._heard_fragment_reference_label = QLabel("")
+        self._heard_fragment_reference_label.setWordWrap(True)
+        apply_role(self._heard_fragment_reference_label, "ui_label")
+        layout.addWidget(self._heard_fragment_reference_label)
+
+        diag_hdr = QLabel("Diagnosis recorded on this cue during this run:")
+        diag_hdr.setWordWrap(True)
+        apply_role(diag_hdr, "ui_label")
+        layout.addWidget(diag_hdr)
+
+        self._diagnosis_list = QListWidget()
+        apply_role(self._diagnosis_list, "ruled_list")
+        theme.configure_long_text_list(self._diagnosis_list)
+        self._diagnosis_list.currentItemChanged.connect(self._on_diagnosis_selected)
+        layout.addWidget(self._diagnosis_list, 1)
+
+        return panel
+
+    def _build_summary_support(self) -> QWidget:
+        panel, layout = theme.make_card("Run Status")
+        apply_surface(panel, "paper")
+        self._summary_status_label = QLabel("")
+        apply_role(self._summary_status_label, "subtitle")
+        self._summary_status_label.setWordWrap(True)
+        layout.addWidget(self._summary_status_label)
+        layout.addStretch(1)
+        return panel
+
+    # ---- Step 1: Listen & Recall (left-bottom work) ----
+
+    def _build_listen_recall_work(self) -> QWidget:
         panel, layout = theme.make_card()
         apply_surface(panel, "paper")
 
@@ -430,45 +724,13 @@ class QuickPracticeWindow(QMainWindow):
         apply_role(inst_lbl, "subtitle")
         layout.addWidget(inst_lbl)
 
-        # Audio Bar Card
-        audio_card = QFrame()
-        apply_role(audio_card, "inset_panel")
-        transport_row = QHBoxLayout(audio_card)
-        transport_row.setContentsMargins(8, 6, 8, 6)
-
-        self._listen_play_button = QPushButton("Play")
-        self._listen_play_button.clicked.connect(self._on_play_clicked)
-        apply_role(self._listen_play_button, "secondary")
-
-        self._listen_replay_button = QPushButton("Replay Cue")
-        self._listen_replay_button.clicked.connect(self._on_replay_clicked)
-        apply_role(self._listen_replay_button, "secondary")
-
-        self._listen_loop_button = QPushButton("Loop Cue")
-        self._listen_loop_button.clicked.connect(self._on_loop_clicked)
-        apply_role(self._listen_loop_button, "secondary")
-
-        self._listen_loop_settings_button = QPushButton("Loop Settings...")
-        self._listen_loop_settings_button.clicked.connect(self._on_open_loop_settings)
-        apply_role(self._listen_loop_settings_button, "quiet")
-
-        self._listen_time_label = QLabel("00:00 / 00:00")
-        apply_role(self._listen_time_label, "monospace")
-
-        for button in (
-            self._listen_play_button,
-            self._listen_replay_button,
-            self._listen_loop_button,
-            self._listen_loop_settings_button,
-        ):
-            transport_row.addWidget(button)
-        transport_row.addStretch(1)
-        transport_row.addWidget(self._listen_time_label)
-        layout.addWidget(audio_card)
-
-        # Recall Options Card
-        recall_card, recall_layout = theme.make_card()
-        apply_surface(recall_card, "paper")
+        # M13 Axis 8 (A8-05): the learner's own active processing surface
+        # -- a neutral notebook/note treatment (mini-notebook: "a hand-sized
+        # spiral notebook page for one control group"), not a diagnosis-
+        # colored or generic form card. `DiagnosisNoteRow` is deliberately
+        # NOT reused here -- that primitive carries diagnosis/evidence
+        # semantics this content doesn't have.
+        recall_notebook, recall_layout = theme.make_mini_notebook("Self-Assessment")
 
         recall_hdr = QLabel("Comprehension Self-Assessment:")
         apply_role(recall_hdr, "ui_label")
@@ -494,18 +756,16 @@ class QuickPracticeWindow(QMainWindow):
         self._heard_fragment_edit.setPlaceholderText("Enter words or sounds you caught...")
         recall_layout.addWidget(self._heard_fragment_edit)
 
-        layout.addWidget(recall_card)
+        layout.addWidget(recall_notebook)
         layout.addStretch(1)
         return panel
 
     def _populate_listen_recall(self) -> None:
-        cue = self._current_cue()
         for radio in self._recall_radio_buttons.values():
             radio.blockSignals(True)
             radio.setChecked(False)
             radio.blockSignals(False)
         self._heard_fragment_edit.clear()
-        self._set_playback_controls_enabled(cue is not None and self._playback_usable)
         self._step_action_button.setText("Reveal and Continue")
         self._step_action_button.setEnabled(False)
         self._close_button.setEnabled(True)
@@ -532,9 +792,9 @@ class QuickPracticeWindow(QMainWindow):
         self._step = _STEP_DIAGNOSE
         self._refresh_state()
 
-    # ---- Step 3: Reveal & Diagnose ----
+    # ---- Step 2: Reveal & Diagnose (left-bottom work) ----
 
-    def _build_diagnose_panel(self) -> QWidget:
+    def _build_diagnose_work(self) -> QWidget:
         panel, layout = theme.make_card()
         apply_surface(panel, "paper")
 
@@ -542,24 +802,9 @@ class QuickPracticeWindow(QMainWindow):
         apply_role(inst_lbl, "subtitle")
         layout.addWidget(inst_lbl)
 
-        self._diagnosis_transcript_view = QTextEdit()
-        self._diagnosis_transcript_view.setReadOnly(True)
-        self._diagnosis_transcript_view.setMinimumHeight(70)
-        self._diagnosis_transcript_view.setMaximumHeight(95)
-        layout.addWidget(self._diagnosis_transcript_view)
-
-        self._heard_fragment_reference_label = QLabel("")
-        self._heard_fragment_reference_label.setWordWrap(True)
-        apply_role(self._heard_fragment_reference_label, "ui_label")
-        layout.addWidget(self._heard_fragment_reference_label)
-
-        # M13 Axis 7: a rigid fixed-column grid clips/hard-packs whichever
-        # label lands in a too-narrow column once the Axis-6 display font
-        # widened these checkbox labels -- a wrapping FlowLayout (the same
-        # shared primitive Quick Practice's own recommendation-reason tags
-        # use) reflows however many labels actually fit the real available
-        # width onto each line instead of a column count baked in ahead of
-        # time.
+        # M13 Axis 7: a wrapping FlowLayout, not the old rigid fixed-column
+        # grid -- see guided_session_window.py's identical corrective for
+        # the shared rationale.
         label_grid_widget = QWidget()
         label_grid = FlowLayout(label_grid_widget, h_spacing=SPACE_SECTION, v_spacing=SPACE_NORMAL)
         self._diagnosis_label_checkboxes: dict[str, QCheckBox] = {}
@@ -605,17 +850,6 @@ class QuickPracticeWindow(QMainWindow):
         buttons_row.addStretch(1)
         layout.addLayout(buttons_row)
 
-        diag_hdr = QLabel("Diagnosis recorded on this cue during this run:")
-        apply_role(diag_hdr, "ui_label")
-        layout.addWidget(diag_hdr)
-
-        self._diagnosis_list = QListWidget()
-        apply_role(self._diagnosis_list, "ruled_list")
-        theme.configure_long_text_list(self._diagnosis_list)
-        self._diagnosis_list.setMaximumHeight(85)
-        self._diagnosis_list.currentItemChanged.connect(self._on_diagnosis_selected)
-        layout.addWidget(self._diagnosis_list)
-
         layout.addStretch(1)
         return panel
 
@@ -624,19 +858,22 @@ class QuickPracticeWindow(QMainWindow):
         item_state = self._current_item_state()
         if cue is None or item_state is None:
             return
-        self._diagnosis_transcript_view.setPlainText(cue.text)
         fragment = item_state.item.heard_fragment
         self._heard_fragment_reference_label.setText(
             f"What you said you heard: {fragment}" if fragment else "You did not enter a heard fragment."
         )
 
         self._current_diagnosis_evidence = item_state.diagnosis
-        colors = label_preference_service.get_label_preferences(self._connection)
-        apply_range_highlighting(self._diagnosis_transcript_view, cue.text, item_state.diagnosis, colors, _OVERLAP_HIGHLIGHT)
+        self._refresh_diagnosis_evidence_list(item_state.diagnosis)
+        self._clear_diagnosis_form()
+        self._step_action_button.setText("Continue to Shadowing")
+        self._step_action_button.setEnabled(True)
 
+    def _refresh_diagnosis_evidence_list(self, diagnosis: list) -> None:
+        colors = label_preference_service.get_label_preferences(self._connection)
         self._diagnosis_list.blockSignals(True)
         self._diagnosis_list.clear()
-        for diag in item_state.diagnosis:
+        for diag in diagnosis:
             heard_as_suffix = f" (heard as: {diag.heard_as})" if diag.heard_as else ""
             item = QListWidgetItem()
             item.setData(Qt.ItemDataRole.UserRole, diag.id)
@@ -648,10 +885,6 @@ class QuickPracticeWindow(QMainWindow):
             item.setSizeHint(theme.ruled_list_row_size_hint(row))
             self._diagnosis_list.setItemWidget(item, row)
         self._diagnosis_list.blockSignals(False)
-
-        self._clear_diagnosis_form()
-        self._step_action_button.setText("Continue to Shadowing")
-        self._step_action_button.setEnabled(True)
 
     def _clear_diagnosis_form(self) -> None:
         for checkbox in self._diagnosis_label_checkboxes.values():
@@ -752,65 +985,28 @@ class QuickPracticeWindow(QMainWindow):
             self._show_status(str(exc))
         self._refresh_state()
 
-    # ---- Step 4: Replay & Shadow ----
+    # ---- Step 3: Replay & Shadow (left-bottom work) ----
 
-    def _build_replay_panel(self) -> QWidget:
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        apply_surface(scroll, "paper")
-
+    def _build_replay_work(self) -> QWidget:
+        """M13 Axis 8 (A8-06): `RecordingPanel` hosted directly in the
+        left-bottom processing region -- the real, evidenced structural
+        overflow root cause (Axis 7's finding) was Quick Practice's old
+        ~600px centered card, not `RecordingPanel` itself (which already
+        renders with zero overflow in the full-width standalone Shadowing
+        Practice window). Removing that narrow host, not patching
+        `RecordingPanel`, is what eliminates the overflow."""
         panel = QWidget()
         apply_surface(panel, "paper")
         layout = QVBoxLayout(panel)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(SPACE_NORMAL)
 
-        # Cue Card
-        cue_card, cue_layout = theme.make_card()
-        apply_surface(cue_card, "paper")
-
         inst_lbl = QLabel("Step 3: Replay the cue and shadow aloud.")
         apply_role(inst_lbl, "subtitle")
-        cue_layout.addWidget(inst_lbl)
+        layout.addWidget(inst_lbl)
 
-        self._replay_cue_label = QLabel("")
-        self._replay_cue_label.setWordWrap(True)
-        apply_role(self._replay_cue_label, "dominant_cue")
-        cue_layout.addWidget(self._replay_cue_label)
-
-        transport_row = QHBoxLayout()
-        self._replay_play_button = QPushButton("Play")
-        self._replay_play_button.clicked.connect(self._on_play_clicked)
-        apply_role(self._replay_play_button, "secondary")
-
-        self._replay_replay_button = QPushButton("Replay Cue")
-        self._replay_replay_button.clicked.connect(self._on_replay_clicked)
-        apply_role(self._replay_replay_button, "secondary")
-
-        self._replay_loop_button = QPushButton("Loop Cue")
-        self._replay_loop_button.clicked.connect(self._on_loop_clicked)
-        apply_role(self._replay_loop_button, "secondary")
-
-        self._replay_loop_settings_button = QPushButton("Loop Settings...")
-        self._replay_loop_settings_button.clicked.connect(self._on_open_loop_settings)
-        apply_role(self._replay_loop_settings_button, "quiet")
-
-        self._replay_time_label = QLabel("00:00 / 00:00")
-        apply_role(self._replay_time_label, "monospace")
-
-        transport_row.addWidget(self._replay_play_button)
-        transport_row.addWidget(self._replay_replay_button)
-        transport_row.addWidget(self._replay_loop_button)
-        transport_row.addWidget(self._replay_loop_settings_button)
-        transport_row.addStretch(1)
-        transport_row.addWidget(self._replay_time_label)
-        cue_layout.addLayout(transport_row)
-        layout.addWidget(cue_card)
-
-        # Recording Panel
         layout.addWidget(self._recording_panel)
 
-        # Shadowed Action
         action_card, action_layout = theme.make_card()
         apply_surface(action_card, "paper")
         self._mark_shadowed_button = QPushButton("Mark Shadowed (Optional)")
@@ -821,16 +1017,13 @@ class QuickPracticeWindow(QMainWindow):
         layout.addWidget(action_card)
 
         layout.addStretch(1)
-        scroll.setWidget(panel)
-        return scroll
+        return panel
 
     def _populate_replay(self) -> None:
         cue = self._current_cue()
         item_state = self._current_item_state()
         if cue is None or item_state is None:
             return
-        self._replay_cue_label.setText(f"[{_format_time(cue.start_ms)}-{_format_time(cue.end_ms)}] {cue.text}")
-        self._set_playback_controls_enabled(self._playback_usable)
         if cue.id is not None:
             self._recording_panel.set_context(self._material.id, cue.id, None)
 
@@ -884,17 +1077,29 @@ class QuickPracticeWindow(QMainWindow):
         self._recording_panel.abort_active_recording()
         self._refresh_state()
 
-    # ---- Summary Step ----
+    # ---- Step 4: Summary (left-bottom work + right status) ----
 
-    def _build_summary_panel(self) -> QWidget:
-        panel, layout = theme.make_card("Quick Practice Run Summary")
+    def _build_summary_work(self) -> QWidget:
+        """M13 Axis 8 (A8-07): the completion state as a written-up study
+        note rather than a mostly-empty generic card -- `_summary_label`
+        (same widget name/content contract as before this Axis) now lives
+        inside a ruled-notebook mini-notebook body instead of a plain flat
+        card, and gains a prominent headline metric above it."""
+        panel, layout = theme.make_card()
         apply_surface(panel, "paper")
 
+        self._summary_headline_label = QLabel("")
+        apply_role(self._summary_headline_label, "dominant_cue")
+        layout.addWidget(self._summary_headline_label)
+
+        summary_notebook, summary_body = theme.make_mini_notebook("Run Summary")
         self._summary_label = QLabel("")
         self._summary_label.setWordWrap(True)
-        apply_role(self._summary_label, "subtitle")
-        layout.addWidget(self._summary_label)
-        layout.addStretch(1)
+        apply_role(self._summary_label, "body")
+        summary_body.addWidget(self._summary_label)
+        summary_body.addStretch(1)
+        layout.addWidget(summary_notebook, 1)
+
         return panel
 
     def _populate_summary(self) -> None:
@@ -902,10 +1107,13 @@ class QuickPracticeWindow(QMainWindow):
             return
         status = self._state.session.status
         if status != QuickPracticeStatus.COMPLETED.value:
+            self._summary_headline_label.setText("")
             self._summary_label.setText(f"This Quick Practice run is {status}.")
+            self._summary_status_label.setText(f"Status: {status}.")
             self._step_action_button.setEnabled(False)
             return
         summary = svc.build_completion_summary(self._connection, self._session_id)
+        self._summary_headline_label.setText(f"Cues completed: {summary.cues_completed}")
         lines = [
             f"Cues completed: {summary.cues_completed}",
             f"Understood: {summary.understood_count}   Partly Understood: {summary.partly_understood_count}   "
@@ -924,6 +1132,7 @@ class QuickPracticeWindow(QMainWindow):
                 lines.append("Cues worth revisiting:")
                 lines.extend(texts)
         self._summary_label.setText("\n".join(lines))
+        self._summary_status_label.setText("Status: completed.")
         self._step_action_button.setText("Done")
         self._step_action_button.setEnabled(True)
         try:

@@ -13,7 +13,6 @@ from PySide6.QtWidgets import (
     QListWidget,
     QListWidgetItem,
     QPushButton,
-    QRadioButton,
     QVBoxLayout,
     QWidget,
 )
@@ -74,18 +73,24 @@ class QuickPracticeStartDialog(QDialog):
         regions_row = QHBoxLayout()
         regions_row.setSpacing(theme.SPACE_SECTION)
 
-        # LEFT: PRACTICE SOURCE
+        # LEFT: PRACTICE SOURCE -- M13 Axis 8: the two real source modes
+        # (Recommended Practice / Selected Cues) as notebook bookmark/
+        # top-edge tabs rather than plain radio buttons. Same exclusive
+        # single-selection behavior underneath (a QButtonGroup of checkable
+        # buttons, not radios); only the selector's visual language changed.
         source_card, source_column = theme.make_card("Practice Source", decorated=False)
         self._source_group = QButtonGroup(self)
-        self._recommended_radio = QRadioButton("Recommended Practice")
-        self._selected_radio = QRadioButton("Selected Cues")
-        theme.apply_role(self._recommended_radio, "ui_label")
-        theme.apply_role(self._selected_radio, "ui_label")
+        self._recommended_radio = theme.make_bookmark_tab("Recommended Practice")
+        self._selected_radio = theme.make_bookmark_tab("Selected Cues")
         self._source_group.addButton(self._recommended_radio)
         self._source_group.addButton(self._selected_radio)
         self._recommended_radio.toggled.connect(self._on_source_changed)
-        source_column.addWidget(self._recommended_radio)
-        source_column.addWidget(self._selected_radio)
+        tabs_row = QHBoxLayout()
+        tabs_row.setSpacing(0)
+        tabs_row.addWidget(self._recommended_radio)
+        tabs_row.addWidget(self._selected_radio)
+        tabs_row.addStretch(1)
+        source_column.addLayout(tabs_row)
 
         recommended_row = QHBoxLayout()
         count_lbl = QLabel("Number of cues:")
@@ -111,10 +116,19 @@ class QuickPracticeStartDialog(QDialog):
         preview_column.addWidget(self._recommended_preview, 1)
         selection_column.addWidget(preview_card, 1)
 
-        cues_card, cues_column = theme.make_card(
-            "Cues (select one, a range, or several — material timeline order is preserved)",
-            decorated=False,
-        )
+        cues_card, cues_column = theme.make_card(decorated=False)
+        # M13 Axis 8: static informational icon identifying this region as
+        # cue content, per the accepted Axis-5 informational-icon system
+        # (theme.make_icon_label() -- a plain, non-clickable QLabel icon,
+        # never a substitute for the existing text heading it sits beside).
+        cues_heading_row = QHBoxLayout()
+        cues_heading_row.setSpacing(theme.SPACE_COMPACT)
+        cues_heading_row.addWidget(theme.make_icon_label("waveform"))
+        cues_heading_label = QLabel("Cues (select one, a range, or several — material timeline order is preserved)")
+        cues_heading_label.setWordWrap(True)
+        theme.apply_role(cues_heading_label, "caption")
+        cues_heading_row.addWidget(cues_heading_label, 1)
+        cues_column.addLayout(cues_heading_row)
         self._cue_list = QListWidget()
         theme.configure_long_text_list(self._cue_list)
         self._cue_list.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
@@ -163,6 +177,8 @@ class QuickPracticeStartDialog(QDialog):
 
     def _on_source_changed(self, *_args) -> None:
         is_recommended = self._recommended_radio.isChecked()
+        theme.apply_variant(self._recommended_radio, selected="true" if is_recommended else "false")
+        theme.apply_variant(self._selected_radio, selected="false" if is_recommended else "true")
         self._count_combo.setEnabled(is_recommended)
         self._recommended_preview.setEnabled(is_recommended)
         self._cue_list.setEnabled(not is_recommended)

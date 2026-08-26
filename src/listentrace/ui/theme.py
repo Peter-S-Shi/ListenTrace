@@ -658,6 +658,25 @@ def make_paper_tag(text: str) -> QLabel:
     return label
 
 
+def make_bookmark_tab(text: str) -> QPushButton:
+    """A checkable `role="bookmark_tab"` `QPushButton` (M13 Axis 8) -- the
+    shared primitive for a small, fixed set of mutually-exclusive source
+    choices styled as notebook bookmarks/top-edge tabs rather than plain
+    radio buttons. Callers add each tab to a `QButtonGroup` (exclusive by
+    default) for the real single-selection behavior, then toggle
+    `apply_variant(tab, selected="true"/"false")` on `toggled` to drive the
+    "attached to the panel below" selected look. Not a real `QTabWidget`:
+    callers keep their own existing content-switching logic (e.g. enabling/
+    disabling sibling widgets) exactly as before -- only the selector's
+    visual language changes.
+    """
+    button = QPushButton(text)
+    button.setCheckable(True)
+    apply_role(button, "bookmark_tab")
+    apply_variant(button, selected="false")
+    return button
+
+
 def make_reason_tag_row(cue_label: str, reasons: list[str]) -> QWidget:
     """A recommendation-preview row: ordinary readable cue/time/text on its
     own line, followed by a `FlowLayout` of `make_paper_tag()` reason tags
@@ -1946,6 +1965,41 @@ QPushButton:focus {{
     border: 2px solid {css('focus', m)};
 }}
 
+/* M13 Axis 8: a notebook bookmark/top-edge-tab selector for a small,
+   fixed set of mutually-exclusive source choices (Quick Practice Start's
+   "Recommended Practice" / "Selected Cues") -- checkable QPushButtons in
+   a QButtonGroup, not radios, so the selected tab reads as visually
+   "attached" to the content panel beneath it (flush bottom border merging
+   into the panel) while the unselected tab sits behind/muted, the classic
+   physical-notebook-bookmark cue. Handwriting-tier font: these are short,
+   personality-bearing selector labels, not reading content. */
+QPushButton[role="bookmark_tab"] {{
+    background-color: {css('surface_soft', m)};
+    color: {css('secondary', m)};
+    border: {BORDER_WIDTH}px solid {css('line', m)};
+    border-bottom: none;
+    border-top-left-radius: {RADIUS_CONTROL + 2}px;
+    border-top-right-radius: {RADIUS_CONTROL + 2}px;
+    border-bottom-left-radius: 0px;
+    border-bottom-right-radius: 0px;
+    padding: {SPACE_NORMAL}px {SPACE_MEDIUM}px;
+    font-family: {HANDWRITING_FONT_FAMILY};
+    font-size: 13px;
+    font-weight: 600;
+}}
+QPushButton[role="bookmark_tab"]:hover {{
+    background-color: {css('accent_subtle', m)};
+}}
+QPushButton[role="bookmark_tab"][selected="true"] {{
+    background-color: {css('surface_paper', m)};
+    color: {css('handwritten_blue', m)};
+    border: {BORDER_WIDTH}px solid {css('accent', m)};
+    border-bottom: 2px solid {css('surface_paper', m)};
+}}
+QPushButton[role="bookmark_tab"]:focus {{
+    border: 2px solid {css('focus', m)};
+}}
+
 /* Shared state-card rendering vocabulary (M13 Stage B, G15): the visual
    mechanics genuinely common to Guided Session's StageStepper items and
    Quiz's QuizOptionCard answer cards -- border/radius, focus treatment,
@@ -1979,6 +2033,33 @@ QPushButton[role="stepper_item"][state="skipped"]:hover {{
 }}
 QPushButton[role="stepper_item"][state="not_started"],
 QPushButton[role="stepper_item"][state="not_started"]:disabled {{
+    background: {css('surface_soft', m)};
+    border: {BORDER_WIDTH}px solid {css('line', m)};
+}}
+
+/* M13 Axis 8: a non-interactive twin of `stepper_item` for surfaces whose
+   product behavior is strictly forward-only (Quick Practice's 4-step
+   micro-cycle has no arbitrary stage jump, unlike Guided Session) -- same
+   pill/border-per-state visual grammar, but a `QFrame` rather than a
+   `QPushButton` so there is no click target, no focus ring, and no
+   Enter/Space activation to wire up (the Axis-8 prompt's explicit "do not
+   invent stepper navigation" boundary). The `stepper_item_badge`/
+   `stepper_item_label` `QLabel` roles below are already widget-agnostic
+   (selector keys only on `role`/`state`, not on the parent's type), so
+   they render identically inside either container -- only this pill
+   selector needed a `QFrame` counterpart. */
+QFrame[role="stepper_item_static"] {{
+    border-radius: {RADIUS_STATE_CARD}px;
+}}
+QFrame[role="stepper_item_static"][state="current"] {{
+    background: {css('accent_subtle', m)};
+    border: 1.5px solid {css('accent', m)};
+}}
+QFrame[role="stepper_item_static"][state="completed"] {{
+    background: {css('surface_paper', m)};
+    border: {BORDER_WIDTH}px solid {css('success', m)};
+}}
+QFrame[role="stepper_item_static"][state="not_started"] {{
     background: {css('surface_soft', m)};
     border: {BORDER_WIDTH}px solid {css('line', m)};
 }}
