@@ -1166,7 +1166,15 @@ class GuidedSessionWindow(QMainWindow):
 
         self._set_diagnosis_playback_controls_enabled(revealed and self._playback_usable and not read_only)
         self._save_diagnosis_button.setEnabled(revealed and not read_only)
-        self._no_difficulty_button.setEnabled(revealed and not read_only)
+        # M14 Corrective Batch B (B2): `mark_stage3_no_difficulty` rejects the
+        # action outright once any session diagnosis evidence exists
+        # (`practice_session_service.mark_stage3_no_difficulty`) -- mirror
+        # that same domain truth here so the button never presents itself as
+        # available only to fail after the click. The service check remains
+        # the ultimate invariant; this is proactive UI truthfulness, not a
+        # replacement for it.
+        has_diagnosis_evidence = len(state.session_diagnosis) > 0
+        self._no_difficulty_button.setEnabled(revealed and not read_only and not has_diagnosis_evidence)
 
         if revealed and self._cues:
             index = self._diagnosis_cue_index if self._diagnosis_cue_index is not None else 0

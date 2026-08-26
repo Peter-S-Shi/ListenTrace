@@ -17,8 +17,8 @@ from PySide6.QtWidgets import (
 from listentrace.application.errors import SessionValidationError
 from listentrace.application.services import practice_session_service as svc
 from listentrace.domain.enums.session_status import SessionStatus
+from listentrace.domain.services.time_display import format_local_timestamp
 from listentrace.ui import theme
-from listentrace.ui.time_display import format_local_timestamp
 
 _DELETE_CONFIRMATION_TEXT = (
     "Delete this practice session record?\n\n"

@@ -9,6 +9,7 @@ from PySide6.QtWidgets import QMessageBox
 
 from listentrace.application.services import annotation_service, cue_note_service
 from listentrace.application.services import label_preference_service
+from listentrace.application.services import material_library_service as library
 from listentrace.application.services import saved_language_item_service as item_service
 from listentrace.application.services.material_import_service import import_material
 from listentrace.application.services.player_loading_service import load_material_for_player
@@ -51,6 +52,39 @@ def _select_range(window, start, end):
     cursor.setPosition(start)
     cursor.setPosition(end, QTextCursor.MoveMode.KeepAnchor)
     window._editing_transcript_view.setTextCursor(cursor)
+
+
+def test_removing_material_while_player_open_then_saving_leaves_no_orphan_write(qapp, conn, tmp_path):
+    """M14 Corrective Batch B (B3): permanent regression for the Phase 1
+    audit's disposable diagnostic. Removing a material through the real
+    Library service path while a Player window is still open on it, then
+    attempting a representative write (Save Annotation) from that still-open
+    window, must not crash, must not create an orphan `annotation` row, and
+    must leave the material's cascade-deleted rows actually gone -- the
+    write path is defensively validated (the target cue no longer exists) and
+    surfaces a handled, user-visible status message instead of an unhandled
+    exception or a silent no-op."""
+    window, material_id = _open_window(conn, tmp_path)
+    window._cue_list.setCurrentRow(0)
+    _select_range(window, 0, 7)
+    window._label_checkboxes["keyword"].setChecked(True)
+
+    recordings_dir = tmp_path / "recordings"
+    recordings_dir.mkdir()
+    library.remove_material(conn, recordings_dir, material_id)
+
+    # Must not raise.
+    window._on_save_annotation_clicked()
+
+    assert conn.execute("SELECT COUNT(*) FROM annotation").fetchone()[0] == 0, (
+        "no orphan annotation row may be created against a cascade-deleted material"
+    )
+    assert conn.execute("SELECT COUNT(*) FROM material WHERE id = ?", (material_id,)).fetchone()[0] == 0
+    assert conn.execute("SELECT COUNT(*) FROM subtitle_cue").fetchone()[0] == 0
+    assert window._workspace_status_label.text() != "", (
+        "the failed write must surface a handled, user-visible status message"
+    )
+    window.close()
 
 
 def test_editing_cue_independent_of_active_playback_cue(qapp, conn, tmp_path):

@@ -17,8 +17,8 @@ from PySide6.QtWidgets import (
 from listentrace.application.errors import QuizValidationError
 from listentrace.application.services import quiz_service as svc
 from listentrace.domain.enums.quiz_status import QuizStatus
+from listentrace.domain.services.time_display import format_local_timestamp
 from listentrace.ui import theme
-from listentrace.ui.time_display import format_local_timestamp
 
 _DELETE_CONFIRMATION_TEXT = (
     "Delete this quiz attempt record?\n\n"

@@ -16,6 +16,8 @@
 
 **PH-3 acceptance-gap update**: Product Owner remote review gave the initial Batch A implementation a **CONDITIONAL PASS** — A1 and A3 (P2-3, P2-1) were accepted outright; A2 and A4 (P2-4, P2-2) each had one bounded gap. Both gaps are now closed (see P2-2's and P2-4's `[RESOLVED — Batch A / A4]`/`[RESOLVED — Batch A / A2]` entries in Section B for the acceptance-gap fix detail) — **all four Batch A findings are now fully resolved with no open conditions.**
 
+**Batch B status update**: M14 Corrective Batch B — Semantic & Time-Display Correctness — closes the two remaining confirmed defects, **P2-5 and P3-1** (both marked `[RESOLVED — Batch B]` in Section B below), and adds a permanent regression test locking in the remove-while-open-window safety property Correction 3c verified by disposable diagnostic (see Section E, former test gap 8, now closed). **All 6 confirmed defects from the accepted Phase 1 map are now resolved.** Only G-1 and G-2 (governance/documentation drift, Section G) remain open, plus the Correction-1 `LabelColorDialog` dead-code cleanup explicitly deferred to a later "Batch C."
+
 ---
 
 ## A. Executive Verdict
@@ -29,7 +31,7 @@
   - TEST COVERAGE GAP: 10
   - HUMAN-ONLY VERIFICATION REQUIRED: 4
   - ACCEPTED LIMITATION / NON-DEFECT (positively verified, no action needed): 20 (corrected from an earlier draft's miscount of 17 against Section H's actual 20-item list; Section H is the source of truth)
-  - **Post-acceptance**: 4 of the 6 confirmed defects (P2-1, P2-2, P2-3, P2-4) are now `[RESOLVED — Batch A]`; 2 remain open (P2-5, P3-1).
+  - **Post-acceptance**: all 6 confirmed defects are now resolved — P2-1, P2-2, P2-3, P2-4 via `[RESOLVED — Batch A]`, P2-5 and P3-1 via `[RESOLVED — Batch B]`.
 
 ---
 
@@ -72,16 +74,19 @@
 - Observed vs expected: a `PlayerWindow`/`GuidedSessionWindow`/`QuizWindow` already open on material X keeps showing the stale title indefinitely after a rename from the Library — the only one of the four mutating actions with a live-window consistency gap and *zero* signal of any kind (see Correction 3: archive/restore and remove were independently re-investigated this revision and are **not** included here).
 - Human retest: not required for the fix; the effect (a stale title on an open window) is deterministic and observable.
 
-**P2-5. Local-time display contract (`format_local_timestamp`) is inconsistently applied across Learning History**
-- Files: `learning_history_window.py:432` (Continue Learning), `:543` (Activity list), `:667-670` (Diagnoses "most recent"), `:852-854` (Shadowing/High-Frequency lists) all interpolate the raw stored-UTC timestamp instead of calling `format_local_timestamp` (`ui/time_display.py:8-21`, self-documented as the mandatory M12 Round 3 Time Contract); `learning_history_service.py:489-491` (`chart_quiz_accuracy_over_time`) likewise builds a chart-point label from the raw value.
-- Observed vs expected: within the *same* window, the Sessions list, Quiz History list, Quiz Comparison tree, Recording list, and Quick Practice list correctly show local wall-clock time, while the five surfaces above show the raw UTC string unconverted — most visibly wrong where the Quiz Comparison tree and the quiz trend chart render the *same underlying entries* with different conventions side by side.
-- Pre-dates M14 Phase 0 but squarely in this audit's date/time scope and still live.
-- Human retest: recommended in addition to automated string-format assertions (a DST-boundary case is best proven with a real date).
+**P2-5. `[RESOLVED — Batch B / B1]` Local-time display contract (`format_local_timestamp`) is inconsistently applied across Learning History**
+- Files (state at time of finding — re-audited fresh against current-branch line numbers before the fix, per instruction, rather than treating this audit's own line numbers as permanent): `learning_history_window.py:432` (Continue Learning), `:543` (Activity list), `:667-670` (Diagnoses "most recent"), `:852-854` (Shadowing/High-Frequency lists, sharing `_shadowing_item_text`) all interpolated the raw stored-UTC timestamp instead of calling `format_local_timestamp` (self-documented as the mandatory M12 Round 3 Time Contract); `learning_history_service.py:489-491` (`chart_quiz_accuracy_over_time`) likewise built a chart-point label from the raw value.
+- Observed vs expected: within the *same* window, the Sessions list, Quiz History list, Quiz Comparison tree, Recording list, and Quick Practice list correctly showed local wall-clock time, while the five surfaces above showed the raw UTC string unconverted — most visibly wrong where the Quiz Comparison tree and the quiz trend chart render the *same underlying entries* with different conventions side by side.
+- **Resolution**: swept all five consumers to call `format_local_timestamp`. The four UI-layer call sites in `learning_history_window.py` were wrapped directly. The chart point label is built in the *application*-service layer (`chart_quiz_accuracy_over_time`), where it is presentational text only — never re-parsed for chronological logic (chronological order comes from the SQL query's own ordering of `group.entries`, not from this label string) — so converting it there does not blur UTC-storage-vs-presentation responsibility; no database storage semantics were touched anywhere. `format_local_timestamp` itself was relocated from `ui/time_display.py` to `domain/services/time_display.py` (it was already framework-free, zero PySide6 imports — this is an architectural cleanup that legitimizes the application-service layer importing it directly, consistent with `domain/services/date_range.py`'s existing pattern for the same class of UTC-conversion concern, rather than importing a `ui/`-layer module from `application/services/`). Gained an optional `tz: tzinfo | None = None` injection seam (default preserves the exact original system-local behavior for every real call site) purely so a DST-offset-sensitive case can be tested deterministically without depending on the host machine's timezone or installing `tzdata`.
+- Regression tests: `tests/unit/test_time_display.py` gained `test_offset_conversion_is_correct_across_a_dst_style_transition` (fixed `timezone(timedelta(hours=-4))`/`(hours=-5)` fixtures proving the conversion applies whatever offset is in effect, not one memoized delta — the exact bug class a real DST transition would expose) and `test_tz_argument_does_not_change_default_system_local_behavior`. `tests/integration/test_learning_history_window.py` gained `test_persisted_timestamps_render_as_local_time_not_raw_utc` (one test, fixed known UTC timestamp, covering all four UI consumers including Shadowing's shared render path) and `test_quiz_accuracy_chart_point_label_renders_local_time`.
+- Human retest: no longer required for correctness (now code-verifiable via the DST-offset test); a live spot-check remains reasonable but is not blocking.
 
 ### P3
 
-**P3-1. "No Notable Difficulty" button (Guided Session Stage 3) stays enabled even when the session already has diagnosis evidence, and the click is guaranteed to fail**
+**P3-1. `[RESOLVED — Batch B / B2]` "No Notable Difficulty" button (Guided Session Stage 3) stays enabled even when the session already has diagnosis evidence, and the click is guaranteed to fail**
 - Files: `guided_session_window.py:1057-1064`/`1131` (`_no_difficulty_button` enabled purely from `revealed and not read_only`) vs. `practice_session_service.mark_stage3_no_difficulty` (`:349-358`), which raises `SessionValidationError("diagnosis_evidence_exists", ...)` whenever any diagnosis evidence already exists. The opposite direction (`record_session_diagnosis`) self-heals silently instead of erroring — the two directions are asymmetric.
+- **Resolution**: `_populate_stage3` now also gates the button on `not (len(state.session_diagnosis) > 0)` — the exact same session-wide evidence-count condition `mark_stage3_no_difficulty` itself checks (`repo.count_session_diagnosis(...) > 0`), so the UI can never present an action the service is guaranteed to reject. The service-level guard is untouched and remains the ultimate invariant; this is proactive UI truthfulness only. Because `_refresh_state()` already re-runs `_populate_stage3` after every diagnosis save/delete, availability correctly flips back to enabled the moment the only evidence is removed — no additional wiring was needed for that case.
+- Regression tests: `test_no_notable_difficulty_available_only_when_stage3_revealed_with_no_evidence` (covers: available with no evidence → disabled once evidence exists → re-enabled after deleting that evidence → the click itself still succeeds and records the outcome exactly as before) and `test_no_notable_difficulty_stays_disabled_on_a_read_only_completed_session` (a read-only/abandoned session keeps the action disabled regardless of evidence state, unchanged from before).
 - Human retest: not required; code-verifiable.
 
 ---
@@ -179,7 +184,7 @@ Only gaps judged meaningful (i.e., an area a defect could hide in, or already hi
 5. No test covers open-secondary-window title staleness when the underlying material is renamed — companion to P2-4.
 6. No test asserts displayed timestamp text/format for Continue Learning, Activity, Diagnoses, Shadowing/High-Frequency lists, or the quiz trend chart — companion to P2-5.
 7. No test asserts the "No Notable Difficulty" button's enabled state vs. existing diagnosis evidence — companion to P3-1.
-8. No permanent regression test locks in the now-directly-verified-safe remove-while-open-window write path (Correction 3c) — this revision's disposable diagnostic proved the behavior but was deleted per its own non-destructive/temporary mandate; promoting a version of it into the permanent suite is recommended so this safety property has a durable guard.
+8. `[CLOSED — Batch B / B3]` No permanent regression test locked in the now-directly-verified-safe remove-while-open-window write path (Correction 3c) — this revision's disposable diagnostic proved the behavior but was deleted per its own non-destructive/temporary mandate. **Closed**: `test_removing_material_while_player_open_then_saving_leaves_no_orphan_write` in `tests/integration/test_player_window_workspace.py` promotes the smallest representative version into the permanent suite (open Player on material X → remove X via the real Library service path → attempt a representative annotation write from the still-open window → assert no exception, no orphan `annotation` row, the cascade-deleted rows are actually gone, and a handled status message is shown). Test-only change; the reproduction confirmed current behavior is unchanged from Correction 3c's original finding, so no production code was touched for this item.
 9. `QuizWindow._on_submit_clicked` (the real submit UI handler — confirmation dialog, unanswered-count warning, review-then-close sequencing) is never exercised end-to-end; existing tests call `quiz_service.submit_quiz` directly instead.
 10. No regression test exists for the M14 Phase 0 `_wrap_scrollable` change across Learning History's 7 tabs; no test exists for `import_dialog.py` or `migrations.py`'s rollback path; no unit test was located exercising non-BMP (surrogate-pair) text through `apply_range_highlighting` end-to-end.
 
@@ -198,13 +203,14 @@ Grouped by shared root cause/surface. Re-derived this revision now that no P1 ex
 - **Human retest**: not required.
 - **Dependencies**: none.
 
-### Batch 2 — Local-time display sweep
+### Batch 2 — `[DONE — implemented as M14 Corrective Batch B1]` Local-time display sweep
 - **Goal**: apply `format_local_timestamp` to the 5 remaining Learning History surfaces and the quiz trend chart's point labels.
 - **Findings included**: P2-5.
 - **Likely files**: `learning_history_window.py`, `learning_history_service.py`.
 - **Regression strategy**: string-format assertions per surface, plus one DST-boundary case (test gap 6).
 - **Human retest**: not required; fully code-verifiable.
 - **Dependencies**: none. Can run fully in parallel with Batch 1.
+- **Status**: see P2-5's `[RESOLVED — Batch B / B1]` entry in Section B for full implementation detail, including the `ui/time_display.py` → `domain/services/time_display.py` relocation this batch made along the way.
 
 ### Batch 3 — `[DONE — implemented as M14 Corrective Batch A3]` Live-refresh bus completeness for diagnosis panels
 - **Goal**: extend `label_color_change_bus` subscription to Guided Session Stage 3 and Quick Practice diagnosis panels; resolve the `LabelColorDialog`/`_label_colors_button` dead-code cleanup decision (delete, or add an explicit non-reachability test) from Correction 1.
@@ -223,13 +229,14 @@ Grouped by shared root cause/surface. Re-derived this revision now that no P1 ex
 - **Human retest**: not required.
 - **Dependencies**: none. Narrowest-frequency scenario (requires two panels open simultaneously) — lowest priority of the four P2 batches, safe to defer if the Product Owner wants a smaller M14 close-out slice.
 
-### Batch 5 — Small UX correctness + governance cleanup + durable safety regression test
+### Batch 5 — `[PARTIALLY DONE — P3-1 and test gap 8 implemented as M14 Corrective Batch B2/B3; G-1/G-2 still open]` Small UX correctness + governance cleanup + durable safety regression test
 - **Goal**: gate the "No Notable Difficulty" button on absence of existing diagnosis evidence; reconcile the `899`→`900` test-count wording drift in `ROADMAP.md` (G-1); align `MainWindow`'s dossier-tooltip/status-bar path display with the elision convention `import_dialog.py`/`ExportDialog` already follow (G-2); promote this revision's disposable remove-while-open-window reproduction into a permanent regression test (test gap 8).
 - **Findings included**: P3-1, G-1, G-2, test gap 8.
 - **Likely files**: `guided_session_window.py`, `ROADMAP.md`, `main_window.py`, a new test in `tests/integration/`.
 - **Regression strategy**: one test for the button-gating fix (test gap 7); one new permanent test for the remove-while-open safety property; doc fixes need no test.
 - **Human retest**: not required.
 - **Dependencies**: none. Lowest risk — safe to bundle into whichever other batch lands first, or ship standalone.
+- **Status**: Batch B's B2 and B3 closed the P3-1 button-gating fix and the test-gap-8 permanent regression test (see Section B and Section E). Batch B's own kickoff scope was explicitly B1/B2/B3 only — **G-1 and G-2's documentation fixes were not part of Batch B and remain open**, still the smallest possible remaining scope (two one-line doc/tooltip edits, no test needed).
 
 ---
 
@@ -285,12 +292,13 @@ Positively verified during this audit (including this revision's corrections) as
 
 **Post-acceptance update**: Batches 1, 3, and 4 (findings P2-3, P2-4, P2-1, P2-2 — everything in Section C's Pattern 1 "incomplete bus rollout" and Pattern 2 "truthful-before-click" instances that Batch A's scope covered) are implemented, tested, and merged to this branch as **M14 Corrective Batch A — Cross-Window State Consistency**. See each finding's `[RESOLVED — Batch A]` marker in Section B for implementation/test detail.
 
-**What remains**:
-- **Batch 2 — Local-time display sweep** (P2-5): not started. Fully independent of Batch A, code-verifiable, no human retest required. Recommended next.
-- **Batch 5 — Small UX correctness + governance cleanup** (P3-1, G-1, G-2, the remove-while-open-window permanent regression test from test gap 8): not started. Low risk, foldable into Batch 2 or shipped standalone.
-- The Correction-1 dead-code cleanup (`LabelColorDialog`/`_label_colors_button`) remains explicitly deferred, per the Batch A kickoff's own instruction, to a later "Batch C."
-- Human QA questionnaire reconciliation (Section D) is deliberately deferred until the remaining corrective batches stabilize, per instruction, to avoid repeated document churn.
+**Batch B update**: M14 Corrective Batch B — Semantic & Time-Display Correctness — closed **P2-5** (B1: local-time display sweep, plus a `time_display.py` relocation to `domain/services/`) and **P3-1** (B2: "No Notable Difficulty" truthful-availability fix), and permanently locked in the remove-while-open-window safety property with a real regression test (B3, closing the former test gap 8). See each finding's `[RESOLVED — Batch B]` marker in Section B, and Section E's item 8, for implementation/test detail. **All 6 confirmed defects from the accepted Phase 1 map are now resolved — none remain open.**
 
-Do not begin Phase C2/Phase D until the remaining batches close and Human QA Round 2 runs against the corrected product, per the Phase 1 kickoff's own scope boundary (unchanged from the original recommendation).
+**What remains**:
+- **G-1 and G-2** (governance/documentation drift, Section G): not started. Two one-line doc/tooltip edits, no test needed, no dependency on anything else.
+- The Correction-1 dead-code cleanup (`LabelColorDialog`/`_label_colors_button`) remains explicitly deferred, per the Batch A kickoff's own instruction, to a later "Batch C."
+- Human QA questionnaire reconciliation (Section D) is deliberately deferred until the remaining corrective batches stabilize, per instruction, to avoid repeated document churn. With all confirmed defects now closed, this reconciliation pass is the natural next major step.
+
+Do not begin Phase C2/Phase D until Human QA Round 2 runs against the corrected product, per the Phase 1 kickoff's own scope boundary (unchanged from the original recommendation). G-1/G-2 and the deferred cleanup are low enough risk that they need not block that pass, but should be closed out before M14 itself is declared complete.
 
 Do not begin Phase C2 (clean-machine acceptance) or Phase D (release candidate) until this batch sequence is closed and Human QA Round 2 has run against the corrected product, per the Phase 1 kickoff's own scope boundary.

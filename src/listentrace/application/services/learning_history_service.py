@@ -24,6 +24,7 @@ from listentrace.application.dto.learning_history import (
 from listentrace.domain.enums.stage_key import STAGE_ORDER
 from listentrace.domain.services import date_range as date_range_rules
 from listentrace.domain.services import needs_attention_rules
+from listentrace.domain.services.time_display import format_local_timestamp
 from listentrace.infrastructure.db import history_repository as repo
 
 """Application service for Milestone 8 (Learning History and Analytics).
@@ -487,7 +488,7 @@ def chart_quiz_accuracy_over_time(
 
     points = [
         ChartPoint(
-            label=f"{e.completed_at or e.started_at} (n={e.actual_count})",
+            label=f"{format_local_timestamp(e.completed_at or e.started_at)} (n={e.actual_count})",
             value=round((e.accuracy or 0.0) * 100, 1),
         )
         for e in group.entries

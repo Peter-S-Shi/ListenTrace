@@ -44,10 +44,10 @@ from listentrace.application.services import quick_practice_service
 from listentrace.application.services.player_loading_service import load_material_for_player
 from listentrace.domain.enums.quick_practice_status import QuickPracticeStatus
 from listentrace.domain.services import date_range as date_range_rules
+from listentrace.domain.services.time_display import format_local_timestamp
 from listentrace.ui import theme
 from listentrace.ui.widgets.notebook_paper import GrainedDeskWidget
 from listentrace.ui.theme import SPACE_COMPACT, SPACE_NORMAL, SPACE_PAGE, SPACE_SECTION, apply_role, apply_surface
-from listentrace.ui.time_display import format_local_timestamp
 from listentrace.ui.widgets.simple_bar_chart import SimpleBarChart
 from listentrace.ui.windows.export_dialog import ExportDialog
 from listentrace.ui.windows.guided_session_window import GuidedSessionWindow
@@ -429,7 +429,7 @@ class LearningHistoryWindow(QMainWindow):
         for entry in self._continue_learning_entries:
             item = QListWidgetItem(
                 f"{entry.material_title} — active, current stage: {entry.current_stage} "
-                f"(last resumed {entry.last_resumed_at})"
+                f"(last resumed {format_local_timestamp(entry.last_resumed_at)})"
             )
             item.setData(Qt.ItemDataRole.UserRole, entry.session_id)
             self._continue_learning_list.addItem(item)
@@ -540,7 +540,7 @@ class LearningHistoryWindow(QMainWindow):
         self._activity_list.clear()
         shown = [e for e in self._activity_entries if e.activity_type in selected_types]
         for entry in shown:
-            item = QListWidgetItem(f"[{entry.occurred_at}] {entry.material_title} — {entry.summary}")
+            item = QListWidgetItem(f"[{format_local_timestamp(entry.occurred_at)}] {entry.material_title} — {entry.summary}")
             item.setData(Qt.ItemDataRole.UserRole, entry)
             self._activity_list.addItem(item)
         if not shown:
@@ -666,7 +666,7 @@ class LearningHistoryWindow(QMainWindow):
             self._diagnosis_history_list.addItem(
                 f"{summary.label_key}: {summary.occurrence_count} occurrence(s) across "
                 f"{summary.session_count} session(s), {summary.material_count} material(s) "
-                f"— most recent {summary.most_recent_at}"
+                f"— most recent {format_local_timestamp(summary.most_recent_at)}"
             )
         if not summaries:
             empty = QListWidgetItem("No session diagnosis evidence for the selected filters.")
@@ -851,7 +851,7 @@ class LearningHistoryWindow(QMainWindow):
     def _shadowing_item_text(self, entry: ShadowingEvidenceEntry) -> str:
         text = f"{entry.material_title} — \"{entry.cue_text}\" — practiced {entry.practice_count}x"
         if entry.last_practiced_at:
-            text += f" — last {entry.last_practiced_at}"
+            text += f" — last {format_local_timestamp(entry.last_practiced_at)}"
         if entry.note:
             text += f" — note: {entry.note}"
         return text
