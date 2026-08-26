@@ -553,7 +553,7 @@ Represents all validation already performed on the development machine, formerly
 
 ---
 
-# Milestone 15 — Release Candidate & Delivery (Current — 15.1 implemented/CI-green on a Draft PR, not merged)
+# Milestone 15 — Release Candidate & Delivery (Current — 15.1 ACCEPTED, 15.2 PASS/ACCEPTED, 15.3 in preparation)
 
 ## Goal
 
@@ -561,25 +561,23 @@ Take the Milestone 14-hardened, Human-QA-accepted product through a refreshed ca
 
 ## Status
 
-**15.1 implemented and CI-verified; not merged. 15.2/15.3 not started.** Consolidates the former separate "Phase C2" and "Phase D" release-engineering labels (historical names, preserved above under Phase A/B/C1) into three sub-stages of one numbered milestone, so the active lifecycle no longer mixes numbered product milestones with unnumbered release-engineering phases:
+**15.1 Product Owner ACCEPTED. 15.2 PASS / Product Owner Accepted. 15.3 now current / in preparation.** Consolidates the former separate "Phase C2" and "Phase D" release-engineering labels (historical names, preserved above under Phase A/B/C1) into three sub-stages of one numbered milestone, so the active lifecycle no longer mixes numbered product milestones with unnumbered release-engineering phases:
 
-- **Milestone 15.1 — Candidate Build / Packaging Refresh**: rebuilds the PyInstaller onedir build and Inno Setup installer against the final, merged Milestone 14 code (including this corrective's Windows AppUserModelID/taskbar-identity fix); confirms packaging identity metadata (icon, AppUserModelID, shortcut/AppId) is internally consistent; promotes the product version to `1.0.0` via a new single-source-of-truth mechanism (`scripts/release_version.py`); adds a GitHub Actions Windows release-candidate pipeline (`.github/workflows/release-candidate.yml`) that builds and smoke-tests the portable ZIP and installer from the same onedir output and uploads checksummed/provenance-tracked canonical artifacts. **Implemented on branch `milestone/15-release-candidate-delivery`, Draft PR against `main`, CI green end-to-end twice** (test suite, build, both packaging smoke checks). Not merged; no `v1.0.0` tag or GitHub Release created — those remain Milestone 15.3 decisions.
-- **Milestone 15.2 — Clean-Machine Acceptance**: the remaining final environment-validation gate, occurring after Milestone 14 so the final hardened, final-UI release candidate is what gets tested, not an earlier presentation layer or an unaudited product.
+- **Milestone 15.1 — Candidate Build / Packaging Refresh (Product Owner ACCEPTED)**: rebuilds the PyInstaller onedir build and Inno Setup installer against the final, merged Milestone 14 code (including the Windows AppUserModelID/taskbar-identity fix); confirms packaging identity metadata (icon, AppUserModelID, shortcut/AppId) is internally consistent; promotes the product version to `1.0.0` via a new single-source-of-truth mechanism (`scripts/release_version.py`); adds a GitHub Actions Windows release-candidate pipeline (`.github/workflows/release-candidate.yml`) that builds and smoke-tests the portable ZIP and installer from the same onedir output and uploads checksummed/provenance-tracked canonical artifacts. Implemented on branch `milestone/15-release-candidate-delivery`, Draft PR #4 against `main`, CI green end-to-end. Not merged; no `v1.0.0` tag or GitHub Release created — those remain Milestone 15.3 decisions.
+- **Milestone 15.2 — Clean-Machine Acceptance (PASS / Product Owner Accepted)**: the environment-validation gate, occurring after Milestone 14 so the final hardened, final-UI release candidate is what gets tested, not an earlier presentation layer or an unaudited product.
+
+  Environment used: a clean Windows 11 VMware VM, VMware Tools installed, a clean baseline snapshot, no Python/Git/IDE/developer environment installed — meeting the target baseline below.
 
   Target baseline: Windows 11 x64, Home or Pro, standard non-N edition, normal Windows system updates, no Python installation, no Git, no IDE, no PyInstaller, no Inno Setup, no project source tree, no developer virtual environment, and no manually installed FFmpeg or codec pack required for ListenTrace.
 
-  Validates the actual packaged release candidate. At minimum:
+  Candidate validated: version `1.0.0`, source SHA `661bca47ce93f1a12a6a17c66f1ed6065d816e43`, `ListenTrace-Setup-1.0.0.exe` — confirmed to be the exact CI-built canonical artifact bundle (`ListenTrace-1.0.0-candidate-661bca47ce93f1a12a6a17c66f1ed6065d816e43`) produced by Milestone 15.1's pipeline at that commit, not a hand-built or unreconciled binary.
 
-  - **Runtime foundation**: install, launch, application-data creation, restart, uninstall, data preservation.
-  - **Multimedia**: real WAV playback, real MP4/H.264 playback, audio output, microphone detection, real recording, playback of a retained recording.
-  - **Data**: fresh schema creation, legacy database upgrade, persistence after restart, upgrade-install preservation, uninstall preservation.
-  - **Core workflows**: Material import, Player, Transcript Workspace, Intensive Practice, Quiz, Shadowing/Recording, Learning History, Export, Quick Practice.
-  - **Windows taskbar identity**: launched alongside another unrelated locally installed application, ListenTrace appears as its own separate taskbar application/group with its own icon (Product Owner human spot-check; not provable by automated tests — see the pre-merge corrective's Windows AppUserModelID work).
+  Human clean-machine evidence, all **PASS**: normal per-user installation; first launch; real MP4/H.264 import and playback; real audio output; SRT/material import; a representative Intensive Practice completion; full app close/reopen with session persistence; Windows taskbar/app identity (own icon, own taskbar group, no shared grouping with an unrelated locally installed application). No release-blocking abnormal behavior observed. Microphone passthrough and display-scaling checks were exercised informally but, by Product Owner decision, were not expanded into additional hard acceptance gates — M15.2 validates the packaged artifact and clean environment, it does not repeat Milestone 14's broad manual regression.
 
   This is a release gate: it must not be marked completed until a genuinely appropriate clean environment has actually been used. If it discovers a release-blocking defect: `M15.2 failure -> return to an M14 corrective batch -> regression -> repeat M15.2`. M15.2 is an environment and packaged-artifact acceptance gate — it does not replace Milestone 14's product-wide hardening and full manual regression.
-- **Milestone 15.3 — Release Candidate Closure & Delivery**: completion of final versioning; About surface; privacy and local-data explanation; installation and usage documentation; known limitations; release notes; final icon and release metadata; final privacy audit; complete regression status; RC installer and RC zip; release checklist; small real-user acceptance test where practical; final v1.0 release decision; tag/release preparation where approved.
+- **Milestone 15.3 — Release Candidate Closure & Delivery (Current / In Preparation)**: completion of final versioning; About surface; privacy and local-data explanation; installation and usage documentation; known limitations; release notes (`RELEASE_NOTES.md`, drafted); final icon and release metadata; final privacy audit (re-verified, no regression since M14 closure); complete regression status; RC installer and RC zip (produced by the M15.1 pipeline, provenance-reconciled against the M15.2-tested candidate); release checklist; small real-user acceptance test where practical (satisfied by M15.2's clean-machine session); final v1.0 release decision; tag/release preparation where approved. **Update Awareness is explicitly out of scope, deferred to the first v1.0.x maintenance update.**
 
-  M15.1/M15.3 planning and preparation may proceed earlier where useful, but **Milestone 15 cannot be completed, v1.0 cannot be tagged or released, and final Release Ready status cannot be claimed until Milestone 14 and Milestone 15.2 have both passed.** If a blocking problem is discovered during M15.3, return to an M14 corrective batch, rerun affected regression, and repeat any invalidated M15.2/M15.3 checks.
+  M15.1/M15.3 planning and preparation may proceed earlier where useful, but **Milestone 15 cannot be completed, v1.0 cannot be tagged or released, and final Release Ready status cannot be claimed until Milestone 14 and Milestone 15.2 have both passed.** Both have now passed. What remains before a merge/tag/Release decision: independent Product Owner pre-merge review of PR #4's actual HEAD, and the Product Owner's own merge/tag/publish decision. If a blocking problem is discovered during M15.3, return to an M14 corrective batch, rerun affected regression, and repeat any invalidated M15.2/M15.3 checks.
 
 ---
 
@@ -619,11 +617,11 @@ Milestones 1-10 — Core Functional Development
   -> Milestone 12 — Pre-UI Product Hardening (Completed)
   -> Milestone 13 — Advanced UI/UX Reconstruction (Completed / Human Visual Gate Passed / Merged)
   -> Milestone 14 — Final Product Hardening & Full Manual Regression (Completed, Accepted, Merged — Human QA Round 2 PASS; pre-merge hygiene/privacy/app-identity corrective Product Owner ACCEPTED)
-  -> Milestone 15 — Release Candidate & Delivery (Current — Not Started)
-       -> Milestone 15.1 — Candidate Build / Packaging Refresh
-       -> Milestone 15.2 — Clean-Machine Acceptance
-       -> Milestone 15.3 — Release Candidate Closure & Delivery
-  -> v1.0 — Current Version Complete
+  -> Milestone 15 — Release Candidate & Delivery (Current — 15.1/15.2 accepted/passed, 15.3 in preparation)
+       -> Milestone 15.1 — Candidate Build / Packaging Refresh (Product Owner ACCEPTED)
+       -> Milestone 15.2 — Clean-Machine Acceptance (PASS / Product Owner Accepted)
+       -> Milestone 15.3 — Release Candidate Closure & Delivery (In Preparation)
+  -> v1.0 — Current Version Complete (Not Yet Reached)
   -> Maintenance / v1.0.x
   -> Next-Version Planning / v1.1+
 ```
