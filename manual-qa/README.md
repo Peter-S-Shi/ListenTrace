@@ -1,9 +1,13 @@
 # ListenTrace Manual QA
 
-Retroactive full-product manual QA baseline (Milestone 12.1-A). This is a
-living artifact: it established the pre-M12 baseline, was exercised in Human
-QA Round 1 (Milestone 12), and will be run in full in Milestone 14
-against the final Notebook Study Desk UI reconstructed in Milestone 13.
+Originated as a retroactive full-product manual QA baseline (Milestone
+12.1-A). This is a living artifact: it established the pre-M12 baseline and
+was exercised in Human QA Round 1 (Milestone 12). **Its current active run
+is Milestone 14 Human QA Round 2 / Full Manual Regression**, executed
+against the final Notebook Study Desk UI (Milestone 13) with M14 Corrective
+Batches A/B/C all complete (see `PROJECT_STATUS.md`/`ROADMAP.md`). The
+questionnaire itself carries this identity in its own on-page Purpose text
+and via `META.questionnaireVersion`.
 
 ## Purpose
 
@@ -15,9 +19,10 @@ Learning History, Export, cross-module/restart recovery, privacy/local-data
 boundaries, accessibility/responsiveness, and performance/stability, plus an
 overall subjective/release-blocker module. It exists to catch real functional
 defects, cross-module inconsistencies, data risks, and UX problems that
-automated tests and an AI agent are unlikely to notice on their own — feeding
-Milestone 12 (Product Hardening & Full Manual Acceptance) and later
-regression/release-candidate acceptance.
+automated tests and an AI agent are unlikely to notice on their own —
+originally feeding Milestone 12 (Product Hardening & Full Manual Acceptance),
+and now feeding Milestone 14 Human QA Round 2 and later regression/
+release-candidate acceptance.
 
 ## How to launch the product
 
@@ -55,9 +60,20 @@ additional, informal pass is welcome but out of scope for this baseline.
 
 ## How results are saved
 
-- Every field autosaves to this browser's `localStorage`, scoped to this
-  questionnaire only (storage key `listentrace_manual_qa_v1`). This is
-  per-browser, per-machine — it is not a hand-off mechanism by itself.
+- Every field autosaves to this browser's `localStorage`, under a key
+  specific to the exact `questionnaireVersion` currently open
+  (`listentrace_manual_qa_v1__<questionnaireVersion>`, e.g.
+  `listentrace_manual_qa_v1__2026-08-26.1`). This is per-browser, per-machine
+  — it is not a hand-off mechanism by itself.
+- **Version isolation (M14 Human QA Round 2 readiness corrective)**: this
+  per-version key means a browser that still has saved state from an older
+  questionnaire version (e.g. the original M12.1-A baseline, or any earlier
+  M14 draft) can never silently populate a fresh run of the current version
+  — opening a version for the first time always starts blank. `loadState()`
+  also independently checks the stored `questionnaireVersion` matches before
+  loading, as a second guard. Old versions' saved data is never deleted or
+  auto-migrated; it simply sits under its own key until you deliberately
+  revisit that version or explicitly import it (see below).
 - Before closing the browser, or when you want to hand off progress, click
   **Export JSON**. This produces a single JSON file containing every item's
   status/evidence/suggestions, the questionnaire's own item definitions
@@ -69,8 +85,17 @@ additional, informal pass is welcome but out of scope for this baseline.
   expands every module so nothing is cut off by the on-screen single-module
   view.
 - **Reset questionnaire** requires a second, explicit confirmation click and
-  only clears this browser's saved answers — it never touches the sample
-  files or the questionnaire HTML itself.
+  only clears the *current version's* saved answers — it never touches the
+  sample files, the questionnaire HTML itself, or another version's saved
+  state under its own key.
+- **Import JSON**: importing a file whose `questionnaireVersion` matches the
+  currently open one merges normally. Importing a file from a **different**
+  `questionnaireVersion` (e.g. an old M12.1-A export, or an earlier M14
+  draft) shows an explicit confirmation naming both versions before
+  proceeding — this is deliberately not silent, since merging a mismatched
+  version's answers into what's supposed to be a fresh Round 2 result would
+  make that result ambiguous. Use this only when you genuinely want to bring
+  in a historical result as reference; cancel it for anything else.
 
 ## Handing a result back to an Agent
 
