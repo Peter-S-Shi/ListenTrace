@@ -63,7 +63,7 @@ additional, informal pass is welcome but out of scope for this baseline.
 - Every field autosaves to this browser's `localStorage`, under a key
   specific to the exact `questionnaireVersion` currently open
   (`listentrace_manual_qa_v1__<questionnaireVersion>`, e.g.
-  `listentrace_manual_qa_v1__2026-08-26.1`). This is per-browser, per-machine
+  `listentrace_manual_qa_v1__2026-08-26.2`). This is per-browser, per-machine
   — it is not a hand-off mechanism by itself.
 - **Version isolation (M14 Human QA Round 2 readiness corrective)**: this
   per-version key means a browser that still has saved state from an older
