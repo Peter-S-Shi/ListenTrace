@@ -205,6 +205,7 @@ class QuickPracticeStartDialog(QDialog):
             empty = QListWidgetItem("No usable cues available for Quick Practice.")
             empty.setFlags(Qt.ItemFlag.NoItemFlags)
             self._recommended_preview.addItem(empty)
+        theme.ruled_list_ensure_visible_rows(self._recommended_preview, visible_rows=1)
 
     def _on_start_clicked(self) -> None:
         self._status_label.setText("")

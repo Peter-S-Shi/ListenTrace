@@ -464,6 +464,40 @@ def ruled_list_row_size_hint(row_widget: QWidget) -> QSize:
     return QSize(hint.width(), hint.height() + RULED_LIST_ITEM_VERTICAL_CHROME_PX)
 
 
+def ruled_list_ensure_visible_rows(list_widget: QListWidget, visible_rows: int = 2) -> None:
+    """Guarantee a `role="ruled_list"` `QListWidget` hosting custom
+    `setItemWidget()` rows (`DiagnosisNoteRow` chips, `make_reason_tag_row()`
+    reason-tag rows) is never squeezed to less than the height its first
+    `visible_rows` rows actually need -- M13 Final Human-Gate Corrective
+    (HG-03/HG-04).
+
+    Two independent ways this was happening before this floor existed: a
+    hardcoded `setMaximumHeight()` sized for the old single-line-per-row era
+    left over from before these rows could hold multi-line chips/wrapped
+    tags, and a sibling widget in the same container layout claiming more
+    than its fair share of stretch space and leaving this list's own
+    `Expanding` size policy starved below what it needed. Either way the
+    effect was identical and easy to miss from widget-state inspection
+    alone: every row's real internal state (text, color, visibility) was
+    correct, but the list's own on-screen viewport was shorter than even
+    its first row, so most of that correct content sat outside the visible,
+    unscrolled area.
+
+    Call after populating the list's items (with each item's `sizeHint()`
+    already set via `ruled_list_row_size_hint()`), so the guaranteed height
+    reflects the list's real, current content -- never a guessed constant
+    that drifts out of sync with what the rows actually need. Scrolling
+    beyond `visible_rows` remains intact; this only raises the floor.
+    """
+    if list_widget.count() == 0:
+        list_widget.setMinimumHeight(0)
+        return
+    rows = min(visible_rows, list_widget.count())
+    content_height = sum(list_widget.item(i).sizeHint().height() for i in range(rows))
+    chrome = 2 * (BORDER_WIDTH + SPACE_COMPACT)
+    list_widget.setMinimumHeight(content_height + chrome)
+
+
 def apply_paper_shadow(widget: QWidget, tier: str = "full") -> None:
     """Attach the frozen paper-shadow treatment (M13 Stage B; DESIGN.md §6,
     Gap Register G10) to `widget`. Three tiers:
@@ -580,6 +614,20 @@ class FlowLayout(QLayout):
         self._h_spacing = h_spacing
         self._v_spacing = v_spacing
         self._items: list = []
+        # M13 Final Human-Gate Corrective: a plain QWidget's own QSizePolicy
+        # does not automatically pick up hasHeightForWidth from a layout set
+        # on it -- without this, an ANCESTOR QBoxLayout (e.g. a stage
+        # card's QVBoxLayout) never queries this layout's real
+        # heightForWidth() and instead falls back to sizeHint()==
+        # minimumSize(), which (see minimumSize() below) used to report
+        # only a single row's height regardless of how many lines the
+        # content actually wraps onto -- clipping every wrapped line past
+        # the first (Guided Session Stage 3's 5-choice diagnosis-label
+        # row silently lost its second line to exactly this).
+        if parent is not None:
+            policy = parent.sizePolicy()
+            policy.setHeightForWidth(True)
+            parent.setSizePolicy(policy)
 
     def addItem(self, item) -> None:  # noqa: N802 -- Qt override
         self._items.append(item)
@@ -610,12 +658,24 @@ class FlowLayout(QLayout):
         return self.minimumSize()
 
     def minimumSize(self) -> QSize:
+        # Height-for-width aware: a flow layout's true minimum height is
+        # whatever full wrapping at its minimum practical WIDTH (the widest
+        # single item) requires, never just one row's height. Reporting a
+        # single-row floor here let an ancestor layout under space pressure
+        # shrink this layout back down to one visible line even after
+        # __init__ above told it this layout supports height-for-width --
+        # the ancestor's shrink pass still needs an honest minimum, not a
+        # falsely tiny one, to know it isn't allowed to go that far.
         size = QSize()
         for item in self._items:
             size = size.expandedTo(item.minimumSize())
         margins = self.contentsMargins()
-        size += QSize(margins.left() + margins.right(), margins.top() + margins.bottom())
-        return size
+        width = size.width() + margins.left() + margins.right()
+        if self._items:
+            height = self.heightForWidth(width)
+        else:
+            height = size.height() + margins.top() + margins.bottom()
+        return QSize(width, height)
 
     def _do_layout(self, rect: QRect, test_only: bool) -> int:
         left, top, right, bottom = self.getContentsMargins()
@@ -934,6 +994,12 @@ def make_surface_header(
     if subtitle is not None:
         subtitle_label = QLabel(subtitle)
         apply_role(subtitle_label, "subtitle" if title_role == "page_title" else "caption")
+        # M13 Final Human-Gate Corrective (HG-01): an unwrapped subtitle
+        # (Main Library's "Study archive and lined diagnosis workspace")
+        # was silently truncated by the header row's available width --
+        # this is the only text in that row with nothing else competing
+        # for space, so wrapping it costs no layout budget elsewhere.
+        subtitle_label.setWordWrap(True)
         # M13 Due-Frame Polish, Axis 3: the due-frame boards consistently
         # end this exact subtitle/caption line with a small blue-pencil
         # flourish -- see SketchFlourishWidget's own docstring for the two

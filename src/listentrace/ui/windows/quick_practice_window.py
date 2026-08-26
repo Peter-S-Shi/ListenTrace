@@ -266,7 +266,8 @@ class QuickPracticeWindow(QMainWindow):
         left_layout.setContentsMargins(0, 0, 0, 0)
         left_layout.setSpacing(SPACE_SECTION)
 
-        left_layout.addWidget(self._build_cue_context_card())
+        self._cue_context_card = self._build_cue_context_card()
+        left_layout.addWidget(self._cue_context_card)
 
         self._work_stack = QStackedWidget()
         self._work_stack.addWidget(self._build_listen_recall_work())
@@ -637,6 +638,11 @@ class QuickPracticeWindow(QMainWindow):
 
     def _populate_cue_context(self) -> None:
         cue = self._current_cue()
+        # M13 Final Human-Gate Corrective (HG-07): Summary has no
+        # meaningful transport/transcript content left to show (the run
+        # is over), so the whole card collapses rather than surviving as
+        # an empty framed paper strip with nothing visible inside it.
+        self._cue_context_card.setVisible(self._step != _STEP_SUMMARY)
         transcript_visible = self._step in (_STEP_DIAGNOSE, _STEP_REPLAY)
         self._diagnosis_transcript_view.setVisible(transcript_visible)
         transport_visible = self._step != _STEP_SUMMARY
@@ -889,6 +895,7 @@ class QuickPracticeWindow(QMainWindow):
             item.setSizeHint(theme.ruled_list_row_size_hint(row))
             self._diagnosis_list.setItemWidget(item, row)
         self._diagnosis_list.blockSignals(False)
+        theme.ruled_list_ensure_visible_rows(self._diagnosis_list, visible_rows=1)
 
     def _clear_diagnosis_form(self) -> None:
         for checkbox in self._diagnosis_label_checkboxes.values():

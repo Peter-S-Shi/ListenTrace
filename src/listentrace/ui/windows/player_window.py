@@ -488,11 +488,19 @@ class PlayerWindow(QMainWindow):
         self._status_label = QLabel("")
         apply_role(self._status_label, "error")
         self._status_label.setWordWrap(True)
+        # M13 Final Human-Gate Corrective (HG-02): these two banners sit
+        # idle-empty far more often than populated, and a visible-but-blank
+        # QLabel still claims its own row height -- reserving real
+        # workspace space for a message that (in the common case) never
+        # appears is exactly the "dead bottom space" the media stage
+        # should be using instead. Hidden until there's an actual message.
+        self._status_label.setVisible(False)
         root_layout.addWidget(self._status_label)
 
         self._workspace_status_label = QLabel("")
         apply_role(self._workspace_status_label, "error")
         self._workspace_status_label.setWordWrap(True)
+        self._workspace_status_label.setVisible(False)
         root_layout.addWidget(self._workspace_status_label)
 
         # No outer QScrollArea: the top bar and the two-page notebook
@@ -660,7 +668,12 @@ class PlayerWindow(QMainWindow):
         apply_role(annots_on_cue_lbl, "ui_label")
         annotation_column.addWidget(annots_on_cue_lbl)
         self._annotation_list = QListWidget()
-        self._annotation_list.setMaximumHeight(80)
+        # M13 Final Human-Gate Corrective: raised from the old 80 (sized
+        # for pre-Axis-4 plain-text rows) so a single wrapped
+        # `DiagnosisNoteRow` chip isn't clipped before any scrolling
+        # happens; `theme.ruled_list_ensure_visible_rows()` (called after
+        # each repopulation) raises the real floor to match current content.
+        self._annotation_list.setMaximumHeight(160)
         self._annotation_list.currentItemChanged.connect(self._on_annotation_selected)
         annotation_column.addWidget(self._annotation_list)
 
@@ -976,6 +989,7 @@ class PlayerWindow(QMainWindow):
 
     def _on_playback_error(self, message: str) -> None:
         self._status_label.setText(f"Playback error: {message}")
+        self._status_label.setVisible(True)
         self._playback_usable = False
         for widget in (
             self._play_pause_button,
@@ -1026,6 +1040,7 @@ class PlayerWindow(QMainWindow):
 
     def _show_status(self, message: str) -> None:
         self._status_label.setText(message)
+        self._status_label.setVisible(bool(message))
 
     def _open_quick_practice(self, subtitle_cue_ids: list[int]) -> None:
         from listentrace.ui.windows.quick_practice_window import QuickPracticeWindow
@@ -1157,6 +1172,7 @@ class PlayerWindow(QMainWindow):
 
     def _show_workspace_status(self, message: str) -> None:
         self._workspace_status_label.setText(message)
+        self._workspace_status_label.setVisible(bool(message))
 
     def _on_editing_cue_changed(self, current: QListWidgetItem, previous: QListWidgetItem) -> None:
         if current is None:
@@ -1218,6 +1234,7 @@ class PlayerWindow(QMainWindow):
             item.setSizeHint(theme.ruled_list_row_size_hint(row))
             self._annotation_list.setItemWidget(item, row)
         self._annotation_list.blockSignals(False)
+        theme.ruled_list_ensure_visible_rows(self._annotation_list, visible_rows=1)
 
         self._cue_note_edit.blockSignals(True)
         self._cue_note_edit.setPlainText(workspace.cue_note.note_text if workspace.cue_note else "")

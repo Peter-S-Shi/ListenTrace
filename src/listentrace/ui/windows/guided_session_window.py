@@ -1069,7 +1069,14 @@ class GuidedSessionWindow(QMainWindow):
         right_column.addWidget(diag_evidence_lbl)
         self._diagnosis_list = QListWidget()
         apply_role(self._diagnosis_list, "ruled_list")
-        self._diagnosis_list.setMaximumHeight(85)
+        # M13 Final Human-Gate Corrective (HG-03): 85 was sized for the
+        # pre-Axis-4 plain-text-row era; a single `DiagnosisNoteRow` chip
+        # alone can need more than that once its text wraps, silently
+        # clipping the row's own content before any scrolling happens.
+        # `theme.ruled_list_ensure_visible_rows()` (called after each
+        # repopulation below) raises the real floor to match current
+        # content; this cap just keeps the panel from growing unbounded.
+        self._diagnosis_list.setMaximumHeight(160)
         self._diagnosis_list.currentItemChanged.connect(self._on_diagnosis_selected)
         right_column.addWidget(self._diagnosis_list)
 
@@ -1081,10 +1088,28 @@ class GuidedSessionWindow(QMainWindow):
         self._diagnosis_reference_list.setMaximumHeight(65)
         right_column.addWidget(self._diagnosis_reference_list)
 
+        # M13 Final Human-Gate Corrective (item 3): the diagnosis-label
+        # FlowLayout now correctly reports its real, content-driven
+        # height-for-width (fixed above), but the right card's total
+        # content -- transcript, 5 wrapping diagnosis-label choices,
+        # heard-as/note/buttons, and two evidence lists -- genuinely needs
+        # more height than a small/laptop-class screen's available work
+        # area leaves for this window, regardless of layout efficiency.
+        # A QScrollArea (the same pattern Stage 1/5 already use) keeps
+        # every control fully reachable and un-clipped at any practical
+        # window size instead of silently compressing children below
+        # their real minimum size, which is what was clipping the second
+        # row of diagnosis-label choices.
+        right_scroll = QScrollArea()
+        right_scroll.setWidgetResizable(True)
+        right_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        apply_surface(right_scroll, "paper")
+        right_scroll.setWidget(right_frame)
+
         splitter = QSplitter(Qt.Orientation.Horizontal)
         splitter.setChildrenCollapsible(False)
         splitter.addWidget(left_frame)
-        splitter.addWidget(right_frame)
+        splitter.addWidget(right_scroll)
         splitter.setSizes([380, 560])
         return splitter
 
@@ -1148,6 +1173,7 @@ class GuidedSessionWindow(QMainWindow):
             list_item.setSizeHint(theme.ruled_list_row_size_hint(row))
             self._diagnosis_list.setItemWidget(list_item, row)
         self._diagnosis_list.blockSignals(False)
+        theme.ruled_list_ensure_visible_rows(self._diagnosis_list, visible_rows=1)
 
         self._diagnosis_reference_list.clear()
         if cue.id is not None:

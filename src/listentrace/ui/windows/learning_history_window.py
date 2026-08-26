@@ -137,6 +137,15 @@ class LearningHistoryWindow(QMainWindow):
         header = theme.make_surface_header("Study Dossier — Learning History & Insights")
         outer_layout.addLayout(header.top_bar)
 
+        # M13 Final Human-Gate Corrective (HG-08): a single rigid
+        # QHBoxLayout packing the material/date filters AND the three
+        # action buttons let the trailing "Export Learning Evidence..."
+        # button run off the window's right edge at a real screen's
+        # available width. Splitting the filters and the actions onto
+        # their own compact rows (rather than a FlowLayout -- which would
+        # also flip this whole window's height-for-width propagation and
+        # inflate the overall window height as an unrelated side effect)
+        # keeps each row's natural content short enough to always fit.
         filter_row = QHBoxLayout()
         filter_row.addWidget(QLabel("Material:"))
         self._material_combo = QComboBox()
@@ -158,20 +167,23 @@ class LearningHistoryWindow(QMainWindow):
         self._custom_end_edit.setDate(today)
         filter_row.addWidget(self._custom_start_edit)
         filter_row.addWidget(self._custom_end_edit)
+        outer_layout.addLayout(filter_row)
 
+        actions_row = QHBoxLayout()
+        actions_row.addStretch(1)
         self._apply_button = QPushButton("Apply")
         self._apply_button.clicked.connect(self._on_reload_clicked)
         theme.apply_role(self._apply_button, "secondary")
-        filter_row.addWidget(self._apply_button)
+        actions_row.addWidget(self._apply_button)
         self._quick_practice_button = QPushButton("Quick Practice...")
         self._quick_practice_button.clicked.connect(self._on_quick_practice_clicked)
         theme.apply_role(self._quick_practice_button, "secondary")
-        filter_row.addWidget(self._quick_practice_button)
+        actions_row.addWidget(self._quick_practice_button)
         self._export_button = QPushButton("Export Learning Evidence...")
         self._export_button.clicked.connect(self._on_export_clicked)
         theme.apply_role(self._export_button, "secondary")
-        filter_row.addWidget(self._export_button)
-        outer_layout.addLayout(filter_row)
+        actions_row.addWidget(self._export_button)
+        outer_layout.addLayout(actions_row)
 
         self._error_label = QLabel("")
         theme.apply_role(self._error_label, "error")
@@ -881,6 +893,18 @@ class LearningHistoryWindow(QMainWindow):
             "Quick Practice runs — Active/Completed/Abandoned kept visibly distinct, "
             "never counted as Intensive Sessions or Quiz Attempts (double-click opens the material)"
         )
+        # M13 Final Human-Gate Corrective (HG-08): this card's title is
+        # long enough on one unwrapped line to force this whole tab --
+        # and so the window itself -- wider than a real screen's available
+        # width, indirectly pushing the toolbar's trailing button off the
+        # window's right edge even after the toolbar's own layout was
+        # fixed. Wrapped locally rather than in `make_card()` itself: that
+        # shared helper's caption uses the same `role="caption"` as
+        # `make_metric_tile()`'s own label, and enabling word-wrap there
+        # was observed to corrupt that unrelated tile's text layout.
+        quick_practice_card_caption = column.itemAt(0).widget()
+        if isinstance(quick_practice_card_caption, QLabel):
+            quick_practice_card_caption.setWordWrap(True)
         self._quick_practice_list = QListWidget()
         theme.configure_long_text_list(self._quick_practice_list)
         self._quick_practice_list.itemDoubleClicked.connect(self._on_quick_practice_item_double_clicked)
