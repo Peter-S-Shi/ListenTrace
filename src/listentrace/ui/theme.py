@@ -1051,6 +1051,7 @@ def make_metric_tile(icon_name: str, label_text: str, tooltip: str | None = None
     """
     tile = QFrame()
     apply_role(tile, "metric_tile")
+    tile.setMinimumHeight(44)
     layout = QHBoxLayout(tile)
     layout.setContentsMargins(SPACE_NORMAL, SPACE_NORMAL, SPACE_NORMAL, SPACE_NORMAL)
     layout.setSpacing(SPACE_NORMAL)
