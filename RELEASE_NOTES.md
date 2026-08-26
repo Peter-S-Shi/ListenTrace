@@ -2,7 +2,7 @@
 
 **Status: draft, prepared during Milestone 15.3 (Release Candidate Closure & Delivery), which is now
 complete.** No `v1.0.0` tag or GitHub Release has been created yet — that remains a Product Owner
-decision after independent pre-merge review of PR #4. This document is written for the Product Owner
+publication decision after Milestone 15 closure. This document is written for the Product Owner
 and, eventually, real users; it is not itself a release announcement.
 
 ## Validated release payload (locked)
