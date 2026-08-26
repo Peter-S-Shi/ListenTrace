@@ -487,6 +487,7 @@ class PlayerWindow(QMainWindow):
         self._main_splitter.setStretchFactor(1, 0)
         self._main_splitter.setStretchFactor(2, 9)
         self._main_splitter.setSizes([580, 28, 440])
+        self._main_splitter.setMinimumSize(self._main_splitter.minimumSizeHint())
         root_layout.addWidget(self._main_splitter, 1)
 
         # -------------------------------------------------------------------
@@ -528,17 +529,28 @@ class PlayerWindow(QMainWindow):
         self._apply_presentation()
         self._set_workspace_form_enabled(False)
 
-        # Lock in the real minimum height Qt's own layout just computed for
-        # everything built above (video/audio viewport, status strip,
-        # timeline, mini-notebooks, transcript, annotation notebook) as a
-        # hard floor, alongside the fixed 1040px width reservation. A guessed
-        # height constant here previously under-stated the media study
-        # page's real requirement for a video-kind Player specifically (an
-        # audio-kind Player's shorter placeholder made the shortfall easy to
-        # miss) -- letting Qt supply the number keeps this self-healing
-        # instead of a magic constant that can silently drift out of sync
-        # with the content again.
-        self.setMinimumSize(1040, self.minimumSizeHint().height())
+        # Lock in the real minimum geometry Qt's layout computes for the
+        # complete Player. Derive the minimum height from the combined
+        # requirement of top bar, main splitter (cinema page: media frame,
+        # HUD, scrubber, mini-notebooks), layout spacing, and desk margins
+        # so no fixed control is clipped below the window client area when
+        # empty status labels are collapsed.
+        central.setGeometry(0, 0, 1040, 800)
+        root_layout.activate()
+        margins = root_layout.contentsMargins()
+        top_bar_height = top_bar.geometry().height() if top_bar.geometry().height() > 0 else top_bar.sizeHint().height()
+        splitter_min_height = self._main_splitter.minimumSize().height()
+        content_min_height = (
+            margins.top()
+            + top_bar_height
+            + root_layout.spacing()
+            + splitter_min_height
+            + margins.bottom()
+        )
+        min_height = max(self.minimumSizeHint().height(), content_min_height)
+        self.setMinimumSize(1040, min_height)
+        if self.height() < min_height:
+            self.resize(self.width(), min_height)
 
         if initial_cue_index is not None and 0 <= initial_cue_index < self._cue_list.count():
             self._cue_list.setCurrentRow(initial_cue_index)
