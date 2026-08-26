@@ -86,6 +86,61 @@ def test_material_override_changed_updates_this_windows_live_session_grace(qapp,
     window.close()
 
 
+def test_material_renamed_updates_window_title_and_header(qapp, conn, tmp_path):
+    """M14 Corrective Batch A (A2): rename propagation to an already-open
+    dependent window."""
+    from listentrace.ui.widgets.material_metadata_bus import material_metadata_bus
+
+    window, load_result, _ = _open_window(conn, tmp_path, None)
+    material_id = load_result.material.id
+    assert window.windowTitle() == "ListenTrace — Quick Practice — QP Lesson"
+    assert window._header_title_label.text() == "QP Lesson"
+
+    material_metadata_bus.material_renamed.emit(material_id, "Renamed QP Lesson")
+
+    assert window.windowTitle() == "ListenTrace — Quick Practice — Renamed QP Lesson"
+    assert window._header_title_label.text() == "Renamed QP Lesson"
+    assert window._material.title == "Renamed QP Lesson"
+
+    material_metadata_bus.material_renamed.emit(material_id + 999, "Someone Else's Lesson")
+    assert window._header_title_label.text() == "Renamed QP Lesson"
+    window.close()
+
+
+def test_label_color_live_refresh_preserves_diagnosis_editing_state(qapp, conn, tmp_path):
+    """M14 Corrective Batch A (A3): a Settings-driven label-color change must
+    repaint diagnosis colors live without clearing the in-progress diagnosis
+    edit form (an unsaved draft note) as a side effect."""
+    from PySide6.QtGui import QColor
+
+    from listentrace.application.services import label_preference_service
+    from listentrace.ui.widgets.label_color_change_bus import label_color_change_bus
+
+    load_result = _import_material(conn, tmp_path)
+    session = svc.start_selected_session(conn, load_result.material.id, [load_result.cues[0].id])
+    window = QuickPracticeWindow(conn, load_result, session.id, tmp_path / "recordings")
+
+    window._recall_radio_buttons["missed"].setChecked(True)
+    window._on_step_action_clicked()
+    assert window._step == _STEP_DIAGNOSE
+
+    window._diagnosis_label_checkboxes["misheard"].setChecked(True)
+    window._diagnosis_heard_as_edit.setText("bonjoor")
+    window._on_save_diagnosis_clicked()
+    assert window._diagnosis_list.count() == 1
+
+    window._diagnosis_note_edit.setText("unsaved draft note")
+
+    label_preference_service.update_label_color(conn, "misheard", "#654321")
+    label_color_change_bus.label_colors_changed.emit()
+
+    row = window._diagnosis_list.itemWidget(window._diagnosis_list.item(0))
+    assert QColor(row.color_hex).name() == QColor("#654321").name()
+    assert window._diagnosis_note_edit.text() == "unsaved draft note"
+    assert window._step == _STEP_DIAGNOSE
+    window.close()
+
+
 def test_window_opens_with_transcript_hidden_at_listen_recall_step(qapp, conn, tmp_path):
     load_result = _import_material(conn, tmp_path)
     session = svc.start_selected_session(conn, load_result.material.id, [load_result.cues[0].id])

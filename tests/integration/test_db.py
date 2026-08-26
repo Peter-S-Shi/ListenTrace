@@ -9,6 +9,7 @@ from listentrace.domain.models.subtitle import SubtitleCue, SubtitleTrack
 from listentrace.infrastructure.db.connection import open_connection
 from listentrace.infrastructure.db.migrations import MIGRATIONS, current_version, migrate
 from listentrace.infrastructure.db.repository import (
+    create_material_package,
     get_cue_count,
     get_cues_for_track,
     get_material,
@@ -77,6 +78,58 @@ def test_material_and_subtitle_persistence_round_trip(conn):
 def test_cue_end_before_start_is_rejected():
     with pytest.raises(ValueError):
         SubtitleCue(cue_index=1, start_ms=1000, end_ms=500, text="broken")
+
+
+def test_create_material_package_rolls_back_completely_on_partial_failure(conn):
+    """M14 Corrective Batch C (C3): `create_material_package` is documented
+    as inserting the material, its subtitle track, and every cue as one
+    all-or-nothing transaction (explicit `try/except: conn.rollback(); raise`
+    around three separate statements/executemany calls, `conn.commit()` only
+    on full success) -- this is the real invariant the Phase 1 audit's
+    "ImportDialog rollback" gap was gesturing at (the UI dialog itself has no
+    separate rollback behavior; the atomicity lives here). No test previously
+    forced a failure partway through and inspected what survived. A cue with
+    `text=None` (bypassing the domain model's own light validation, which
+    only checks end_ms >= start_ms) reaches SQLite's real `text TEXT NOT
+    NULL` constraint on `subtitle_cue`, failing after the material and
+    subtitle_track rows have already been inserted in the same transaction --
+    the exact partial-failure shape this function's rollback exists for."""
+    material = Material(title="Broken Import", media_path="C:/media/broken.mp4")
+    track = SubtitleTrack(
+        material_id=0,
+        format="srt",
+        source_path="C:/media/broken.srt",
+        cues=[
+            SubtitleCue(cue_index=1, start_ms=0, end_ms=1000, text="Bonjour"),
+            SubtitleCue(cue_index=2, start_ms=1000, end_ms=2000, text=None),  # violates NOT NULL
+        ],
+    )
+
+    with pytest.raises(sqlite3.IntegrityError):
+        create_material_package(conn, material, track)
+
+    assert conn.execute("SELECT COUNT(*) FROM material").fetchone()[0] == 0, (
+        "the material row from earlier in the same transaction must not survive"
+    )
+    assert conn.execute("SELECT COUNT(*) FROM subtitle_track").fetchone()[0] == 0, (
+        "the subtitle_track row from earlier in the same transaction must not survive"
+    )
+    assert conn.execute("SELECT COUNT(*) FROM subtitle_cue").fetchone()[0] == 0, (
+        "no partial cue rows may survive either"
+    )
+
+    # The connection must remain usable for a subsequent, valid write --
+    # proving the rollback left no dangling transaction state.
+    good_track = SubtitleTrack(
+        material_id=0,
+        format="srt",
+        source_path="C:/media/good.srt",
+        cues=[SubtitleCue(cue_index=1, start_ms=0, end_ms=1000, text="Bonjour")],
+    )
+    good_material = Material(title="Good Import", media_path="C:/media/good.mp4")
+    material_id, track_id = create_material_package(conn, good_material, good_track)
+    assert get_material(conn, material_id) is not None
+    assert get_cue_count(conn, track_id) == 1
 
 
 def test_migration_upgrades_a_milestone1_v1_database(tmp_path):

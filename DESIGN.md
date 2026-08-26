@@ -1,7 +1,7 @@
 # ListenTrace — DESIGN.md
 
 > **Status:** Normative Rendering Authority v1.0 — Implemented and Accepted in Milestone 13  
-> **Scope:** Final visual rendering, interaction styling, typography, color, paper/notebook treatment, decorative grammar, acoustic feedback, and visual acceptance.  
+> **Scope:** Final visual rendering, interaction styling, typography, color, paper/notebook treatment, decorative grammar, and visual acceptance.  
 > **Product:** ListenTrace  
 > **UI stack:** PySide6 / Qt Widgets  
 > **Primary visual system:** **Notebook Study Desk**  
@@ -911,7 +911,7 @@ Handle size:   14px
 Groove height: 4px
 ```
 
-Media volume and Interface Sound Volume use the same visual component but separate data/state.
+Media volume is controlled via the standard horizontal slider component.
 
 ---
 
@@ -1084,140 +1084,22 @@ The explanatory sticky notes seen around design-board mockups are **not product 
 
 ---
 
-# 11. Sound and Acoustic Study Desk system
+# 11. Interface sound policy — Decorative UI audio explicitly excluded
 
-## 11.1 Principle
+ListenTrace is a dedicated listening-training application. Decorative interface sound effects (paper rustles, pencil ticks, UI button clicks, completion stamps, and folder navigation sounds) are **explicitly excluded from the product design contract**.
 
-The sound system should extend the physical-study metaphor:
+Additional UI sounds create auditory competition and cognitive interference during intensive foreign-language listening practice.
 
-```text
-paper
-pencil
-desk
-folder
-recorder
-soft completion stamp
-```
+All auditory capabilities in ListenTrace are reserved exclusively for authentic learning audio:
 
-It must not sound like:
+- media playback;
+- cue replay and loop practice;
+- volume and mute controls;
+- microphone recording capture;
+- learner take playback;
+- source-versus-take comparison.
 
-- a game;
-- a phone notification pack;
-- Windows system beeps;
-- arcade success/failure;
-- synthetic UI blips on every click.
-
----
-
-## 11.2 Absolute learning-audio rule
-
-> **UI sounds must never contaminate learning audio.**
-
-Do not play an interface click immediately before or over:
-
-- Play;
-- Replay Cue;
-- Loop Cue;
-- Compare Source playback;
-- any navigation action that automatically triggers source audio.
-
-The learner must hear the real onset of the target audio without a synthetic auditory cue.
-
----
-
-## 11.3 Canonical sound asset set
-
-Recommended bundled WAV assets:
-
-```text
-ui_paper_tap_soft.wav
-ui_page_turn_soft.wav
-ui_paper_slide_soft.wav
-ui_pencil_tick.wav
-ui_pencil_save.wav
-ui_stamp_complete_soft.wav
-ui_folder_open_soft.wav
-ui_folder_close_soft.wav
-ui_recorder_start_click.wav
-ui_recorder_stop_click.wav
-ui_error_wood_knock_soft.wav
-```
-
-Use original, properly licensed, or CC0 assets.  
-Do not depend on web-hosted audio at runtime.
-
----
-
-## 11.4 Sound mapping
-
-| Action | Sound | Notes |
-|---|---|---|
-| Ordinary non-media Primary commit | `ui_paper_tap_soft.wav` | very quiet |
-| Stage transition | `ui_page_turn_soft.wav` | only when no media starts immediately |
-| Reveal & Continue | `ui_paper_slide_soft.wav` | Quick Practice reveal |
-| Save annotation / diagnosis / note | `ui_pencil_save.wav` | short |
-| Checkbox / answer selection | `ui_pencil_tick.wav` | optional; very quiet |
-| Complete Stage / Session / Run | `ui_stamp_complete_soft.wav` | restrained, not celebratory arcade sound |
-| Open dossier/history | `ui_folder_open_soft.wav` | optional |
-| Close dossier/history | `ui_folder_close_soft.wav` | optional |
-| Recording Start | `ui_recorder_start_click.wav` | useful tactile confirmation |
-| Recording Stop | `ui_recorder_stop_click.wav` | paired response |
-| Invalid action / blocking validation | `ui_error_wood_knock_soft.wav` | never sharp/alarming |
-
-No sound for ordinary hover.
-
-No sound for every scroll, list selection, or keyboard focus move.
-
----
-
-## 11.5 Sound technical limits
-
-Interface master volume:
-
-```text
-Default: 22%
-User range: 0–50%
-```
-
-Media volume and Interface Sound Volume are fully independent.
-
-Target asset characteristics:
-
-```text
-Sample rate:       44.1kHz or 48kHz
-Bit depth:         16-bit or 24-bit PCM WAV
-Peak target:       approximately -14 dBFS
-Typical RMS/LUFS:  restrained; perceived well below learning media
-Ordinary duration: 60–220ms
-Page-turn duration: up to 420ms
-Completion stamp:  up to 300ms
-```
-
-Do not normalize UI sounds to commercial music loudness.
-
-Prevent repeated triggering of the same UI sound within **120ms** unless it represents separate explicit user actions.
-
----
-
-## 11.6 Sound settings
-
-Add a small **Sound & Feedback** preference group:
-
-```text
-Interface Sounds        [On / Off]
-Interface Sound Volume  [slider]
-```
-
-Defaults:
-
-```text
-Interface Sounds: ON
-Interface Volume: 22%
-```
-
-Every sound-supported action must still provide complete visual feedback.
-
-Turning sounds off must never remove information.
+All interface actions communicate state changes through visual clarity, state tokens, and accessible visual feedback rather than decorative UI sounds.
 
 ---
 
@@ -1341,7 +1223,6 @@ Visual intensity: **5 / 5**.
 - Stage 3 is the densest evidence workspace.
 - Stage 4 centers Recording.
 - Stage 5 is a large ruled Final Recall Journal.
-- Stage transitions may use a restrained page-turn sound.
 
 ---
 
@@ -1353,7 +1234,6 @@ Visual intensity: **4 / 5**.
 - Question/media region + answer region + Learning Flow Action Bar.
 - Do not turn each answer into an oversized card.
 - Submit remains hero when eligible.
-- Answer-selection pencil sound is optional and subtle.
 
 ---
 
@@ -1408,7 +1288,7 @@ Visual intensity: **2 / 5**.
 
 Visual intensity: **2 / 5**.
 
-- Global Playback Settings, Material Loop Settings, and Label Colors share visual chrome.
+- Global Settings (Playback and Label Colors) and Material Loop Settings share visual chrome.
 - Global scope vs per-material override must be immediately legible.
 - Inherit / Custom / Reset-to-Global semantics must not be visually collapsed.
 - Label Colors is lighter and more visual; include a real preview.
@@ -1451,7 +1331,6 @@ Prefer:
 theme.py
 shared notebook primitives
 shared button/control roles
-shared sound-feedback service
 ```
 
 Avoid:
@@ -1461,7 +1340,6 @@ window-local magic hex
 window-local arbitrary font sizes
 window-local one-off radii
 window-local duplicated notebook painters
-window-local sound playback plumbing
 ```
 
 ---
@@ -1481,8 +1359,7 @@ Examples:
 - spiral binding;
 - notebook page;
 - history ruled list;
-- settings section;
-- sound feedback service.
+- settings section.
 
 Do not create a universal mega-widget with dozens of configuration flags merely to claim reuse.
 
@@ -1501,8 +1378,7 @@ Use the correct Qt mechanism:
 - ruled paper / spiral rings → `QPainter`;
 - uppercase labels → uppercase source string;
 - text document paragraph spacing → `QTextDocument` / block formatting;
-- real focus / keyboard semantics → native QWidget/QAbstractButton behavior;
-- sound playback → a centralized service suitable for short local WAV assets.
+- real focus / keyboard semantics → native QWidget/QAbstractButton behavior.
 
 Do not fake unsupported QSS behavior and assume it works because the stylesheet parses.
 
@@ -1603,15 +1479,12 @@ A surface is not visually complete until all applicable checks pass.
 - [ ] Flowers/stars/tape/paperclips are sparse and purposeful.
 - [ ] Dense data and error zones remain decoration-free.
 
-## 15.7 Sound
+## 15.7 Learning audio integrity
 
-- [ ] Interface Sounds can be disabled.
-- [ ] Interface volume is independent from Media volume.
-- [ ] Playback/replay/loop audio onset is not contaminated by UI sounds.
-- [ ] Recording start/stop has clear tactile feedback if sounds are enabled.
-- [ ] No arcade success/error sounds.
-- [ ] Every sound has equivalent visual feedback.
-- [ ] Rapid repeated sounds are throttled.
+- [ ] Media playback starts cleanly without UI audio contamination.
+- [ ] Replay, cue navigation, and loop endpoints operate without synthetic clicks.
+- [ ] Microphone recording and take review preserve authentic audio signals.
+- [ ] All action feedback is provided visually with accessible state indications.
 
 ## 15.8 Platform verification
 
@@ -1645,9 +1518,9 @@ Before accepting a rendered surface, ask:
 6. Is the surface appropriately restrained for its visual-intensity class?
 7. Does it still behave like a precise modern desktop application?
 8. Would removing the decorative motifs leave a coherent, usable information architecture?
-9. If sound is enabled, does it reinforce the study-desk metaphor without touching learning-audio fidelity?
+9. Does the interface communicate state changes purely visually without competing audio?
 10. Does the result feel like **ListenTrace**, not a generic SaaS dashboard wearing a notebook skin?
 
 The intended final impression is:
 
-> **A warm, personal, tactile study desk where listening, diagnosis, shadowing, quizzes, and learning evidence live in one coherent journal system — with modern desktop clarity underneath every paper, notebook, and sound cue.**
+> **A warm, personal, tactile study desk where listening, diagnosis, shadowing, quizzes, and learning evidence live in one coherent journal system — with modern desktop clarity underneath every paper and notebook surface.**

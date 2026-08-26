@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (
     QComboBox,
     QDateEdit,
     QDialog,
+    QFrame,
     QGridLayout,
     QHBoxLayout,
     QHeaderView,
@@ -19,6 +20,7 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QMessageBox,
     QPushButton,
+    QScrollArea,
     QSplitter,
     QStackedWidget,
     QTabWidget,
@@ -42,10 +44,10 @@ from listentrace.application.services import quick_practice_service
 from listentrace.application.services.player_loading_service import load_material_for_player
 from listentrace.domain.enums.quick_practice_status import QuickPracticeStatus
 from listentrace.domain.services import date_range as date_range_rules
+from listentrace.domain.services.time_display import format_local_timestamp
 from listentrace.ui import theme
 from listentrace.ui.widgets.notebook_paper import GrainedDeskWidget
 from listentrace.ui.theme import SPACE_COMPACT, SPACE_NORMAL, SPACE_PAGE, SPACE_SECTION, apply_role, apply_surface
-from listentrace.ui.time_display import format_local_timestamp
 from listentrace.ui.widgets.simple_bar_chart import SimpleBarChart
 from listentrace.ui.windows.export_dialog import ExportDialog
 from listentrace.ui.windows.guided_session_window import GuidedSessionWindow
@@ -104,6 +106,15 @@ _OVERVIEW_METRICS: list[tuple[str, str, str | None, str]] = [
 ]
 
 
+def _wrap_scrollable(widget: QWidget) -> QScrollArea:
+    scroll = QScrollArea()
+    scroll.setWidgetResizable(True)
+    scroll.setFrameShape(QFrame.Shape.NoFrame)
+    scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+    scroll.setWidget(widget)
+    return scroll
+
+
 class LearningHistoryWindow(QMainWindow):
     """Milestone 8: a global learning-evidence center. Combines a learning
     log, lightweight summaries, transparent insights, and workflow
@@ -121,60 +132,78 @@ class LearningHistoryWindow(QMainWindow):
         initial_material_id: int | None = None,
     ) -> None:
         super().__init__(parent)
-        self.setWindowTitle("ListenTrace — Learning History & Insights")
-        self.resize(920, 700)
         self._connection = connection
         self._recordings_dir = recordings_dir
-        self._child_window: QWidget | None = None
 
-        central = GrainedDeskWidget(self)
+        self.setWindowTitle("ListenTrace — Learning History & Insights")
+        self.setMinimumSize(900, 560)
+        self.resize(980, 640)
+
+        self._activity_entries: list[ActivityItem] = []
+        self._continue_learning_entries: list[SessionHistoryEntry] = []
+        self._needs_attention_entries: list[history_svc.NeedsAttentionItem] = []
+        self._session_entries: list[SessionHistoryEntry] = []
+        self._quiz_history_entries: list[history_svc.QuizHistoryEntry] = []
+        self._quiz_comparison_groups: list[history_svc.QuizComparisonGroup] = []
+        self._shadowing_entries: list[ShadowingEvidenceEntry] = []
+        self._high_frequency_entries: list[history_svc.HighFrequencyCue] = []
+        self._recording_entries: list[RecordingEvidenceEntry] = []
+        self._quick_practice_entries: list[QuickPracticeHistoryEntry] = []
+
+        self._init_ui(initial_material_id)
+
+    def _init_ui(self, initial_material_id: int | None) -> None:
+        apply_surface(self, "paper")
+        central = GrainedDeskWidget()
         apply_surface(central, "paper")
         outer_layout = QVBoxLayout(central)
-        outer_layout.setContentsMargins(SPACE_PAGE, SPACE_PAGE, SPACE_PAGE, SPACE_PAGE)
-        outer_layout.setSpacing(SPACE_SECTION)
-        apply_surface(self, "paper")
+        outer_layout.setContentsMargins(SPACE_SECTION, SPACE_SECTION, SPACE_SECTION, SPACE_SECTION)
+        outer_layout.setSpacing(SPACE_NORMAL)
 
+        # Header: surface identity stamp + filter bar
         header = theme.make_surface_header("Study Dossier — Learning History & Insights")
         outer_layout.addLayout(header.top_bar)
 
-        # M13 Final Human-Gate Corrective (HG-08): a single rigid
-        # QHBoxLayout packing the material/date filters AND the three
-        # action buttons let the trailing "Export Learning Evidence..."
-        # button run off the window's right edge at a real screen's
-        # available width. Splitting the filters and the actions onto
-        # their own compact rows (rather than a FlowLayout -- which would
-        # also flip this whole window's height-for-width propagation and
-        # inflate the overall window height as an unrelated side effect)
-        # keeps each row's natural content short enough to always fit.
-        filter_row = QHBoxLayout()
-        filter_row.addWidget(QLabel("Material:"))
-        self._material_combo = QComboBox()
-        filter_row.addWidget(self._material_combo, 1)
+        filters_card = QFrame()
+        theme.apply_role(filters_card, "card_plain")
+        filters_row = QHBoxLayout(filters_card)
+        filters_row.setContentsMargins(SPACE_NORMAL, SPACE_COMPACT, SPACE_NORMAL, SPACE_COMPACT)
+        filters_row.setSpacing(SPACE_NORMAL)
 
-        filter_row.addWidget(QLabel("Date Range:"))
+        filters_row.addWidget(QLabel("Material:"))
+        self._material_combo = QComboBox()
+        self._material_combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToContents)
+        apply_role(self._material_combo, "compact_dropdown")
+        filters_row.addWidget(self._material_combo, 1)
+
+        filters_row.addWidget(QLabel("Date Range:"))
         self._preset_combo = QComboBox()
-        for label, _ in _PRESET_LABELS:
+        for label, _code in _PRESET_LABELS:
             self._preset_combo.addItem(label)
         self._preset_combo.currentIndexChanged.connect(self._on_preset_changed)
-        filter_row.addWidget(self._preset_combo)
+        apply_role(self._preset_combo, "compact_dropdown")
+        filters_row.addWidget(self._preset_combo)
 
-        self._custom_start_edit = QDateEdit()
+        self._custom_start_edit = QDateEdit(QDate.currentDate().addDays(-7))
         self._custom_start_edit.setCalendarPopup(True)
-        self._custom_end_edit = QDateEdit()
-        self._custom_end_edit.setCalendarPopup(True)
-        today = QDate.currentDate()
-        self._custom_start_edit.setDate(today.addDays(-30))
-        self._custom_end_edit.setDate(today)
-        filter_row.addWidget(self._custom_start_edit)
-        filter_row.addWidget(self._custom_end_edit)
-        outer_layout.addLayout(filter_row)
+        self._custom_start_edit.setDisplayFormat("yyyy-MM-dd")
+        filters_row.addWidget(self._custom_start_edit)
 
-        actions_row = QHBoxLayout()
-        actions_row.addStretch(1)
+        self._custom_end_edit = QDateEdit(QDate.currentDate())
+        self._custom_end_edit.setCalendarPopup(True)
+        self._custom_end_edit.setDisplayFormat("yyyy-MM-dd")
+        filters_row.addWidget(self._custom_end_edit)
+
         self._apply_button = QPushButton("Apply")
         self._apply_button.clicked.connect(self._on_reload_clicked)
         theme.apply_role(self._apply_button, "secondary")
-        actions_row.addWidget(self._apply_button)
+        filters_row.addWidget(self._apply_button)
+
+        outer_layout.addWidget(filters_card)
+
+        # Action shortcuts row (Quick Practice / Export)
+        actions_row = QHBoxLayout()
+        actions_row.addStretch(1)
         self._quick_practice_button = QPushButton("Quick Practice...")
         self._quick_practice_button.clicked.connect(self._on_quick_practice_clicked)
         theme.apply_role(self._quick_practice_button, "secondary")
@@ -196,10 +225,6 @@ class LearningHistoryWindow(QMainWindow):
 
         # Left navigation directory
         self._section_list = QListWidget()
-        # 168px with no wrapping truncated "Shadowing & Recordings" and forced
-        # an unwanted horizontal scrollbar. Wrapping (plus a modest width
-        # bump) lets every label read in full on two lines without reviving
-        # the old horizontal-tabs layout.
         self._section_list.setMaximumWidth(190)
         self._section_list.setMinimumWidth(150)
         theme.configure_long_text_list(self._section_list)
@@ -219,15 +244,15 @@ class LearningHistoryWindow(QMainWindow):
         self._section_list.currentRowChanged.connect(self._on_section_changed)
         body_splitter.addWidget(self._section_list)
 
-        # Right section workspace (one page per directory entry)
+        # Right section workspace (one scrollable page per directory entry)
         self._section_stack = QStackedWidget()
-        self._section_stack.addWidget(self._build_overview_tab())
-        self._section_stack.addWidget(self._build_activity_tab())
-        self._section_stack.addWidget(self._build_sessions_tab())
-        self._section_stack.addWidget(self._build_diagnoses_tab())
-        self._section_stack.addWidget(self._build_quizzes_tab())
-        self._section_stack.addWidget(self._build_shadowing_recordings_tab())
-        self._section_stack.addWidget(self._build_quick_practice_tab())
+        self._section_stack.addWidget(_wrap_scrollable(self._build_overview_tab()))
+        self._section_stack.addWidget(_wrap_scrollable(self._build_activity_tab()))
+        self._section_stack.addWidget(_wrap_scrollable(self._build_sessions_tab()))
+        self._section_stack.addWidget(_wrap_scrollable(self._build_diagnoses_tab()))
+        self._section_stack.addWidget(_wrap_scrollable(self._build_quizzes_tab()))
+        self._section_stack.addWidget(_wrap_scrollable(self._build_shadowing_recordings_tab()))
+        self._section_stack.addWidget(_wrap_scrollable(self._build_quick_practice_tab()))
         body_splitter.addWidget(self._section_stack)
 
         body_splitter.setSizes([180, 718])
@@ -343,8 +368,9 @@ class LearningHistoryWindow(QMainWindow):
         self._continue_learning_list = QListWidget()
         theme.apply_role(self._continue_learning_list, "ruled_list")
         theme.configure_long_text_list(self._continue_learning_list)
+        self._continue_learning_list.setMinimumHeight(110)
         self._continue_learning_list.currentItemChanged.connect(self._on_continue_learning_selection_changed)
-        continue_column.addWidget(self._continue_learning_list, 1)
+        continue_column.addWidget(self._continue_learning_list)
 
         continue_buttons_row = QHBoxLayout()
         self._resume_button = QPushButton("Resume")
@@ -363,7 +389,7 @@ class LearningHistoryWindow(QMainWindow):
         continue_buttons_row.addWidget(self._open_material_from_continue_button)
         continue_buttons_row.addWidget(self._abandon_button)
         continue_column.addLayout(continue_buttons_row)
-        layout.addWidget(continue_card, 1)
+        layout.addWidget(continue_card)
 
         attention_card, attention_column = theme.make_card(
             "Needs Attention — transparent reasons, not a ranking (always shown, all materials)"
@@ -371,9 +397,10 @@ class LearningHistoryWindow(QMainWindow):
         self._needs_attention_list = QListWidget()
         theme.apply_role(self._needs_attention_list, "ruled_list")
         theme.configure_long_text_list(self._needs_attention_list)
+        self._needs_attention_list.setMinimumHeight(110)
         self._needs_attention_list.itemDoubleClicked.connect(self._on_needs_attention_double_clicked)
-        attention_column.addWidget(self._needs_attention_list, 1)
-        layout.addWidget(attention_card, 1)
+        attention_column.addWidget(self._needs_attention_list)
+        layout.addWidget(attention_card)
 
         return widget
 
@@ -402,7 +429,7 @@ class LearningHistoryWindow(QMainWindow):
         for entry in self._continue_learning_entries:
             item = QListWidgetItem(
                 f"{entry.material_title} — active, current stage: {entry.current_stage} "
-                f"(last resumed {entry.last_resumed_at})"
+                f"(last resumed {format_local_timestamp(entry.last_resumed_at)})"
             )
             item.setData(Qt.ItemDataRole.UserRole, entry.session_id)
             self._continue_learning_list.addItem(item)
@@ -513,7 +540,7 @@ class LearningHistoryWindow(QMainWindow):
         self._activity_list.clear()
         shown = [e for e in self._activity_entries if e.activity_type in selected_types]
         for entry in shown:
-            item = QListWidgetItem(f"[{entry.occurred_at}] {entry.material_title} — {entry.summary}")
+            item = QListWidgetItem(f"[{format_local_timestamp(entry.occurred_at)}] {entry.material_title} — {entry.summary}")
             item.setData(Qt.ItemDataRole.UserRole, entry)
             self._activity_list.addItem(item)
         if not shown:
@@ -639,7 +666,7 @@ class LearningHistoryWindow(QMainWindow):
             self._diagnosis_history_list.addItem(
                 f"{summary.label_key}: {summary.occurrence_count} occurrence(s) across "
                 f"{summary.session_count} session(s), {summary.material_count} material(s) "
-                f"— most recent {summary.most_recent_at}"
+                f"— most recent {format_local_timestamp(summary.most_recent_at)}"
             )
         if not summaries:
             empty = QListWidgetItem("No session diagnosis evidence for the selected filters.")
@@ -824,7 +851,7 @@ class LearningHistoryWindow(QMainWindow):
     def _shadowing_item_text(self, entry: ShadowingEvidenceEntry) -> str:
         text = f"{entry.material_title} — \"{entry.cue_text}\" — practiced {entry.practice_count}x"
         if entry.last_practiced_at:
-            text += f" — last {entry.last_practiced_at}"
+            text += f" — last {format_local_timestamp(entry.last_practiced_at)}"
         if entry.note:
             text += f" — note: {entry.note}"
         return text

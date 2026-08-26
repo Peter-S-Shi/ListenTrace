@@ -218,3 +218,67 @@ def test_player_window_m13_video_widget_preserves_aspect_ratio_without_black_box
     window.close()
 
 
+def test_player_window_material_renamed_updates_window_title_and_header(qapp, db_conn, tmp_path):
+    """M14 Corrective Batch A (A2): rename propagation to an already-open
+    dependent window. PlayerWindow is the bus's own motivating case
+    (`material_metadata_bus.py`'s docstring), but was missing this test
+    while every sibling window (GuidedSessionWindow, QuizWindow,
+    QuickPracticeWindow, ShadowingPracticeWindow,
+    MaterialLoopSettingsDialog) already had one -- found during the M14
+    merge-ready `/code-review` pass."""
+    from listentrace.ui.widgets.material_metadata_bus import material_metadata_bus
+
+    load_res = _sample_player_load(tmp_path)
+    window = PlayerWindow(load_res, db_conn)
+
+    assert window.windowTitle() == "ListenTrace — M13 Audio Lesson"
+    assert window._header_title_label.text() == "M13 Audio Lesson"
+
+    material_metadata_bus.material_renamed.emit(load_res.material.id, "Renamed M13 Lesson")
+
+    assert window.windowTitle() == "ListenTrace — Renamed M13 Lesson"
+    assert window._header_title_label.text() == "Renamed M13 Lesson"
+
+    # A rename for a different material must not affect this window.
+    material_metadata_bus.material_renamed.emit(load_res.material.id + 999, "Someone Else's Lesson")
+    assert window.windowTitle() == "ListenTrace — Renamed M13 Lesson"
+
+
+def test_player_cue_selection_clearing_and_state_coexistence(qapp, db_conn, tmp_path):
+    """M14 Phase 0: Test explicit cue selection clearing via context menu or clearSelection,
+    confirming it clears multi-selection while preserving editing cue index, active playing cue,
+    and annotation workspace state."""
+    load_res = _sample_player_load(tmp_path)
+    window = PlayerWindow(load_res, db_conn)
+    window.show()
+    qapp.processEvents()
+
+    # Set current row and select both cues in the list
+    window._cue_list.setCurrentRow(0)
+    window._cue_list.item(0).setSelected(True)
+    window._cue_list.item(1).setSelected(True)
+    assert len(window._cue_list.selectedItems()) == 2
+    assert window._editing_cue_index == 0
+
+    # Simulate active playing cue on cue 1 (start 1000ms - end 2500ms)
+    window._on_position_changed(1500)
+    assert window._cue_rows[1]._marker_label.text() == "▶"
+
+    # Context menu exists on cue list
+    assert window._cue_list.contextMenuPolicy() == Qt.ContextMenuPolicy.CustomContextMenu
+
+    # Clear explicit selection
+    window._on_clear_cue_selection()
+
+    # Selected items must be cleared
+    assert len(window._cue_list.selectedItems()) == 0
+    assert window._selected_cue_indices() == []
+
+    # Editing cue index, current row, and active playing cue are preserved
+    assert window._editing_cue_index == 0
+    assert window._session.active_cue_index == 1
+    assert window._cue_rows[1]._marker_label.text() == "▶"
+
+    window.close()
+
+

@@ -24,6 +24,7 @@ from listentrace.domain.services.loop_grace_policy import (
 )
 from listentrace.ui import theme
 from listentrace.ui.widgets.loop_grace_change_bus import loop_grace_change_bus
+from listentrace.ui.widgets.material_metadata_bus import material_metadata_bus
 
 _EXPLANATION = (
     "Some subtitle timings cut off the end of spoken audio during Loop. "
@@ -60,6 +61,11 @@ class MaterialLoopSettingsDialog(QDialog):
         # custom state and value that no longer match what's persisted.
         loop_grace_change_bus.global_default_changed.connect(self._on_preference_changed_elsewhere)
         loop_grace_change_bus.material_override_changed.connect(self._on_material_override_changed_elsewhere)
+        # M14 Corrective Batch A2 acceptance gap: this dialog's window title
+        # bakes in the material title at construction time, same as the five
+        # host learning windows -- it needs the same live-refresh treatment
+        # rather than a sixth host-specific update path.
+        material_metadata_bus.material_renamed.connect(self._on_material_renamed)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(theme.SPACE_SECTION, theme.SPACE_SECTION, theme.SPACE_SECTION, theme.SPACE_SECTION)
@@ -200,6 +206,10 @@ class MaterialLoopSettingsDialog(QDialog):
     def _on_material_override_changed_elsewhere(self, material_id: int) -> None:
         if material_id == self._material_id:
             self._refresh_from_persistence()
+
+    def _on_material_renamed(self, material_id: int, new_title: str) -> None:
+        if material_id == self._material_id:
+            self.setWindowTitle(f"Loop Settings — {new_title}")
 
     def showEvent(self, event) -> None:  # noqa: D102 - Qt override
         super().showEvent(event)

@@ -61,7 +61,9 @@ from listentrace.ui.theme import (
     apply_surface,
     apply_variant,
 )
+from listentrace.ui.widgets.label_color_change_bus import label_color_change_bus
 from listentrace.ui.widgets.loop_grace_change_bus import loop_grace_change_bus
+from listentrace.ui.widgets.material_metadata_bus import material_metadata_bus
 from listentrace.ui.widgets.recording_panel import RecordingPanel
 from listentrace.ui.windows.material_loop_settings_dialog import MaterialLoopSettingsDialog
 from listentrace.ui.windows.player_window import _OVERLAP_HIGHLIGHT, _format_time
@@ -207,6 +209,8 @@ class QuickPracticeWindow(QMainWindow):
         self._loop_settings_dialog: MaterialLoopSettingsDialog | None = None
         loop_grace_change_bus.global_default_changed.connect(self._on_loop_grace_global_default_changed)
         loop_grace_change_bus.material_override_changed.connect(self._on_loop_grace_material_override_changed)
+        material_metadata_bus.material_renamed.connect(self._on_material_renamed)
+        label_color_change_bus.label_colors_changed.connect(self._on_label_colors_changed)
         self._playback_usable = True
         self._state: QuickPracticeSessionState | None = None
         self._index = 0
@@ -230,6 +234,7 @@ class QuickPracticeWindow(QMainWindow):
         # -------------------------------------------------------------------
         header = theme.make_surface_header(self._material.title)
         header_row = header.top_bar
+        self._header_title_label = header.title_label
         header.title_row.addStretch(1)
 
         close_top_btn = QPushButton("Exit")
@@ -438,6 +443,39 @@ class QuickPracticeWindow(QMainWindow):
     def _refresh_loop_end_grace(self) -> None:
         grace_ms = loop_grace_service.effective_loop_end_grace_ms(self._connection, self._material.id)
         self._player_session.set_loop_end_grace_ms(grace_ms)
+
+    def _on_material_renamed(self, material_id: int, new_title: str) -> None:
+        # M14 Corrective Batch A (A2): only title-derived presentation
+        # refreshes -- run/step state is untouched.
+        if material_id != self._material.id:
+            return
+        self._material.title = new_title
+        self.setWindowTitle(f"ListenTrace — Quick Practice — {new_title}")
+        self._header_title_label.setText(new_title)
+
+    def _on_label_colors_changed(self) -> None:
+        # M14 Corrective Batch A (A3): repaint diagnosis colors in place --
+        # deliberately not `_populate_diagnose()`/`_refresh_diagnosis_evidence_list()`
+        # via a full step reload, which also clears the in-progress diagnosis
+        # edit form as a side effect.
+        self._refresh_diagnosis_presentation_colors()
+
+    def _refresh_diagnosis_presentation_colors(self) -> None:
+        colors = label_preference_service.get_label_preferences(self._connection)
+        cue = self._current_cue()
+        if cue is not None and self._diagnosis_transcript_view.isVisible():
+            apply_range_highlighting(
+                self._diagnosis_transcript_view, cue.text, self._current_diagnosis_evidence, colors, _OVERLAP_HIGHLIGHT
+            )
+        for i in range(self._diagnosis_list.count()):
+            item = self._diagnosis_list.item(i)
+            if item is None:
+                continue
+            diag_id = item.data(Qt.ItemDataRole.UserRole)
+            diag = next((d for d in self._current_diagnosis_evidence if d.id == diag_id), None)
+            row = self._diagnosis_list.itemWidget(item)
+            if diag is not None and isinstance(row, theme.DiagnosisNoteRow):
+                row.set_color(colors.get(diag.label_key, UNKNOWN_LABEL_COLOR))
 
     def _sync_playback_button_texts(self) -> None:
         text = "Pause" if self._playback.is_playing else "Play"

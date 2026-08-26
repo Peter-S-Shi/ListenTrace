@@ -360,7 +360,7 @@ M11 must preserve Functional Feature Freeze. It must not introduce new learning 
 
 ## Dependencies
 
-Requires the functionally complete, feature-frozen application from Milestones 1-10. Milestone 12 — Product Hardening & Full Manual Acceptance (below) follows M11's Presentation Complete Gate; Phase C2 — Clean-Machine Acceptance (see "v1.0 Release Engineering" below) occurs only after M12, so the actual hardened, final-UI release is what gets clean-machine-validated, not an earlier presentation layer.
+Requires the functionally complete, feature-frozen application from Milestones 1-10. Milestone 12 (Pre-UI Product Hardening), Milestone 13 (Advanced UI/UX Reconstruction), and Milestone 14 (Final Product Hardening & Full Manual Regression) follow M11's Presentation Complete Gate; Milestone 15 — Release Candidate & Delivery, including its clean-machine acceptance stage (see "v1.0 Release Engineering" below), occurs only after Milestone 14, so the actual hardened, final-UI release is what gets clean-machine-validated, not an earlier presentation layer or unaudited build.
 
 ## Closeout Summary
 
@@ -394,71 +394,29 @@ Do not claim presentation completion before M11 is implemented and accepted.
 
 ---
 
-# Milestone 12 — Product Hardening & Full Manual Acceptance
+# Milestone 12 — Pre-UI Product Hardening (Completed)
 
 ## Goal
 
-M12 is not a new-feature milestone. Its purpose is to make the final M1-M11 product reliable, consistent, understandable, maintainable, and ready to enter clean-machine and release-candidate validation.
+Audit and harden the pre-reconstruction v1.0 product, repair release-relevant defects, and complete initial system audits and automated regression baselines without expanding the frozen product scope.
 
-> Audit and harden the complete v1.0 product after the final presentation layer
-> is in place, repair release-relevant defects, and complete full regression and
-> real-user-workflow acceptance without expanding the frozen product scope.
+## Status
 
-**M12 is split into two sub-phases, separated by Milestone 13 — Advanced UI/UX Reconstruction (below).** This split was decided during M12 itself, once the audit and the user's Human QA Round 1 pass surfaced UI/layout/playback-interaction findings substantial enough to warrant their own dedicated whole-product reconstruction phase rather than being patched piecemeal inside M12:
+**Completed, Accepted, and Merged to `main`.**
 
-- **Phase 12-A — Pre-UI Product Hardening (Completed).** Covers M12.1 (System Audit), M12.2 (Correctness and Data Integrity), most of M12.3 (Workflow and UX Consistency — the correctness/reliability half, not visual/interaction redesign), and M12.4 (Robustness, Privacy, and Performance), plus the Loop Cue audible-endpoint defect chain through to a human-calibrated, closed resolution. See `PROJECT_STATUS.md`'s Completed section for the full record. Human QA Round 2 is **frozen as a pre-UI baseline / partial acceptance** at the point Phase 12-A closed: it verified the corrected areas from Round 1 plus the Loop End Grace calibration, not a full fresh product-wide pass — the remainder of Round 2's original full-questionnaire scope is deferred to Phase 12-B, after Milestone 13, so it tests the actual final UI rather than the pre-reconstruction one.
-- **Milestone 13 — Advanced UI/UX Reconstruction** (below): remaining UI/layout/playback-interaction *experience* findings from Phase 12-A's audit and Human QA Round 1/2 are intentionally handed to this dedicated phase rather than fixed piecemeal here.
-- **Phase 12-B — Final Product Hardening & Full Manual Regression (Pending, after Milestone 13).** M12.5, the original exit stage below, occurs here: a full regression pass and the user's complete Human QA Round 2 questionnaire against the *final* UI, not the pre-reconstruction one. M12 as a whole is not complete until Phase 12-B passes.
-
-M12 is organized conceptually into five stages.
-
-### M12.1 — System Audit and Defect Inventory
-
-A product-wide audit through realistic GUI workflows, not only isolated service calls. Covers at minimum: material and subtitle import; Material Library; Player; Transcript Workspace; Intensive Practice; Quiz; Shadowing and Recording; Learning History; Export; Quick Practice; restart and reopen; cancel/close/resume/abandon/discard/interrupted states; empty data, old data, invalid input, missing files, and failure paths. M12.1's purpose is to discover and classify problems, not to pre-invent a defect list before the audit runs. Findings are classified as: release-blocking defect; data-integrity/privacy/security defect; core-workflow or severe UX defect; medium/low-impact issue; architecture debt; or new feature request.
-
-### M12.2 — Correctness and Data Integrity
-
-Addresses confirmed problems involving data loss/overwrite/duplicate writes/partial success; session/quiz/recording/Quick Practice state transitions; deletion consistency between database records and retained files; migration and upgrade safety; transaction rollback; crash recovery; export atomicity and privacy redaction; historical calculations and evidence semantics; restart durability; legacy-data compatibility. Any critical defect fixed here gets regression coverage or a documented verification procedure.
-
-### M12.3 — Workflow and UX Consistency
-
-Audits whether the final M11 interface lets users complete existing promises reliably: consistent equivalent operations; clear Back/Cancel/Close/Resume/Restart/Abandon/Discard/Delete semantics; disabled controls that explain why; empty/error states; confirmation flows; navigation and return paths; status naming; workflow continuity across windows; whether core learning journeys form understandable end-to-end loops. M11 improves presentation and cognitive clarity; M12 verifies that the resulting workflows are correct and reliable. A severe UX defect that breaks or misrepresents an existing workflow belongs in M12, not Deferred Features.
-
-### M12.4 — Robustness, Privacy, and Performance
-
-Audits large histories; large subtitle files and long media; long-running sessions; repeated clicks; disk-full and permission failures where practical; moved or missing media; codec and playback failures; microphone disconnect/unavailability; logs and crash reports; accidental exposure of transcript text, personal paths, recordings, or other local data; installer/runtime resource behavior; foreseeable performance bottlenecks; third-party dependency and packaging risks. An untested condition is documented as unverified, never claimed as proven safe.
-
-### M12.5 — Full Regression and Manual Acceptance
-
-M12's exit stage. M12 can be completed only when: no known release-blocking defects remain; no known high-risk data-integrity/privacy/security defects remain; all defined core workflows pass manual GUI acceptance; the automated test suite passes; each fixed critical defect has regression coverage or a documented verification procedure; known deferred issues and limitations are documented; new feature requests are outside the frozen v1.0 scope; `ROADMAP.md`/`PROJECT_STATUS.md`/`README.md`/product documentation/packaging documentation/release planning agree; privacy and secret-safety checks pass; the verified local commit matches the intended remote `main` branch. M12 completion means product-wide hardening is complete — it does not by itself prove clean-machine compatibility or complete Phase D.
-
-## Phase 12-A Closeout Summary
-
-Delivered on branch `milestone/12-product-hardening`, prepared for merge to `main` via PR (not yet merged as of this writing — see `PROJECT_STATUS.md`'s Repository State for the exact commit):
-
-- **M12.1-B autonomous overnight audit** (Batches 1-5 + the M12.4 Performance Decision Gate): 18 findings, 8 fixed (5 with pre-fix-verified regression tests), 4 verified already correct, 4 accepted with rationale, 2 deferred to v1.0.x by measurement — see `HARDENING_BACKLOG.md`.
-- **Human QA Round 1** (the user's first full manual-acceptance pass) surfaced systemic playback/layout/workflow findings, handled through a read-only Phase 0 audit (`M12_CORRECTIVE_DIVERGENCE_MAP.md`, human-reviewed before any fix) then Batches A (release blockers: Guided Session completion-explainability, ghost-recording-Take, UTC-to-local-time display), B (Round 1 Playback Contract: cue-scoped Play, Previous/Next-Cue fix, Loop Cue toggle label, transcript auto-follow), C (Round 2 Layout Contract: Player workspace scroll/min-height fix, Quiz answer word-wrap), a new History Deletion capability (Round 4 Feasibility Gate), and 2 QA fixture/wording corrections — 10 further fixes, every one with a pre-fix-verified regression test.
-- **The Loop Cue audible-endpoint defect** (surfaced by Human QA Round 1): three corrective rounds against a single fixed constant were each human-retested and found insufficient, leading to a full architectural redesign — a calibratable **Loop End Grace** mechanism (per-Material override, global default, a `PlayerSession` snapshot mechanism guaranteeing a live change never retroactively edits an in-flight Loop iteration) plus a provisional (explicitly not M13-precedent) Settings UI reachable from all five Loop-capable training surfaces. **Human-calibrated and closed**: a 3-material retest found the original 180ms default insufficient on all three, 200ms sufficient on all three (complete tail, no next-cue leakage, continuous multi-cue playback) — the built-in default was raised accordingly (migration 12, additive). **Loop audible-end blocker: HUMAN ACCEPTED / CLOSED.**
-- This 3-material Loop End Grace retest is the only human-verification activity that happened after Human QA Round 1's corrective work landed. It is **not** a full product-wide Human QA Round 2 pass — see the note under Phase 12-A above. Human QA Round 2's original full-questionnaire scope (`manual-qa/manual_review_questionnaire.html`) remains pending, deferred to Phase 12-B after Milestone 13.
-- **Tests**: grew from 666 (Human QA Round 1 close) to 759 (Phase 12-A close) — every behavior-changing fix across this phase has an independently pre-fix-verified regression test, no exceptions taken.
-
-**Not delivered in Phase 12-A, by design:** any UI/layout/playback-interaction visual redesign beyond the minimum needed to expose the Loop End Grace settings (explicitly provisional scaffolding, not to be read as Milestone 13 precedent); Human QA Round 2's full questionnaire pass; Phase C2; Phase D; a `main` merge (pending PR review at the time of this writing).
-
-## HARDENING_BACKLOG.md Policy
-
-`HARDENING_BACKLOG.md` does not exist yet and is not created merely to satisfy process formality. M12.1 performs the audit first; `HARDENING_BACKLOG.md` is created only if the resulting issue set is large enough to need multiple repair batches or structured severity/reproduction tracking. If only a small number of findings exist, they are recorded in `PROJECT_STATUS.md`, an M12 working document, or repository issues, as appropriate. If created later, it tracks per finding: ID, title, category, severity, affected workflow, evidence/reproduction, expected/current behavior, decision, target repair batch, status, verification, and deferred reason.
-
-## Dependencies
-
-Requires Milestone 11 accepted and the Presentation Complete Gate passed. Phase C2 — Clean-Machine Acceptance occurs after M12 (both sub-phases, i.e. after Phase 12-B, not after Phase 12-A alone), not directly after M11.
+- **M12.1-B autonomous overnight audit** (Batches 1-5 + the M12.4 Performance Decision Gate): 18 findings, 8 fixed (5 with pre-fix-verified regression tests), 4 verified already correct, 4 accepted with rationale, 2 deferred to v1.0.x by measurement — see `docs/HARDENING_BACKLOG.md`.
+- **Human QA Round 1** (the user's first full manual-acceptance pass) surfaced systemic playback/layout/workflow findings, handled through a read-only Phase 0 audit (`docs/M12_CORRECTIVE_DIVERGENCE_MAP.md`, human-reviewed before any fix) then Batches A (release blockers: Guided Session completion-explainability, ghost-recording-Take, UTC-to-local-time display), B (Round 1 Playback Contract: cue-scoped Play, Previous/Next-Cue fix, Loop Cue toggle label, transcript auto-follow), C (Round 2 Layout Contract: Player workspace scroll/min-height fix, Quiz answer word-wrap), a new History Deletion capability (Round 4 Feasibility Gate), and 2 QA fixture/wording corrections — 10 further fixes, every one with a pre-fix-verified regression test.
+- **The Loop Cue audible-endpoint defect** (surfaced by Human QA Round 1): resolved through the calibratable **Loop End Grace** mechanism (per-Material override, global default, a `PlayerSession` snapshot mechanism guaranteeing a live change never retroactively edits an in-flight Loop iteration) plus settings dialogs. **Human-calibrated and closed**: a 3-material retest verified 200ms default sufficient on all three samples — **HUMAN ACCEPTED / CLOSED**.
+- **Human QA Round 2**: frozen as a pre-UI baseline/partial acceptance (Loop End Grace calibration only). Full-questionnaire manual regression pass against the finalized UI was cleanly transitioned to Milestone 14.
+- **Automated Tests**: reached 759 passing tests upon M12 completion.
 
 ---
 
-# Milestone 13 — Advanced UI/UX Reconstruction
+# Milestone 13 — Advanced UI/UX Reconstruction (Completed)
 
 ## Goal
 
-A whole-product visual/interaction reconstruction, distinct from Milestone 11 (a presentation-only theming pass over the existing Qt Widgets structure). M13 addresses the UI/layout/playback-interaction *experience* findings across the whole product through a coherent Notebook Study Desk design language.
+A whole-product visual/interaction reconstruction across all 16 production surfaces, replacing the legacy UI with the modern ListenTrace Notebook Study Desk design system.
 
 ## Status
 
@@ -486,15 +444,32 @@ A whole-product visual/interaction reconstruction, distinct from Milestone 11 (a
 - **Automated Tests**: 894 passed (100% green regression and integration test suite).
 - **Human Visual Gate**: formally accepted on native Windows.
 
-## Boundary
+---
 
-- Functional Feature Freeze preserved (no new learning workflows, analytics, or domain capabilities).
-- Schema version 12 preserved.
-- Phase 12-B (Final Product Hardening & Full Manual Regression) follows M13 to validate the finalized UI.
+# Milestone 14 — Final Product Hardening & Full Manual Regression (Completed, Accepted, Merged)
 
-## Dependencies
+## Goal
 
-Milestone 12 Phase 12-A and Milestone 13 are complete and merged into `main`. The next lifecycle phase is **Milestone 12 Phase 12-B — Final Product Hardening & Full Manual Regression**.
+Final product hardening and full manual acceptance against the reconstructed Notebook Study Desk interface, resolving remaining edge-case defects, and preparing the codebase for clean-machine packaging and v1.0 release.
+
+## Status
+
+**Completed, Accepted, and Merged to `main`.** Human QA Round 2 PASS; the pre-merge repository-hygiene/privacy/Windows-app-identity corrective is Product Owner ACCEPTED (Windows taskbar-identity spot-check PASS). Accepted M14 product baseline: the final commit on `milestone/14-final-product-hardening` merged into `main` via the M14 pull request.
+
+- **Phase 0 — Baseline Reconciliation & Immediate Correctives (Complete)**:
+  - Macro documentation reconciled to the then-canonical lifecycle: `M12 (Completed) -> M13 (Completed) -> M14 (Current) -> Phase C2 -> Phase D` (superseded by the M14 pre-merge hygiene/privacy/app-identity corrective's `M15 — Release Candidate & Delivery` lifecycle — see "Canonical v1.0 Sequence", below; the former Phase C2/Phase D content was not discarded, only renamed and consolidated into Milestone 15).
+  - Interface-sound system explicitly excluded from product/design specs (decorative audio removed; learning audio fully intact).
+  - Material Study Dossier in `MainWindow` aligned to approved wireframe (structured 7-row ruled metadata panel with blue ink labels, spiral dots, and action suite).
+  - Global Settings consolidated under Library sidebar `Settings...` with categorized `Playback` and `Label Colors` tabs; redundant Player entry point removed.
+  - Cue selection clearing via right-click context menu implemented; selection box border clipping normalized; automated test suite expanded to 900 passing tests.
+- **Phase 1 — Whole-Product Hardening Audit (Complete, Product Owner Accepted)**: a read-only, risk-based audit across all in-scope product areas (`docs/M14_PHASE1_WHOLE_PRODUCT_HARDENING_AUDIT.md`) — 6 confirmed defects, 2 governance/documentation drift items, and a proposed corrective batch plan.
+- **Corrective Batches A, B, C (All Complete)**: every confirmed defect from the accepted Phase 1 audit resolved (0 open) — cross-window state consistency (rename/selection/label-color/recording-availability), local-time display correctness, "No Notable Difficulty" availability truthfulness, a permanent remove-while-open-window safety regression test, the two governance drift items closed, and the orphaned Player-local Label Colors compatibility path removed. Automated test suite: 924 passing.
+- **Human QA Round 2 (PASS)**: full manual regression pass against the finalized, corrective-batch-complete product using `manual-qa/manual_review_questionnaire.html` (`2026-08-26.2` — stale M13-era wording corrected, new M14 behavior covered, and items strongly protected by the new automated regression consolidated so the Product Owner isn't asked to repeatedly re-verify what automation already proves). One finding (`m09-04`, structured-export Markdown/JSON evidence parity) was corrected across two focused correctives before Product Owner retest passed; 0 known open Human QA defects.
+- **Pre-Merge Repository Hygiene, Privacy & Windows Product Identity Corrective (Complete, Product Owner Accepted)**: lifecycle/governance naming cleanup (this document), repository-root hygiene and historical-artifact archival, manual-QA/live-database source-control privacy hardening, and a Windows AppUserModelID fix so ListenTrace no longer shares taskbar grouping with unrelated local applications — Product Owner Windows taskbar spot-check **PASS**.
+- **Final `/code-review` exit pass (Complete)**: reviewed the full M14 branch diff against `main` (Standards and Spec axes). Two bounded, real gaps found and fixed with regression coverage — a missing test for `PlayerWindow`'s cross-window rename-propagation handler, and a stale `LabelColorDialog` reference in `README.md`'s architecture tree. No release blocker found otherwise. Final automated suite: 948 passing.
+- **Pre-Release Non-Visual Hardening**: Final sweep of error boundaries, missing file handlers, and edge cases — folded into the above; no additional open items.
+
+**M14 exit summary**: confirmed open defects — 0; M14-internal release blockers — 0. Milestone 14 does not itself perform clean-machine acceptance or release-candidate delivery; those are Milestone 15's job, below.
 
 ---
 
@@ -522,7 +497,9 @@ Not a numbered milestone. There is no current implementation plan, and it is not
 
 # v1.0 Release Engineering
 
-Release engineering began once Milestone 10 was accepted and functional feature development entered freeze, organized into phases: A (packaging spike), B (targeted technical release hardening), C1 (release preflight), C2 (clean-machine acceptance), D (release candidate) — interleaved with Milestones 11 and 12 in the Canonical v1.0 Sequence, below. This section was previously named "Post-M10 — Release Engineering and v1.0 Delivery"; it is renamed here only because Milestone 11 now exists after M10, which made a "Post-M10" heading historically awkward — the Phase A/B/C history and decisions below are preserved, not rewritten. Phase A's packaging decisions are locked, Phase B's hardening pass is complete, and Phase C1's development-machine preflight is complete (see below). Phase C2 — Clean-Machine Acceptance is pending and now occurs after both Milestone 11 (presentation) and Milestone 12 (product-wide hardening), not directly after M11. A v1.0 release date is still not chosen.
+Release engineering began once Milestone 10 was accepted and functional feature development entered freeze, organized into phases: A (packaging spike), B (targeted technical release hardening), C1 (release preflight) — interleaved with Milestones 11, 12, 13, and 14 in the Canonical v1.0 Sequence, below. This section was previously named "Post-M10 — Release Engineering and v1.0 Delivery"; it is renamed here only because Milestone 11 now exists after M10, which made a "Post-M10" heading historically awkward — the Phase A/B/C history and decisions below are preserved, not rewritten. Phase A's packaging decisions are locked, Phase B's hardening pass is complete, and Phase C1's development-machine preflight is complete (see below).
+
+The remaining forward-facing release-candidate work — formerly tracked as the separate "Phase C2" and "Phase D" release-engineering labels sitting awkwardly beside numbered product milestones — is now consolidated as **Milestone 15 — Release Candidate & Delivery** (see below), the next numbered milestone after Milestone 14. Milestone 15 is pending and occurs after Milestone 14 (Final Product Hardening & Full Manual Regression). A v1.0 release date is still not chosen.
 
 ## Phase A — Packaging Spike (Completed)
 
@@ -541,7 +518,7 @@ See `packaging/README.md` for the full build recipe and `ARCHITECTURE.md`'s "Res
 
 ## Phase B — Targeted Technical Release Hardening (Completed)
 
-Phase B was a targeted technical release-hardening pass completed before the final UI and product-wide acceptance stages. It addressed confirmed technical risks, but it does not replace Milestone 12's final, system-wide Product Hardening & Full Manual Acceptance milestone, below — Phase B is not reopened merely because M12 now exists. Corrective work for:
+Phase B was a targeted technical release-hardening pass completed before the final UI and product-wide acceptance stages. It addressed confirmed technical risks, but it does not replace the subsequent hardening passes in Milestone 12 and Milestone 14 — Phase B is not reopened merely because later hardening milestones exist. Corrective work for:
 
 - startup and shutdown failures: startup fixed — `QApplication` is now constructed before anything else that could fail, so a startup failure can always show a friendly dialog instead of the process silently terminating; unhandled exceptions during normal use are now logged via a global crash-logging hook. Shutdown audited directly (closeout pass) and found already correct: no explicit database-connection close exists anywhere, which is safe because every write already commits synchronously in SQLite's default (non-WAL) journal mode; a normal window close really aborts an in-progress recording through the real service path, not just in a mocked test; re-opening the database afterward reads back exactly what was left, with nothing dangling for startup crash-recovery to find;
 - missing or moved media: verified already solid — every material-opening entry point already pre-flight-checks the media and subtitle paths with a friendly error;
@@ -553,7 +530,7 @@ Phase B was a targeted technical release-hardening pass completed before the fin
 - migration failure: fixed — a real bug was found and reproduced (`migrate()`'s use of `executescript` could leave a failed migration half-applied while `PRAGMA user_version` stayed unbumped, permanently stuck); migrations now run as one explicit transaction per migration, rolling back completely on any failure;
 - export failure: verified already solid (`export_dialog.py`'s existing atomic-write error handling);
 - large-history behavior: fixed — schema version 10 adds nine indexes on foreign-key columns that were previously unindexed full-table-scan targets in the Learning History/Quick-Practice-recommendation/export query layer;
-- operation without a developer Python environment: structurally addressed by construction (the PyInstaller build embeds the Python runtime and every dependency, with no intended dependency on a separately installed interpreter), but **not yet empirically verified on a machine without Python installed** — every Phase A/B validation so far ran on the development machine, which already has Python installed; that empirical verification belongs specifically to Phase C2's "no preinstalled Python" clean-machine criterion (not Phase C1, which is development-machine preflight only).
+- operation without a developer Python environment: structurally addressed by construction (the PyInstaller build embeds the Python runtime and every dependency, with no intended dependency on a separately installed interpreter), but **not yet empirically verified on a machine without Python installed** — every Phase A/B validation so far ran on the development machine, which already has Python installed; that empirical verification belongs specifically to Milestone 15.2's "no preinstalled Python" clean-machine criterion (not Phase C1, which is development-machine preflight only).
 
 An acceptance closeout pass corrected the wording above (the no-developer-Python-environment item had originally, and incorrectly, been described as already verified) and completed the shutdown half of the startup/shutdown audit that the original pass had left unaudited.
 
@@ -561,7 +538,7 @@ See `ARCHITECTURE.md`'s "Resolved in Post-M10 Phase B" section and `packaging/RE
 
 ## Phase C1 — Development-Machine Release Preflight (Completed)
 
-Represents all validation already performed on the development machine, formerly recorded as the single Phase C. Not to be confused with Milestone 12's Product Hardening & Full Manual Acceptance, below — C1 is packaged-build preflight evidence, not a product-wide audit. Covers:
+Represents all validation already performed on the development machine, formerly recorded as the single Phase C. Not to be confused with product-wide hardening and full manual regression (Milestones 12 and 14) — C1 is packaged-build preflight evidence, not a product-wide audit. Covers:
 
 - install, launch, upgrade, and uninstall: a fresh silent install, a reinstall over the same install (upgrade-in-place via the same AppId), a silent uninstall, each launch in between, all completed cleanly;
 - data preservation: a real material row survived install → data creation → reinstall → uninstall intact;
@@ -572,49 +549,43 @@ Represents all validation already performed on the development machine, formerly
 - core application-service walkthroughs (Intensive Practice, Quiz, a standalone recording, Quick Practice), Learning History aggregation, and Markdown export generation, all through the real application services, feeding one database;
 - the latest packaged application opening the resulting database without error.
 
-**C1 does not prove**: clean Windows behavior, no-Python target-machine behavior, fresh Windows-user behavior, a genuinely non-development environment, broad real-world MP4/H.264 compatibility, or native GUI interaction coverage on another machine — every check above ran on this project's own development machine, which already has Python, Git, an IDE, FFmpeg, and other developer tooling installed. C1 is release preflight, not Clean-Machine Testing; that is Phase C2's job, below.
+**C1 does not prove**: clean Windows behavior, no-Python target-machine behavior, fresh Windows-user behavior, a genuinely non-development environment, broad real-world MP4/H.264 compatibility, or native GUI interaction coverage on another machine — every check above ran on this project's own development machine, which already has Python, Git, an IDE, FFmpeg, and other developer tooling installed. C1 is release preflight, not Clean-Machine Testing; that is Milestone 15.2's job, below.
 
-## Phase C2 — Clean-Machine Acceptance (Pending)
+---
 
-The remaining final environment-validation gate, occurring **after Milestone 11 — UI/UX Presentation Refresh and Milestone 12 — Product Hardening & Full Manual Acceptance** so the final hardened, final-UI release candidate is what gets tested, not an earlier presentation layer or an unaudited product.
+# Milestone 15 — Release Candidate & Delivery (Current — Not Started)
 
-Target baseline: Windows 11 x64, Home or Pro, standard non-N edition, normal Windows system updates, no Python installation, no Git, no IDE, no PyInstaller, no Inno Setup, no project source tree, no developer virtual environment, and no manually installed FFmpeg or codec pack required for ListenTrace.
+## Goal
 
-C2 validates the actual packaged release candidate. At minimum:
+Take the Milestone 14-hardened, Human-QA-accepted product through a refreshed candidate build, genuine clean-machine acceptance, and final release-candidate closure — the last milestone before `v1.0 — Current Version Complete`.
 
-- **Runtime foundation**: install, launch, application-data creation, restart, uninstall, data preservation.
-- **Multimedia**: real WAV playback, real MP4/H.264 playback, audio output, microphone detection, real recording, playback of a retained recording.
-- **Data**: fresh schema creation, legacy database upgrade, persistence after restart, upgrade-install preservation, uninstall preservation.
-- **Core workflows**: Material import, Player, Transcript Workspace, Intensive Practice, Quiz, Shadowing/Recording, Learning History, Export, Quick Practice.
+## Status
 
-Phase C2 is a release gate: it must not be marked completed until a genuinely appropriate clean environment has actually been used. If C2 discovers a release-blocking defect: `C2 failure -> return to an M12 corrective batch -> regression -> repeat C2`. C2 is an environment and packaged-artifact acceptance gate — it does not replace Milestone 12's product-wide audit.
+**Not started; ready to begin now that Milestone 14 has merged.** Consolidates the former separate "Phase C2" and "Phase D" release-engineering labels (historical names, preserved above under Phase A/B/C1) into three sub-stages of one numbered milestone, so the active lifecycle no longer mixes numbered product milestones with unnumbered release-engineering phases:
 
-## Phase D — v1.0 Release Candidate (Pending)
+- **Milestone 15.1 — Candidate Build / Packaging Refresh**: rebuild the PyInstaller onedir build and Inno Setup installer against the final, merged Milestone 14 code (including this corrective's Windows AppUserModelID/taskbar-identity fix); confirm packaging identity metadata (icon, AppUserModelID, shortcut/AppId) is internally consistent; refresh version/release metadata.
+- **Milestone 15.2 — Clean-Machine Acceptance**: the remaining final environment-validation gate, occurring after Milestone 14 so the final hardened, final-UI release candidate is what gets tested, not an earlier presentation layer or an unaudited product.
 
-Completion of:
+  Target baseline: Windows 11 x64, Home or Pro, standard non-N edition, normal Windows system updates, no Python installation, no Git, no IDE, no PyInstaller, no Inno Setup, no project source tree, no developer virtual environment, and no manually installed FFmpeg or codec pack required for ListenTrace.
 
-- final versioning;
-- About surface;
-- privacy and local-data explanation;
-- installation and usage documentation;
-- known limitations;
-- release notes;
-- final icon and release metadata;
-- final privacy audit;
-- complete regression status;
-- RC installer and RC zip;
-- release checklist;
-- small real-user acceptance test where practical;
-- final v1.0 release decision;
-- tag/release preparation where approved.
+  Validates the actual packaged release candidate. At minimum:
 
-Phase D planning and preparation may proceed earlier where useful, but **Phase D cannot be completed, v1.0 cannot be tagged or released, and final Release Ready status cannot be claimed until Milestone 12 and Phase C2 have both passed.** If a blocking problem is discovered during Phase D, return to an M12 corrective batch, rerun affected regression, and repeat any invalidated C2/Phase D checks.
+  - **Runtime foundation**: install, launch, application-data creation, restart, uninstall, data preservation.
+  - **Multimedia**: real WAV playback, real MP4/H.264 playback, audio output, microphone detection, real recording, playback of a retained recording.
+  - **Data**: fresh schema creation, legacy database upgrade, persistence after restart, upgrade-install preservation, uninstall preservation.
+  - **Core workflows**: Material import, Player, Transcript Workspace, Intensive Practice, Quiz, Shadowing/Recording, Learning History, Export, Quick Practice.
+  - **Windows taskbar identity**: launched alongside another unrelated locally installed application, ListenTrace appears as its own separate taskbar application/group with its own icon (Product Owner human spot-check; not provable by automated tests — see the pre-merge corrective's Windows AppUserModelID work).
+
+  This is a release gate: it must not be marked completed until a genuinely appropriate clean environment has actually been used. If it discovers a release-blocking defect: `M15.2 failure -> return to an M14 corrective batch -> regression -> repeat M15.2`. M15.2 is an environment and packaged-artifact acceptance gate — it does not replace Milestone 14's product-wide hardening and full manual regression.
+- **Milestone 15.3 — Release Candidate Closure & Delivery**: completion of final versioning; About surface; privacy and local-data explanation; installation and usage documentation; known limitations; release notes; final icon and release metadata; final privacy audit; complete regression status; RC installer and RC zip; release checklist; small real-user acceptance test where practical; final v1.0 release decision; tag/release preparation where approved.
+
+  M15.1/M15.3 planning and preparation may proceed earlier where useful, but **Milestone 15 cannot be completed, v1.0 cannot be tagged or released, and final Release Ready status cannot be claimed until Milestone 14 and Milestone 15.2 have both passed.** If a blocking problem is discovered during M15.3, return to an M14 corrective batch, rerun affected regression, and repeat any invalidated M15.2/M15.3 checks.
 
 ---
 
 # v1.0 — Current Version Complete
 
-This state means: the approved v1.0 scope is implemented; Functional Feature Freeze was respected; M11 presentation convergence is complete; M12 product hardening and manual acceptance passed; C2 clean-machine acceptance passed; Phase D release-candidate checks passed; the release artifact, documentation, known limitations, and repository state are finalized. This does **not** describe the project as permanently complete — see Maintenance and Next-Version Planning, below.
+This state means: the approved v1.0 scope is implemented; Functional Feature Freeze was respected; M11 presentation refresh and M13 UI reconstruction are complete; M14 product hardening and manual regression passed; Milestone 15.2 clean-machine acceptance passed; Milestone 15.3 release-candidate checks passed; the release artifact, documentation, known limitations, and repository state are finalized. This does **not** describe the project as permanently complete — see Maintenance and Next-Version Planning, below.
 
 # Maintenance / v1.0.x
 
@@ -623,6 +594,14 @@ Possible scope: release-blocking or user-impacting defect fixes; compatibility f
 # Next-Version Planning / v1.1+
 
 Possible new capabilities may be evaluated only after v1.0 is stabilized and used. Optional Assisted Features (above) remain in the deferred section unless explicitly promoted through a future product decision.
+
+## Candidate: Milestone 16 — Library Organization & Collections
+
+Recorded during real high-frequency post-Human-QA use: the Product Owner identified that ListenTrace will be used across multiple languages (including English and French), and that long-term use will build a large material library where materials serve different learning purposes and skill areas. The current flat Library remains functionally correct for v1.0 but will become increasingly costly to navigate at scale — a product-growth / information-architecture requirement, not an M14 defect or v1.0 release blocker.
+
+Possible future exploration (not designed, not locked): language-aware organization; Collections; optional tags / learning-purpose organization; scalable Library filtering/navigation; relationships between organization metadata and existing Archive / History / Export behavior.
+
+**Explicitly**: not part of Milestone 14; not part of Milestone 15 (Release Candidate & Delivery); no current schema migration; no current UI change; a v1.1 / Milestone 16 candidate only, to be scoped after v1.0 is closed. This is intentional scope control, not a missing v1.0 feature.
 
 ---
 
@@ -637,11 +616,13 @@ Milestones 1-10 — Core Functional Development
   -> Phase C1 — Development-Machine Release Preflight (Completed)
   -> Milestone 11 — UI/UX Presentation Refresh (Completed)
   -> Presentation Complete Gate (Passed)
-  -> Milestone 12 Phase 12-A — Pre-UI Product Hardening (Completed)
+  -> Milestone 12 — Pre-UI Product Hardening (Completed)
   -> Milestone 13 — Advanced UI/UX Reconstruction (Completed / Human Visual Gate Passed / Merged)
-  -> Milestone 12 Phase 12-B — Final Product Hardening & Full Manual Regression (Next)
-  -> Phase C2 — Clean-Machine Acceptance
-  -> Phase D — v1.0 Release Candidate
+  -> Milestone 14 — Final Product Hardening & Full Manual Regression (Completed, Accepted, Merged — Human QA Round 2 PASS; pre-merge hygiene/privacy/app-identity corrective Product Owner ACCEPTED)
+  -> Milestone 15 — Release Candidate & Delivery (Current — Not Started)
+       -> Milestone 15.1 — Candidate Build / Packaging Refresh
+       -> Milestone 15.2 — Clean-Machine Acceptance
+       -> Milestone 15.3 — Release Candidate Closure & Delivery
   -> v1.0 — Current Version Complete
   -> Maintenance / v1.0.x
   -> Next-Version Planning / v1.1+
@@ -700,19 +681,19 @@ The deferred assisted-feature ideas ("Deferred Beyond v1.0 — Optional Assisted
 
 - Product name: ListenTrace
 - Local-first desktop product
-- User supplies media and matching transcript or subtitles
-- Timed subtitles provide the full experience
+- User supplies media and matching transcript or timed subtitles
+- Timed subtitles (.srt, .vtt) provide the primary structured learning experience
 - Listening failure categories are semantic labels, not colors
 - User owns saved word and chunk content
 - Structured export precedes embedded online evaluation
-- Original user media should remain outside the application database
+- Original user media remains outside the application database, referenced in place, never modified or deleted
+- Desktop media playback backend: PySide6 Qt Multimedia with bundled FFmpeg backend
+- Audio recording format: 16-bit PCM WAV captured locally to `%APPDATA%\ListenTrace\recordings`
+- Target desktop OS: Windows 10/11 x64 (per-user installation via Inno Setup and portable zip)
+- Interface sound policy: decorative UI audio explicitly excluded; authentic learning audio fully preserved
 
 # Decisions Still Open
 
-- Final media playback backend
-- Minimum supported desktop operating systems
-- Whether plain-text transcripts are included in the first usable release
-- Whether imported media is referenced in place or optionally copied
-- Audio recording format and retention defaults
-- Initial accessibility and localization targets
-- Update strategy (auto-update) — packaging itself was decided and validated in Post-M10 Phase A; see `packaging/README.md`
+- Future platform packaging (macOS, Linux) — deferred beyond v1.0
+- Long-term auto-update service integration — deferred beyond v1.0
+- Multi-language interface localization — English UI baseline established for v1.0; additional locales deferred beyond v1.0

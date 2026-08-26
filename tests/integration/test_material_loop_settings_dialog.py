@@ -42,6 +42,23 @@ def test_opens_showing_custom_state_when_an_override_already_exists(qapp, conn, 
     dialog.close()
 
 
+def test_material_renamed_updates_dialog_title_for_matching_id_only(qapp, conn, material_id):
+    """M14 Corrective Batch A2 acceptance gap: an already-open dialog's
+    window title (baked in at construction, same as the five host learning
+    windows) must refresh live from a Library rename."""
+    from listentrace.ui.widgets.material_metadata_bus import material_metadata_bus
+
+    dialog = MaterialLoopSettingsDialog(conn, material_id, "Lesson")
+    assert dialog.windowTitle() == "Loop Settings — Lesson"
+
+    material_metadata_bus.material_renamed.emit(material_id, "Renamed Lesson")
+    assert dialog.windowTitle() == "Loop Settings — Renamed Lesson"
+
+    material_metadata_bus.material_renamed.emit(material_id + 999, "Someone Else's Lesson")
+    assert dialog.windowTitle() == "Loop Settings — Renamed Lesson"
+    dialog.close()
+
+
 def test_switching_to_custom_persists_immediately_starting_from_the_effective_value(qapp, conn, material_id):
     dialog = MaterialLoopSettingsDialog(conn, material_id, "Lesson")
     dialog._custom_radio.setChecked(True)

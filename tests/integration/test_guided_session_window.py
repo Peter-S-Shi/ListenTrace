@@ -299,6 +299,123 @@ def test_m4_annotation_semantics_reused_misheard_requires_heard_as(qapp, conn, t
     window.close()
 
 
+def test_no_notable_difficulty_available_only_when_stage3_revealed_with_no_evidence(
+    qapp, conn, tmp_path, monkeypatch
+):
+    """M14 Corrective Batch B (B2): the button must reflect
+    `practice_session_service.mark_stage3_no_difficulty`'s own precondition
+    (no session diagnosis evidence yet) before the click, not just fail
+    after it."""
+    monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.StandardButton.Yes)
+    window, _, session_id = _open_guided_window(conn, tmp_path)
+    window._show_stage("transcript_diagnosis")
+    window._diagnosis_cue_list.setCurrentRow(0)
+
+    assert window._no_difficulty_button.isEnabled() is True, (
+        "revealed Stage 3 with no diagnosis evidence yet must leave the "
+        "action available"
+    )
+
+    # Recording evidence must disable it.
+    window._diagnosis_label_checkboxes["keyword"].setChecked(True)
+    window._on_save_diagnosis_clicked()
+    assert window._diagnosis_list.count() == 1
+    assert window._no_difficulty_button.isEnabled() is False, (
+        "diagnosis evidence exists -> the service call would reject "
+        "mark_stage3_no_difficulty, so the button must already be disabled"
+    )
+
+    # Removing the only evidence must return availability to "available".
+    window._diagnosis_list.setCurrentRow(0)
+    window._on_delete_diagnosis_clicked()
+    assert window._diagnosis_list.count() == 0
+    assert window._no_difficulty_button.isEnabled() is True, (
+        "deleting the only diagnosis evidence must re-enable the action"
+    )
+
+    # The click itself still behaves exactly as before: it succeeds when
+    # evidence-free, and normal diagnosis editing/recording is unaffected.
+    window._on_no_difficulty_clicked()
+    state = svc.load_session_state(conn, session_id)
+    assert state.stage_progress["transcript_diagnosis"].outcome_key == "no_notable_difficulty"
+    window.close()
+
+
+def test_no_notable_difficulty_stays_disabled_on_a_read_only_completed_session(qapp, conn, tmp_path, monkeypatch):
+    """M14 Corrective Batch B (B2): completed/read-only session behavior must
+    remain unchanged -- the button stays disabled regardless of evidence
+    presence, exactly as the pre-existing `read_only` gate already ensured."""
+    monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.StandardButton.Yes)
+    window, material_id, session_id = _open_guided_window(conn, tmp_path)
+    window._show_stage("transcript_diagnosis")
+    window._diagnosis_cue_list.setCurrentRow(0)
+    assert window._no_difficulty_button.isEnabled() is True
+    window.close()
+
+    svc.abandon_session(conn, session_id)
+    load_result = load_material_for_player(conn, material_id)
+    reopened = GuidedSessionWindow(conn, load_result, session_id, tmp_path / "recordings")
+    reopened._show_stage("transcript_diagnosis")
+    reopened._diagnosis_cue_list.setCurrentRow(0)
+
+    assert reopened._no_difficulty_button.isEnabled() is False, (
+        "a read-only (abandoned/completed) session must keep the action "
+        "disabled regardless of evidence state"
+    )
+    reopened.close()
+
+
+def test_material_renamed_updates_window_title_and_header(qapp, conn, tmp_path):
+    """M14 Corrective Batch A (A2): rename propagation to an already-open
+    dependent window."""
+    from listentrace.ui.widgets.material_metadata_bus import material_metadata_bus
+
+    window, material_id, _ = _open_guided_window(conn, tmp_path)
+    assert "Guided Lesson" in window.windowTitle()
+    assert window._header_title_label.text() == "Guided Lesson"
+
+    material_metadata_bus.material_renamed.emit(material_id, "Renamed Guided Lesson")
+
+    assert window.windowTitle() == "ListenTrace — Guided Practice — Renamed Guided Lesson"
+    assert window._header_title_label.text() == "Renamed Guided Lesson"
+    assert window._material.title == "Renamed Guided Lesson"
+
+    # A different material_id must be ignored.
+    material_metadata_bus.material_renamed.emit(material_id + 999, "Someone Else's Lesson")
+    assert window._header_title_label.text() == "Renamed Guided Lesson"
+    window.close()
+
+
+def test_label_color_live_refresh_preserves_diagnosis_editing_state(qapp, conn, tmp_path, monkeypatch):
+    """M14 Corrective Batch A (A3): a Settings-driven label-color change must
+    repaint Stage 3 diagnosis colors live without clearing the in-progress
+    diagnosis edit form (an unsaved draft note) as a side effect."""
+    from PySide6.QtGui import QColor
+
+    from listentrace.application.services import label_preference_service
+    from listentrace.ui.widgets.label_color_change_bus import label_color_change_bus
+
+    monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.StandardButton.Yes)
+    window, _, session_id = _open_guided_window(conn, tmp_path)
+    window._show_stage("transcript_diagnosis")
+    window._diagnosis_cue_list.setCurrentRow(0)
+
+    window._diagnosis_label_checkboxes["keyword"].setChecked(True)
+    window._on_save_diagnosis_clicked()
+    assert window._diagnosis_list.count() == 1
+
+    # Leave an unsaved draft in the note field -- must survive a color-only repaint.
+    window._diagnosis_note_edit.setText("unsaved draft note")
+
+    label_preference_service.update_label_color(conn, "keyword", "#123456")
+    label_color_change_bus.label_colors_changed.emit()
+
+    row = window._diagnosis_list.itemWidget(window._diagnosis_list.item(0))
+    assert QColor(row.color_hex).name() == QColor("#123456").name()
+    assert window._diagnosis_note_edit.text() == "unsaved draft note"
+    window.close()
+
+
 def test_one_diagnosis_evidence_object_produces_exactly_one_diagnosis_list_row(qapp, conn, tmp_path, monkeypatch):
     """M13 Axis 4 corrective: `_refresh_diagnosis_cue_panels()` previously called
     `self._diagnosis_list.addItem(list_item)` both before building the

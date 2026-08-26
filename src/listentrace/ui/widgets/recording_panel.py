@@ -39,6 +39,14 @@ class _RecordingChangeBus(QObject):
     cue_changed = Signal(int)  # subtitle_cue_id
     material_changed = Signal(int)  # material_id -- e.g. "delete all takes for this material"
 
+    # M14 Corrective Batch A (A4): the domain/database invariant is global
+    # (at most one `status = 'recording'` row across the whole app, not
+    # scoped per material/cue -- see migration 8's partial unique index), so
+    # these two carry no payload either; every open `RecordingPanel` reacts
+    # the same way regardless of which material/cue is actually recording.
+    recording_started = Signal()
+    recording_stopped = Signal()
+
 
 recording_change_bus = _RecordingChangeBus()
 
@@ -94,6 +102,8 @@ class RecordingPanel(QWidget):
 
         recording_change_bus.cue_changed.connect(self._on_external_cue_changed)
         recording_change_bus.material_changed.connect(self._on_external_material_changed)
+        recording_change_bus.recording_started.connect(self._on_external_recording_started)
+        recording_change_bus.recording_stopped.connect(self._on_external_recording_stopped)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -328,6 +338,7 @@ class RecordingPanel(QWidget):
         self._pending_action = None
         self._recorder.start(absolute_path)
         self._update_recording_buttons()
+        recording_change_bus.recording_started.emit()
 
     def _on_stop_recording_clicked(self) -> None:
         if not self._recorder.is_recording or self._active_recording is None:
@@ -359,6 +370,7 @@ class RecordingPanel(QWidget):
             pass  # already resolved by another path (e.g. a device error)
         self._refresh_takes()
         self._update_recording_buttons()
+        recording_change_bus.recording_stopped.emit()
 
     def _on_recording_error(self, message: str) -> None:
         if self._active_recording is None:
@@ -373,6 +385,7 @@ class RecordingPanel(QWidget):
         QMessageBox.warning(self, "Recording Error", message)
         self._refresh_takes()
         self._update_recording_buttons()
+        recording_change_bus.recording_stopped.emit()
 
     def _on_recorder_stopped(self) -> None:
         if self._pending_action != "finish" or self._active_recording is None:
@@ -389,12 +402,33 @@ class RecordingPanel(QWidget):
             QMessageBox.warning(self, "Recording Failed", updated.failure_detail or "The recording could not be saved.")
         self._refresh_takes()
         self._update_recording_buttons()
+        recording_change_bus.recording_stopped.emit()
 
     def _update_recording_buttons(self) -> None:
         has_cue = self._subtitle_cue_id is not None
         recording_in_progress = self._active_recording is not None
+        # M14 Corrective Batch A (A4, acceptance-gap fix): make Start
+        # Recording's availability truthful *before* click when a sibling
+        # panel elsewhere is already recording -- the domain/database
+        # invariant (migration 8's partial unique index) remains the
+        # ultimate safety guard either way. Queried fresh against the
+        # authoritative DB state on every call, rather than cached from a
+        # `recording_started`/`recording_stopped` event history: a panel
+        # constructed *after* another panel already started recording would
+        # otherwise have missed that event and stayed permanently wrong
+        # until the next stop. `recording_started`/`recording_stopped` still
+        # fire (see below) purely as "go re-check now" invalidation
+        # notifications for already-open sibling panels -- they no longer
+        # carry any state of their own.
+        blocked_by_other_panel = (
+            not recording_in_progress and recording_service.has_active_recording(self._connection)
+        )
         self._start_recording_button.setEnabled(
-            has_cue and not recording_in_progress and self._selected_device() is not None and not self._read_only
+            has_cue
+            and not recording_in_progress
+            and not blocked_by_other_panel
+            and self._selected_device() is not None
+            and not self._read_only
         )
         self._stop_recording_button.setEnabled(recording_in_progress and self._pending_action != "finish")
         self._device_combo.setEnabled(not recording_in_progress)
@@ -402,6 +436,8 @@ class RecordingPanel(QWidget):
             self._recording_state_label.setText("Stopping…")
         elif recording_in_progress:
             self._recording_state_label.setText("Recording in progress…")
+        elif blocked_by_other_panel:
+            self._recording_state_label.setText("Another recording is in progress elsewhere.")
         else:
             self._recording_state_label.setText("")
 
@@ -518,6 +554,15 @@ class RecordingPanel(QWidget):
         if self._material_id == material_id:
             self._refresh_takes()
             self._update_recording_buttons()
+
+    def _on_external_recording_started(self) -> None:
+        # Pure invalidation notification -- reconcile against the
+        # authoritative DB state in `_update_recording_buttons()` rather than
+        # trusting this event's payload/ordering (see its docstring note).
+        self._update_recording_buttons()
+
+    def _on_external_recording_stopped(self) -> None:
+        self._update_recording_buttons()
 
     # ---- comparison sequencing ----
 

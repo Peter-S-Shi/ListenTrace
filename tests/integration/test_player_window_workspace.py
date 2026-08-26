@@ -9,6 +9,7 @@ from PySide6.QtWidgets import QMessageBox
 
 from listentrace.application.services import annotation_service, cue_note_service
 from listentrace.application.services import label_preference_service
+from listentrace.application.services import material_library_service as library
 from listentrace.application.services import saved_language_item_service as item_service
 from listentrace.application.services.material_import_service import import_material
 from listentrace.application.services.player_loading_service import load_material_for_player
@@ -51,6 +52,39 @@ def _select_range(window, start, end):
     cursor.setPosition(start)
     cursor.setPosition(end, QTextCursor.MoveMode.KeepAnchor)
     window._editing_transcript_view.setTextCursor(cursor)
+
+
+def test_removing_material_while_player_open_then_saving_leaves_no_orphan_write(qapp, conn, tmp_path):
+    """M14 Corrective Batch B (B3): permanent regression for the Phase 1
+    audit's disposable diagnostic. Removing a material through the real
+    Library service path while a Player window is still open on it, then
+    attempting a representative write (Save Annotation) from that still-open
+    window, must not crash, must not create an orphan `annotation` row, and
+    must leave the material's cascade-deleted rows actually gone -- the
+    write path is defensively validated (the target cue no longer exists) and
+    surfaces a handled, user-visible status message instead of an unhandled
+    exception or a silent no-op."""
+    window, material_id = _open_window(conn, tmp_path)
+    window._cue_list.setCurrentRow(0)
+    _select_range(window, 0, 7)
+    window._label_checkboxes["keyword"].setChecked(True)
+
+    recordings_dir = tmp_path / "recordings"
+    recordings_dir.mkdir()
+    library.remove_material(conn, recordings_dir, material_id)
+
+    # Must not raise.
+    window._on_save_annotation_clicked()
+
+    assert conn.execute("SELECT COUNT(*) FROM annotation").fetchone()[0] == 0, (
+        "no orphan annotation row may be created against a cascade-deleted material"
+    )
+    assert conn.execute("SELECT COUNT(*) FROM material WHERE id = ?", (material_id,)).fetchone()[0] == 0
+    assert conn.execute("SELECT COUNT(*) FROM subtitle_cue").fetchone()[0] == 0
+    assert window._workspace_status_label.text() != "", (
+        "the failed write must surface a handled, user-visible status message"
+    )
+    window.close()
 
 
 def test_editing_cue_independent_of_active_playback_cue(qapp, conn, tmp_path):
@@ -432,8 +466,26 @@ def test_non_bmp_selection_round_trips_through_real_qt_widget(qapp, conn, tmp_pa
     restored = window._editing_transcript_view.textCursor()
     assert restored.selectedText() == "there"
 
-    # Highlighting must not crash or misplace the highlight for non-BMP text.
+    # Highlighting must not crash for non-BMP text (M14 Corrective Batch C,
+    # C3: strengthened beyond a smoke check -- verify the highlight actually
+    # lands on "there" and not on the emoji or the text preceding it, since
+    # an off-by-one in UTF-16-vs-codepoint math here would misplace it onto
+    # the wrong characters without necessarily crashing).
     window._refresh_editing_cue_panels()
+
+    def _background_at(qt_position: int):
+        probe = window._editing_transcript_view.textCursor()
+        probe.setPosition(qt_position)
+        probe.setPosition(qt_position + 1, QTextCursor.MoveMode.KeepAnchor)
+        return probe.charFormat().background().color()
+
+    # "hi \U0001F600 there" as Qt UTF-16 positions: h=0 i=1 ' '=2 emoji=3-4
+    # ' '=5 t=6 (start of "there"). Position 0 ('h') is definitely
+    # unhighlighted -- use its background as the baseline "no highlight"
+    # color rather than assuming Qt's exact default QColor representation.
+    unhighlighted = _background_at(0)
+    assert _background_at(3) == unhighlighted, "the emoji itself must not be highlighted"
+    assert _background_at(6) != unhighlighted, "\"there\" must actually be highlighted"
 
     window.close()
 
@@ -462,9 +514,19 @@ def test_non_bmp_character_inside_selection_round_trips(qapp, conn, tmp_path):
     assert annotations[0].selected_text == "hi \U0001F600 "
 
 
-def test_open_label_colors_refreshes_highlight_and_badge_without_full_reload(qapp, conn, tmp_path, monkeypatch):
-    from PySide6.QtCore import QSize
+def test_label_color_change_bus_refreshes_highlight_and_badge_without_full_reload(qapp, conn, tmp_path):
+    """M14 Corrective Batch C (C2): the real, reachable entry point for
+    editing label colors is Library -> Settings... -> Label Colors, which
+    emits `label_color_change_bus.label_colors_changed` after persisting
+    (`settings_dialog.py`). The old Player-local `LabelColorDialog`/
+    `_label_colors_button`/`_on_open_label_colors` path this test used to
+    drive was confirmed UI-unreachable (never added to any layout) and has
+    been removed; this test now exercises the same
+    `_refresh_annotation_presentation()` behavior through the bus directly,
+    matching how it is actually triggered in the shipped product."""
     from PySide6.QtGui import QColor
+
+    from listentrace.ui.widgets.label_color_change_bus import label_color_change_bus
 
     window, _ = _open_window(conn, tmp_path)
     window._cue_list.setCurrentRow(0)
@@ -477,19 +539,10 @@ def test_open_label_colors_refreshes_highlight_and_badge_without_full_reload(qap
     selected_annotation_id_before = window._editing_annotation_id
     window._annotation_note_edit.setText("unsaved note draft")
 
-    class _FakeLabelColorDialog:
-        def __init__(self, connection, parent):
-            self._connection = connection
-
-        def exec(self):
-            # Simulate the user picking a new color inside the real dialog.
-            label_preference_service.update_label_color(self._connection, "keyword", "#00FF00")
-
-    monkeypatch.setattr(
-        "listentrace.ui.windows.player_window.LabelColorDialog", _FakeLabelColorDialog
-    )
-
-    window._on_open_label_colors()
+    # Simulate the real Settings dialog persisting a new color and
+    # broadcasting the change, exactly as settings_dialog.py does.
+    label_preference_service.update_label_color(conn, "keyword", "#00FF00")
+    label_color_change_bus.label_colors_changed.emit()
 
     # Transcript highlight over the annotated range reflects the new color.
     cursor = window._editing_transcript_view.textCursor()

@@ -337,9 +337,9 @@ A short, low-friction, cue-based practice mode — a companion to Guided Intensi
 
 ## Release Scope
 
-- Quick Practice (Milestone 10) is implemented; ListenTrace reached the **Functional Feature Complete Gate** and the project is now in Functional Feature Freeze for the first release. No further *functional*-feature milestones are planned before v1.0 — **Milestone 11 — UI/UX Presentation Refresh** is a presentation-only milestone that does not reopen freeze (see `ROADMAP.md`). Feature Complete is explicitly not Release Ready: presentation convergence (M11), product-wide hardening (M12), clean-machine acceptance (Phase C2), and release-candidate work (Phase D) all remain.
+- Quick Practice (Milestone 10) is implemented; ListenTrace reached the **Functional Feature Complete Gate** and the project is now in Functional Feature Freeze for the first release. No further *functional*-feature milestones are planned before v1.0. **Milestone 11 — UI/UX Presentation Refresh**, **Milestone 12 — Pre-UI Product Hardening**, **Milestone 13 — Advanced UI/UX Reconstruction**, and **Milestone 14 — Final Product Hardening & Full Manual Regression** are all completed, accepted, and merged into `main` (see `ROADMAP.md` and `PROJECT_STATUS.md`). Feature Complete is explicitly not Release Ready: candidate build/packaging refresh (Milestone 15.1), clean-machine acceptance (Milestone 15.2), and release-candidate closure (Milestone 15.3) remain under **Milestone 15 — Release Candidate & Delivery** (pending, ready to start).
 - The optional assisted features once numbered "Milestone 11" (speech recognition, pronunciation feedback, translation assistance, subtitle generation, question generation) are outside first-release scope, carry no milestone number, and remain deferred until after a packaged, tested, successfully used v1.0 — see `ROADMAP.md`'s "Deferred Beyond v1.0" section.
-- Windows-first packaging and release validation follows functional feature completion — see `ROADMAP.md`'s "v1.0 Release Engineering" sequence. Phase A (packaging spike), Phase B (targeted technical release hardening), and Phase C1 (development-machine release preflight) are complete — these are targeted technical passes, not the final, system-wide product-hardening audit. Milestone 11, then **Milestone 12 — Product Hardening & Full Manual Acceptance** (a final GUI-level audit and defect-repair pass, not a new-feature milestone), then Phase C2 (clean-machine acceptance, after both M11 and M12) and Phase D (release-candidate validation), remain and are the project's next engineering objectives.
+- Windows-first packaging and release validation follows functional feature completion — see `ROADMAP.md`'s "v1.0 Release Engineering" sequence. Phase A (packaging spike), Phase B (targeted technical release hardening), and Phase C1 (development-machine release preflight) are complete. Milestones 11 through 14 are complete and merged. **Milestone 15 — Release Candidate & Delivery** (15.1 Candidate Build/Packaging Refresh, 15.2 Clean-Machine Acceptance, 15.3 Release Candidate Closure & Delivery) is the next engineering objective.
 
 ## Copyright and Source Policy
 
@@ -362,7 +362,7 @@ The design should eventually support:
 - readable focus states;
 - category labels that do not depend on color alone;
 - adjustable transcript size;
-- captions and text equivalents for interface sounds.
+- visual feedback for all system state changes without reliance on UI sound effects.
 
 ## Explicit Non-Goals for Early Development
 

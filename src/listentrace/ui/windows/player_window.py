@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import sqlite3
 
-from PySide6.QtCore import QEvent, QSize, Qt
+from PySide6.QtCore import QEvent, QPoint, QSize, Qt
 from PySide6.QtGui import QColor, QIcon, QKeyEvent, QPixmap, QTextCursor
 from PySide6.QtMultimediaWidgets import QVideoWidget
 from PySide6.QtWidgets import (
@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
     QListWidget,
     QListWidgetItem,
     QMainWindow,
+    QMenu,
     QMessageBox,
     QPlainTextEdit,
     QPushButton,
@@ -62,9 +63,10 @@ from listentrace.ui.text_offset_conversion import (
     qt_offset_to_codepoint_index,
 )
 from listentrace.ui.theme import SPACE_COMPACT, SPACE_NORMAL, SPACE_PAGE, SPACE_SECTION, apply_role, apply_surface
+from listentrace.ui.widgets.label_color_change_bus import label_color_change_bus
 from listentrace.ui.widgets.loop_grace_change_bus import loop_grace_change_bus
+from listentrace.ui.widgets.material_metadata_bus import material_metadata_bus
 from listentrace.ui.widgets.notebook_paper import GrainedDeskWidget, RuledPaperFrame, RuledTextEdit
-from listentrace.ui.windows.label_color_dialog import LabelColorDialog
 from listentrace.ui.windows.material_loop_settings_dialog import MaterialLoopSettingsDialog
 
 _SEEK_STEP_MS = 5000
@@ -231,6 +233,8 @@ class PlayerWindow(QMainWindow):
         self._loop_settings_dialog: MaterialLoopSettingsDialog | None = None
         loop_grace_change_bus.global_default_changed.connect(self._on_loop_grace_global_default_changed)
         loop_grace_change_bus.material_override_changed.connect(self._on_loop_grace_material_override_changed)
+        label_color_change_bus.label_colors_changed.connect(self._on_label_colors_changed)
+        material_metadata_bus.material_renamed.connect(self._on_material_renamed)
 
         central = GrainedDeskWidget()
         apply_surface(central, "paper")
@@ -250,6 +254,7 @@ class PlayerWindow(QMainWindow):
             ],
         )
         top_bar = header.top_bar
+        self._header_title_label = header.title_label
         header.title_row.addStretch(1)
 
         return_button = QPushButton("Return to Library")
@@ -400,10 +405,10 @@ class PlayerWindow(QMainWindow):
         apply_role(self._loop_settings_button, "quiet")
         utility_layout.addWidget(self._loop_settings_button)
 
-        self._label_colors_button = QPushButton("Label Colors...")
-        self._label_colors_button.clicked.connect(self._on_open_label_colors)
-        apply_role(self._label_colors_button, "quiet")
-        utility_layout.addWidget(self._label_colors_button)
+        # Global label colors preference lives in Library Settings ->
+        # Label Colors (settings_dialog.py) -- the sole reachable entry
+        # point; live-refreshed here via label_color_change_bus (see
+        # _on_label_colors_changed) rather than a second Player-local path.
 
         self._transcript_button = QPushButton("Hide Transcript")
         self._transcript_button.clicked.connect(self._on_toggle_transcript)
@@ -483,6 +488,8 @@ class PlayerWindow(QMainWindow):
         self._cue_list = QListWidget()
         apply_role(self._cue_list, "ruled_list_notebook")
         self._cue_list.setSelectionMode(QAbstractItemView.SelectionMode.ContiguousSelection)
+        self._cue_list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self._cue_list.customContextMenuRequested.connect(self._on_cue_list_context_menu)
         self._cue_list.setMinimumHeight(160)
         self._cue_list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self._cue_rows: list[_CueTranscriptRow] = []
@@ -597,7 +604,6 @@ class PlayerWindow(QMainWindow):
             apply_role(button, "secondary")
         for button in (
             self._mute_button,
-            self._label_colors_button,
             self._loop_settings_button,
             self._return_to_playing_button,
         ):
@@ -1067,11 +1073,6 @@ class PlayerWindow(QMainWindow):
         if tick.restart_at_ms is None:
             self._play_pause_button.setText("Play")
 
-    def _on_open_label_colors(self) -> None:
-        dialog = LabelColorDialog(self._connection, self)
-        dialog.exec()
-        self._refresh_annotation_presentation()
-
     def _on_open_loop_settings(self) -> None:
         if self._loop_settings_dialog is None:
             self._loop_settings_dialog = MaterialLoopSettingsDialog(
@@ -1087,6 +1088,19 @@ class PlayerWindow(QMainWindow):
     def _on_loop_grace_material_override_changed(self, material_id: int) -> None:
         if material_id == self._material.id:
             self._refresh_loop_end_grace()
+
+    def _on_label_colors_changed(self) -> None:
+        self._refresh_annotation_presentation()
+
+    def _on_material_renamed(self, material_id: int, new_title: str) -> None:
+        # M14 Corrective Batch A (A2): only title-derived presentation
+        # refreshes -- everything else (session/cue/annotation state) is
+        # untouched, since renaming carries no other meaning.
+        if material_id != self._material.id:
+            return
+        self._material.title = new_title
+        self.setWindowTitle(f"ListenTrace — {new_title}")
+        self._header_title_label.setText(new_title)
 
     def _refresh_loop_end_grace(self) -> None:
         grace_ms = loop_grace_service.effective_loop_end_grace_ms(self._connection, self._material.id)
@@ -1230,6 +1244,16 @@ class PlayerWindow(QMainWindow):
     def _show_workspace_status(self, message: str) -> None:
         self._workspace_status_label.setText(message)
         self._workspace_status_label.setVisible(bool(message))
+
+    def _on_cue_list_context_menu(self, pos: QPoint) -> None:
+        menu = QMenu(self._cue_list)
+        theme.apply_surface(menu, "popup")
+        clear_action = menu.addAction("Clear Cue Selection")
+        clear_action.triggered.connect(self._on_clear_cue_selection)
+        menu.exec(self._cue_list.mapToGlobal(pos))
+
+    def _on_clear_cue_selection(self) -> None:
+        self._cue_list.clearSelection()
 
     def _on_editing_cue_changed(self, current: QListWidgetItem, previous: QListWidgetItem) -> None:
         if current is None:

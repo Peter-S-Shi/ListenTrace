@@ -31,6 +31,15 @@ logs/
 *.db
 *.sqlite
 *.sqlite3
+*.db-wal
+*.db-shm
+*.db-journal
+*.sqlite-wal
+*.sqlite-shm
+*.sqlite-journal
+*.sqlite3-wal
+*.sqlite3-shm
+*.sqlite3-journal
 *.log
 
 # Media and subtitle working files
@@ -54,14 +63,30 @@ samples/private/
 # collides with the product's intentional duplicate-file-path invariant.
 !/manual-qa/samples/audio/normal_lesson2.wav
 
-# Manual QA temporary and generated artifacts
+# Manual QA temporary and generated artifacts. Deliberately narrow: only the
+# two specifically-named, audited fixtures above are ever un-ignored — never
+# a blanket `manual-qa/samples/**` allow, which would silently make any real
+# recording or export a tester drops into samples/ committable (see M14
+# pre-merge privacy corrective).
 manual-qa/*.json
+manual-qa/**/*.json
 manual-qa/*.srt
 manual-qa/*.vtt
+# Same narrow-allow-list treatment as the audio fixtures above: any new
+# .srt/.vtt dropped under samples/subtitles/ is ignored by default; only the
+# six specifically audited fixtures are un-ignored (see samples/README.md).
+manual-qa/samples/subtitles/*.srt
+manual-qa/samples/subtitles/*.vtt
+!/manual-qa/samples/subtitles/normal_lesson.srt
+!/manual-qa/samples/subtitles/normal_lesson.vtt
+!/manual-qa/samples/subtitles/boundary_stress.srt
+!/manual-qa/samples/subtitles/invalid_non_numeric_index.srt
+!/manual-qa/samples/subtitles/invalid_timing_backwards.srt
+!/manual-qa/samples/subtitles/invalid_missing_webvtt_header.vtt
 manual-qa/*.db
 manual-qa/screenshots/
-!manual-qa/samples/
-!manual-qa/samples/**
+manual-qa/results/**
+!manual-qa/results/.gitkeep
 
 # IDE and operating-system files
 .vscode/
@@ -75,3 +100,9 @@ desktop.ini
 *.temp
 *.bak
 ~$*
+
+# Design-scratch working folder (screenshots/prototypes/decision notes) —
+# local-only per M14 pre-merge repository hygiene corrective. Not a
+# replacement scratch location; the Product Owner's local files stay put,
+# they simply stop being tracked/pushed.
+/UI design/

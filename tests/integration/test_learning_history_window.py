@@ -91,6 +91,30 @@ def _seed_rich_material(conn, tmp_path):
     return material_id, cues, session_id, attempt_id, recording_id
 
 
+def test_all_seven_workspace_sections_are_scroll_wrapped(qapp, tmp_path):
+    """M14 Corrective Batch C (C3): structural-level regression for the M14
+    Phase 0 `_wrap_scrollable` change -- every one of the 7 workspace tabs
+    (Overview, Activity, Sessions, Diagnoses, Quizzes, Shadowing &
+    Recordings, Quick Practice) must actually be a resizable QScrollArea
+    hosting real content, not just some of them. This checks the structural
+    fact (right type, right count, a real inner widget, resizable) rather
+    than live resize/scrollbar rendering behavior, which belongs to Human QA
+    (real window sizes, real wheel-capture feel) rather than automation."""
+    from PySide6.QtWidgets import QScrollArea
+
+    connection = open_connection(tmp_path / "empty.db")
+    migrate(connection)
+    window = LearningHistoryWindow(connection, tmp_path / "recordings")
+
+    assert window._section_stack.count() == 7
+    for i in range(window._section_stack.count()):
+        page = window._section_stack.widget(i)
+        assert isinstance(page, QScrollArea), f"section {i} must be wrapped in a QScrollArea"
+        assert page.widgetResizable() is True
+        assert page.widget() is not None, f"section {i}'s scroll area must host real content"
+    window.close()
+
+
 def test_window_opens_with_no_data(qapp, tmp_path):
     connection = open_connection(tmp_path / "empty.db")
     migrate(connection)
@@ -177,6 +201,106 @@ def test_needs_attention_double_click_sets_material_filter(qapp, tmp_path):
     item = window._needs_attention_list.item(0)
     window._on_needs_attention_double_clicked(item)
     assert window._selected_material_id() == material_id
+    window.close()
+
+
+def test_persisted_timestamps_render_as_local_time_not_raw_utc(qapp, tmp_path):
+    """M14 Corrective Batch B (B1): every user-visible persisted timestamp in
+    Learning History must go through `format_local_timestamp`, not the raw
+    stored UTC string. Covers all four consumers Phase 1 flagged: Continue
+    Learning, Activity, Diagnoses "most recent", and Shadowing (which shares
+    `_shadowing_item_text` with High-Frequency, so this also covers that
+    surface without a separate assertion)."""
+    from listentrace.domain.services.time_display import format_local_timestamp
+
+    connection = open_connection(tmp_path / "smoke.db")
+    migrate(connection)
+    material_id, cues, session_id, attempt_id, recording_id = _seed_rich_material(connection, tmp_path)
+
+    # A fixed, known UTC instant -- deliberately not "now", so the test's
+    # expected local rendering is reproducible rather than depending on
+    # when the suite happens to run.
+    known_utc = "2026-06-15 18:45:00"
+    connection.execute(
+        "UPDATE session_diagnosis_evidence SET created_at = ? WHERE practice_session_id = ?",
+        (known_utc, session_id),
+    )
+    connection.execute(
+        "UPDATE shadowing_cue_progress SET last_practiced_at = ? WHERE practice_session_id = ?",
+        (known_utc, session_id),
+    )
+    # A second, active session (Continue Learning only lists active sessions;
+    # `_seed_rich_material`'s own session is already completed) whose
+    # Activity-feed row anchors on the same `last_resumed_at` column.
+    active_session_id = session_repository.create_practice_session(connection, material_id)
+    connection.execute(
+        "UPDATE practice_session SET last_resumed_at = ? WHERE id = ?",
+        (known_utc, active_session_id),
+    )
+    connection.commit()
+
+    expected_local = format_local_timestamp(known_utc)
+    assert expected_local != known_utc, "test is only meaningful if local time actually differs from raw UTC"
+
+    window = LearningHistoryWindow(connection, tmp_path / "recordings")
+    # The fixed-date fixture timestamp deliberately doesn't fall within the
+    # default "Last 7 Days" range -- select "All Time" so the date filter
+    # itself isn't what's under test here.
+    window._preset_combo.setCurrentIndex(4)
+    window._reload()
+
+    continue_texts = [
+        window._continue_learning_list.item(i).text() for i in range(window._continue_learning_list.count())
+    ]
+    assert any(expected_local in t for t in continue_texts)
+    assert not any(known_utc in t for t in continue_texts)
+
+    activity_texts = [window._activity_list.item(i).text() for i in range(window._activity_list.count())]
+    assert any(expected_local in t for t in activity_texts)
+    assert not any(known_utc in t for t in activity_texts)
+
+    diagnosis_texts = [
+        window._diagnosis_history_list.item(i).text() for i in range(window._diagnosis_history_list.count())
+    ]
+    assert any(expected_local in t for t in diagnosis_texts)
+    assert not any(known_utc in t for t in diagnosis_texts)
+
+    shadowing_texts = [window._shadowing_list.item(i).text() for i in range(window._shadowing_list.count())]
+    assert any(expected_local in t for t in shadowing_texts)
+    assert not any(known_utc in t for t in shadowing_texts)
+
+    window.close()
+
+
+def test_quiz_accuracy_chart_point_label_renders_local_time(qapp, tmp_path):
+    """M14 Corrective Batch B (B1): the quiz accuracy-over-time chart's point
+    label -- built in the application-service layer, since it is a purely
+    presentational string never re-parsed for chronological logic -- must
+    also show local time, matching the Quiz Comparison tree's own rendering
+    of the same underlying entries."""
+    from listentrace.domain.services.time_display import format_local_timestamp
+
+    connection = open_connection(tmp_path / "smoke.db")
+    migrate(connection)
+    material_id, cues, session_id, attempt_id, recording_id = _seed_rich_material(connection, tmp_path)
+
+    known_utc = "2026-06-15 18:45:00"
+    connection.execute("UPDATE quiz_attempt SET completed_at = ? WHERE id = ?", (known_utc, attempt_id))
+    connection.commit()
+
+    expected_local = format_local_timestamp(known_utc)
+    assert expected_local != known_utc
+
+    window = LearningHistoryWindow(connection, tmp_path / "recordings")
+    # The fixed-date fixture timestamp deliberately doesn't fall within the
+    # default "Last 7 Days" range -- select "All Time" so the date filter
+    # itself isn't what's under test here.
+    window._preset_combo.setCurrentIndex(4)
+    window._reload()
+
+    labels = [window._quiz_chart_table.item(i).text() for i in range(window._quiz_chart_table.count())]
+    assert any(expected_local in t for t in labels)
+    assert not any(known_utc in t for t in labels)
     window.close()
 
 

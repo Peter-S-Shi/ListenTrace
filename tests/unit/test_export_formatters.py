@@ -96,6 +96,484 @@ def test_render_markdown_handles_empty_materials_list():
     assert "no materials matched" in md.lower()
 
 
+# ---- Quick Practice parity (M14 Human QA Round 2 export-parity corrective) ----
+
+
+def test_render_markdown_includes_quick_practice_section_with_run_and_item_evidence():
+    material = {
+        "title": "Lesson",
+        "material_id": 1,
+        "quick_practice_evidence": [
+            {
+                "session_id": 7,
+                "source_type": "weakest_cues",
+                "status": "completed",
+                "requested_count": 5,
+                "actual_count": 5,
+                "started_at": "2026-07-24 12:00:00",
+                "completed_at": "2026-07-24 12:05:00",
+                "abandoned_at": None,
+                "items": [
+                    {
+                        "position": 1,
+                        "subtitle_cue_id": 42,
+                        "recall_result": "recalled",
+                        "heard_fragment": "gonna",
+                        "completed": True,
+                        "shadowed": False,
+                        "diagnosis": [
+                            {
+                                "label_key": "connected_speech",
+                                "transcript_excerpt": "going to",
+                                "heard_as": "gonna",
+                                "note": "reduced speech",
+                            }
+                        ],
+                    }
+                ],
+            }
+        ],
+    }
+    md = fmt.render_markdown(_bundle([material]))
+    assert "Quick Practice" in md
+    assert "Run #7" in md
+    assert "weakest" in md and "cues" in md
+    assert "gonna" in md
+    assert "connected_speech" in md
+    assert "reduced speech" in md
+
+
+def test_render_markdown_quick_practice_empty_run_says_no_items():
+    material = {
+        "title": "Lesson",
+        "material_id": 1,
+        "quick_practice_evidence": [
+            {
+                "session_id": 1,
+                "source_type": "recent",
+                "status": "abandoned",
+                "requested_count": 3,
+                "actual_count": 0,
+                "started_at": "2026-07-24 12:00:00",
+                "completed_at": None,
+                "abandoned_at": "2026-07-24 12:01:00",
+                "items": [],
+            }
+        ],
+    }
+    md = fmt.render_markdown(_bundle([material]))
+    assert "No items recorded" in md
+
+
+# ---- Quiz Q&A parity ----
+
+
+def test_render_markdown_quiz_qa_free_text_includes_learner_and_correct_answer_and_correctness():
+    material = {
+        "title": "Lesson",
+        "material_id": 1,
+        "quiz_attempts": [
+            {
+                "attempt_id": 1,
+                "quiz_mode": "dictation",
+                "completed_at": "2026-07-24 12:00:00",
+                "correct_count": 1,
+                "actual_count": 1,
+                "accuracy": 1.0,
+                "questions": [
+                    {
+                        "position": 1,
+                        "question_type": "dictation",
+                        "source_cue_text": "I am going to school",
+                        "prompt": {"masked_text": "I am ___ to school"},
+                        "correct_answer": {"answer_text": "going"},
+                        "learner_answer": {"raw_answer_text": "going", "selected_choice_index": None, "is_correct": True},
+                    }
+                ],
+            }
+        ],
+    }
+    md = fmt.render_markdown(_bundle([material]))
+    assert "Learner answer" in md
+    assert "Correct answer" in md
+    assert "going" in md
+
+
+def test_render_markdown_quiz_qa_choice_question_shows_readable_choice_text():
+    material = {
+        "title": "Lesson",
+        "material_id": 1,
+        "quiz_attempts": [
+            {
+                "attempt_id": 1,
+                "quiz_mode": "audio_transcript_choice",
+                "completed_at": "2026-07-24 12:00:00",
+                "correct_count": 0,
+                "actual_count": 1,
+                "accuracy": 0.0,
+                "questions": [
+                    {
+                        "position": 1,
+                        "question_type": "audio_transcript_choice",
+                        "source_cue_text": "She sells seashells",
+                        "prompt": {"choices": ["She sells seashells", "She smells seashells"]},
+                        "correct_answer": {"correct_choice_index": 0, "correct_text": "She sells seashells"},
+                        "learner_answer": {"raw_answer_text": None, "selected_choice_index": 1, "is_correct": False},
+                    }
+                ],
+            }
+        ],
+    }
+    md = fmt.render_markdown(_bundle([material]))
+    assert "She smells seashells" in md
+    assert "She sells seashells" in md
+
+
+def _quiz_material(question: dict) -> dict:
+    return {
+        "title": "Lesson",
+        "material_id": 1,
+        "quiz_attempts": [
+            {
+                "attempt_id": 1,
+                "quiz_mode": question["question_type"],
+                "completed_at": "2026-07-24 12:00:00",
+                "correct_count": 1,
+                "actual_count": 1,
+                "accuracy": 1.0,
+                "questions": [question],
+            }
+        ],
+    }
+
+
+# ---- Quiz prompt parity (M14 Human QA R2 export-parity corrective 2) ----
+
+
+def test_render_markdown_keyword_recognition_question_includes_prompt_target_text():
+    question = {
+        "position": 1,
+        "question_type": "keyword_recognition",
+        "source_cue_text": "It was overcast that morning",
+        "prompt": {"target_text": "gonna rain", "choices": ["No", "Yes"]},
+        "correct_answer": {"correct_choice_index": 1, "target_text": "gonna rain", "expected": True},
+        "learner_answer": {"raw_answer_text": None, "selected_choice_index": 1, "is_correct": True},
+    }
+    md = fmt.render_markdown(_bundle([_quiz_material(question)]))
+    assert "gonna rain" in md
+
+
+def test_render_markdown_dictation_blank_question_includes_masked_prompt():
+    question = {
+        "position": 1,
+        "question_type": "dictation",
+        "source_cue_text": "I am going to school",
+        "prompt": {"mode": "blank", "masked_text": "I am ___ to school", "blank_start": 5, "blank_end": 10},
+        "correct_answer": {"answer_text": "going", "normalized_answer_text": "going"},
+        "learner_answer": {"raw_answer_text": "going", "selected_choice_index": None, "is_correct": True},
+    }
+    md = fmt.render_markdown(_bundle([_quiz_material(question)]))
+    assert "Prompt (masked)" in md
+    assert "I am" in md and "to school" in md
+
+
+def test_render_markdown_review_missed_question_shows_masked_prompt_and_diagnosis_context():
+    question = {
+        "position": 1,
+        "question_type": "review_missed",
+        "source_cue_text": "I am going to school",
+        "prompt": {
+            "mode": "blank",
+            "masked_text": "I am ___ to school",
+            "blank_start": 5,
+            "blank_end": 10,
+            "label_key": "connected_speech",
+            "heard_as": "gonna",
+        },
+        "correct_answer": {"answer_text": "going", "normalized_answer_text": "going"},
+        "learner_answer": {"raw_answer_text": "gonna", "selected_choice_index": None, "is_correct": False},
+    }
+    md = fmt.render_markdown(_bundle([_quiz_material(question)]))
+    assert "Prompt (masked)" in md
+    assert "I am" in md and "to school" in md
+    assert "connected" in md and "speech" in md
+    assert "gonna" in md
+
+
+def test_render_markdown_review_missed_redacted_heard_as_stays_redacted():
+    question = {
+        "position": 1,
+        "question_type": "review_missed",
+        "source_cue_text": "I am walking to the store",
+        "prompt": {
+            "mode": "blank",
+            "masked_text": "I am ___ to the store",
+            "blank_start": 5,
+            "blank_end": 12,
+            "label_key": "connected_speech",
+            "heard_as": "[redacted]",
+        },
+        "correct_answer": {"answer_text": "walking", "normalized_answer_text": "walking"},
+        "learner_answer": {"raw_answer_text": "walking", "selected_choice_index": None, "is_correct": True},
+    }
+    md = fmt.render_markdown(_bundle([_quiz_material(question)]))
+    assert "redacted" in md
+    assert "gonna" not in md
+
+
+def test_render_markdown_quiz_qa_json_round_trips_prompt_field_unchanged():
+    question = {
+        "position": 1,
+        "question_type": "keyword_recognition",
+        "source_cue_text": "It was going to rain",
+        "prompt": {"target_text": "going to", "choices": ["No", "Yes"]},
+        "correct_answer": {"correct_choice_index": 1, "target_text": "going to", "expected": True},
+        "learner_answer": {"raw_answer_text": None, "selected_choice_index": 1, "is_correct": True},
+    }
+    bundle = _bundle([_quiz_material(question)])
+    js = json.loads(fmt.render_json(bundle))
+    assert js["materials"][0]["quiz_attempts"][0]["questions"][0]["prompt"] == question["prompt"]
+
+
+# ---- Shadowing note parity ----
+
+
+def test_render_markdown_shadowing_evidence_includes_note():
+    material = {
+        "title": "Lesson",
+        "material_id": 1,
+        "shadowing_evidence": [
+            {
+                "transcript_excerpt": "hello there",
+                "practice_count": 3,
+                "last_practiced_at": "2026-07-24 12:00:00",
+                "note": "still working on the vowel sound",
+            }
+        ],
+    }
+    md = fmt.render_markdown(_bundle([material]))
+    assert "still working on the vowel sound" in md
+
+
+# ---- Diagnosis/annotation note parity ----
+
+
+def test_render_markdown_session_diagnosis_history_note_survives():
+    material = {
+        "title": "Lesson",
+        "material_id": 1,
+        "session_diagnosis_history": [
+            {
+                "session_id": 1,
+                "subtitle_cue_id": 1,
+                "label_key": "misheard",
+                "transcript_excerpt": "hello there",
+                "heard_as": "hello bear",
+                "note": "confused vowel sound",
+                "created_at": "2026-07-24 12:00:00",
+            }
+        ],
+    }
+    md = fmt.render_markdown(_bundle([material]))
+    assert "confused vowel sound" in md
+
+
+def test_render_markdown_current_annotations_note_survives():
+    material = {
+        "title": "Lesson",
+        "material_id": 1,
+        "current_material_annotations": [
+            {
+                "subtitle_cue_id": 1,
+                "label_key": "unknown_chunk",
+                "transcript_excerpt": "kind of",
+                "heard_as": None,
+                "note": "still unsure of meaning",
+            }
+        ],
+    }
+    md = fmt.render_markdown(_bundle([material]))
+    assert "still unsure of meaning" in md
+
+
+# ---- Category omission still works ----
+
+
+def test_render_markdown_omits_quick_practice_section_when_category_not_selected():
+    material = {"title": "Lesson", "material_id": 1}
+    md = fmt.render_markdown(_bundle([material]))
+    assert "Quick Practice" not in md
+
+
+# ---- Redaction parity across formats ----
+
+
+def test_render_markdown_and_json_show_redaction_placeholder_consistently():
+    material = {
+        "title": "Lesson",
+        "material_id": 1,
+        "quick_practice_evidence": [
+            {
+                "session_id": 1,
+                "source_type": "recent",
+                "status": "completed",
+                "requested_count": 1,
+                "actual_count": 1,
+                "started_at": "2026-07-24 12:00:00",
+                "completed_at": "2026-07-24 12:01:00",
+                "abandoned_at": None,
+                "items": [
+                    {
+                        "position": 1,
+                        "subtitle_cue_id": 1,
+                        "recall_result": "recalled",
+                        "heard_fragment": "[redacted]",
+                        "completed": True,
+                        "shadowed": False,
+                        "diagnosis": [],
+                    }
+                ],
+            }
+        ],
+    }
+    bundle = _bundle([material])
+    md = fmt.render_markdown(bundle)
+    js = json.loads(fmt.render_json(bundle))
+    assert "redacted" in md
+    assert js["materials"][0]["quick_practice_evidence"][0]["items"][0]["heard_fragment"] == "[redacted]"
+
+
+# ---- Semantic coverage: every material key the export service can produce
+# must render *something* distinguishable in Markdown, so a future evidence
+# category added to `export_service.py` without a matching Markdown branch
+# fails this test loudly instead of silently becoming JSON-only. ----
+
+
+def test_render_markdown_has_a_visible_marker_for_every_known_material_key():
+    marker_by_key = {
+        "material_metadata": "MARKERMATERIALMETADATA",
+        "sessions": "MARKERSESSIONRESPONSE",
+        "session_diagnosis_history": "MARKERDIAGNOSISNOTE",
+        "current_material_annotations": "MARKERANNOTATIONNOTE",
+        "quiz_attempts": "MARKERQUIZLEARNERANSWER",
+        "quiz_prompt": "MARKERQUIZMASKEDPROMPT",
+        "shadowing_evidence": "MARKERSHADOWINGEXCERPT",
+        "shadowing_note": "MARKERSHADOWINGNOTE",
+        "retained_recordings": 424242,
+        "cue_notes": "MARKERCUENOTE",
+        "vocabulary_and_saved_chunks": "MARKERVOCABTEXT",
+        "quick_practice_evidence": "MARKERQUICKPRACTICEHEARDFRAGMENT",
+    }
+    material = {
+        "title": "Lesson",
+        "material_id": 1,
+        "material_metadata": {"language": marker_by_key["material_metadata"], "source_label": "audio file"},
+        "sessions": [
+            {
+                "session_id": 1,
+                "status": "completed",
+                "mode": "intensive",
+                "stage_responses": [
+                    {"stage_key": "global_comprehension", "prompt_key": "p", "response_text": marker_by_key["sessions"]}
+                ],
+                "keyword_captures": [],
+            }
+        ],
+        "session_diagnosis_history": [
+            {
+                "session_id": 1,
+                "subtitle_cue_id": 1,
+                "label_key": "misheard",
+                "transcript_excerpt": "x",
+                "heard_as": "y",
+                "note": marker_by_key["session_diagnosis_history"],
+                "created_at": "2026-07-24 12:00:00",
+            }
+        ],
+        "current_material_annotations": [
+            {
+                "subtitle_cue_id": 1,
+                "label_key": "misheard",
+                "transcript_excerpt": "x",
+                "heard_as": "y",
+                "note": marker_by_key["current_material_annotations"],
+            }
+        ],
+        "quiz_attempts": [
+            {
+                "attempt_id": 1,
+                "quiz_mode": "dictation",
+                "completed_at": "2026-07-24 12:00:00",
+                "correct_count": 1,
+                "actual_count": 1,
+                "accuracy": 1.0,
+                "questions": [
+                    {
+                        "position": 1,
+                        "question_type": "dictation",
+                        "source_cue_text": "x",
+                        "prompt": {"mode": "blank", "masked_text": marker_by_key["quiz_prompt"], "blank_start": 0, "blank_end": 1},
+                        "correct_answer": {"answer_text": "x"},
+                        "learner_answer": {
+                            "raw_answer_text": marker_by_key["quiz_attempts"],
+                            "selected_choice_index": None,
+                            "is_correct": True,
+                        },
+                    }
+                ],
+            }
+        ],
+        "shadowing_evidence": [
+            {
+                "transcript_excerpt": marker_by_key["shadowing_evidence"],
+                "practice_count": 1,
+                "last_practiced_at": "2026-07-24 12:00:00",
+                "note": marker_by_key["shadowing_note"],
+            }
+        ],
+        "retained_recordings": [
+            {
+                "recording_id": marker_by_key["retained_recordings"],
+                "duration_ms": 1000,
+                "status": "ready",
+                "created_at": "2026-07-24 12:00:00",
+            }
+        ],
+        "cue_notes": [{"transcript_excerpt": "x", "note": marker_by_key["cue_notes"]}],
+        "vocabulary_and_saved_chunks": [
+            {"item_type": "word", "text": marker_by_key["vocabulary_and_saved_chunks"], "meaning": "m"}
+        ],
+        "quick_practice_evidence": [
+            {
+                "session_id": 1,
+                "source_type": "recent",
+                "status": "completed",
+                "requested_count": 1,
+                "actual_count": 1,
+                "started_at": "2026-07-24 12:00:00",
+                "completed_at": "2026-07-24 12:01:00",
+                "abandoned_at": None,
+                "items": [
+                    {
+                        "position": 1,
+                        "subtitle_cue_id": 1,
+                        "recall_result": "recalled",
+                        "heard_fragment": marker_by_key["quick_practice_evidence"],
+                        "completed": True,
+                        "shadowed": False,
+                        "diagnosis": [],
+                    }
+                ],
+            }
+        ],
+    }
+
+    md = fmt.render_markdown(_bundle([material]))
+
+    for key, marker in marker_by_key.items():
+        assert str(marker) in md, f"material key {key!r} has no visible Markdown representation"
+
+
 # ---- JSON ----
 
 

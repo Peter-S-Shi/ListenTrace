@@ -66,7 +66,9 @@ from listentrace.ui.theme import (
     apply_role,
     apply_surface,
 )
+from listentrace.ui.widgets.label_color_change_bus import label_color_change_bus
 from listentrace.ui.widgets.loop_grace_change_bus import loop_grace_change_bus
+from listentrace.ui.widgets.material_metadata_bus import material_metadata_bus
 from listentrace.ui.widgets.notebook_paper import GrainedDeskWidget, RuledTextEdit
 from listentrace.ui.widgets.recording_panel import RecordingPanel
 from listentrace.ui.windows.material_loop_settings_dialog import MaterialLoopSettingsDialog
@@ -244,6 +246,8 @@ class GuidedSessionWindow(QMainWindow):
         self._loop_settings_dialog: MaterialLoopSettingsDialog | None = None
         loop_grace_change_bus.global_default_changed.connect(self._on_loop_grace_global_default_changed)
         loop_grace_change_bus.material_override_changed.connect(self._on_loop_grace_material_override_changed)
+        material_metadata_bus.material_renamed.connect(self._on_material_renamed)
+        label_color_change_bus.label_colors_changed.connect(self._on_label_colors_changed)
         self._current_stage = StageKey.GLOBAL_COMPREHENSION.value
         self._state: PracticeSessionState | None = None
         self._diagnosis_cue_index: int | None = None
@@ -270,6 +274,7 @@ class GuidedSessionWindow(QMainWindow):
         # -------------------------------------------------------------------
         header = theme.make_surface_header(self._material.title)
         header_row = header.top_bar
+        self._header_title_label = header.title_label
         self._stage_progress_label = QLabel("")
         apply_role(self._stage_progress_label, "caption")
         header.title_row.addWidget(self._stage_progress_label, 1)
@@ -611,6 +616,39 @@ class GuidedSessionWindow(QMainWindow):
     def _refresh_loop_end_grace(self) -> None:
         grace_ms = loop_grace_service.effective_loop_end_grace_ms(self._connection, self._material.id)
         self._player_session.set_loop_end_grace_ms(grace_ms)
+
+    def _on_material_renamed(self, material_id: int, new_title: str) -> None:
+        # M14 Corrective Batch A (A2): only title-derived presentation
+        # refreshes -- session/stage/diagnosis state is untouched.
+        if material_id != self._material.id:
+            return
+        self._material.title = new_title
+        self.setWindowTitle(f"ListenTrace — Guided Practice — {new_title}")
+        self._header_title_label.setText(new_title)
+
+    def _on_label_colors_changed(self) -> None:
+        # M14 Corrective Batch A (A3): repaint Stage 3 diagnosis colors in
+        # place -- deliberately not `_refresh_diagnosis_cue_panels()`, which
+        # also clears the in-progress diagnosis edit form as a side effect.
+        self._refresh_diagnosis_presentation_colors()
+
+    def _refresh_diagnosis_presentation_colors(self) -> None:
+        if self._diagnosis_cue_index is None or self._state is None:
+            return
+        cue = self._cues[self._diagnosis_cue_index]
+        colors = label_preference_service.get_label_preferences(self._connection)
+        apply_range_highlighting(
+            self._diagnosis_transcript_view, cue.text, self._current_diagnosis_evidence, colors, _OVERLAP_HIGHLIGHT
+        )
+        for i in range(self._diagnosis_list.count()):
+            item = self._diagnosis_list.item(i)
+            if item is None:
+                continue
+            evidence_id = item.data(Qt.ItemDataRole.UserRole)
+            evidence = next((e for e in self._current_diagnosis_evidence if e.id == evidence_id), None)
+            row = self._diagnosis_list.itemWidget(item)
+            if evidence is not None and isinstance(row, theme.DiagnosisNoteRow):
+                row.set_color(colors.get(evidence.label_key, UNKNOWN_LABEL_COLOR))
 
     def _sync_playback_button_texts(self) -> None:
         text = "Pause" if self._playback.is_playing else "Play"
@@ -1128,7 +1166,15 @@ class GuidedSessionWindow(QMainWindow):
 
         self._set_diagnosis_playback_controls_enabled(revealed and self._playback_usable and not read_only)
         self._save_diagnosis_button.setEnabled(revealed and not read_only)
-        self._no_difficulty_button.setEnabled(revealed and not read_only)
+        # M14 Corrective Batch B (B2): `mark_stage3_no_difficulty` rejects the
+        # action outright once any session diagnosis evidence exists
+        # (`practice_session_service.mark_stage3_no_difficulty`) -- mirror
+        # that same domain truth here so the button never presents itself as
+        # available only to fail after the click. The service check remains
+        # the ultimate invariant; this is proactive UI truthfulness, not a
+        # replacement for it.
+        has_diagnosis_evidence = len(state.session_diagnosis) > 0
+        self._no_difficulty_button.setEnabled(revealed and not read_only and not has_diagnosis_evidence)
 
         if revealed and self._cues:
             index = self._diagnosis_cue_index if self._diagnosis_cue_index is not None else 0

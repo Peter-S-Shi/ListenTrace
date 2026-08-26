@@ -11,6 +11,7 @@ from listentrace.infrastructure.appdata import get_database_path, get_recordings
 from listentrace.infrastructure.db.connection import open_connection
 from listentrace.infrastructure.db.migrations import migrate
 from listentrace.infrastructure.logging_setup import configure_logging
+from listentrace.infrastructure.windows_identity import set_windows_app_user_model_id
 from listentrace.ui.theme import apply_theme, get_app_icon
 from listentrace.ui.windows.main_window import MainWindow
 
@@ -43,12 +44,22 @@ def main() -> int:
     to a real user, the app would simply appear to do nothing when launched.
     Reuses an existing instance if one is already running rather than always
     constructing a new one -- this never happens for the real console-script
-    entry point, but lets tests exercise this function directly."""
+    entry point, but lets tests exercise this function directly.
+
+    `set_windows_app_user_model_id()` runs before `QApplication` is
+    constructed -- the Windows shell only reads a process's AppUserModelID
+    once, at first window creation, so a source-mode run (which otherwise
+    inherits generic `python.exe` taskbar identity) would keep the wrong
+    identity for the rest of the process if this ran any later. No-op on
+    non-Windows platforms."""
+    set_windows_app_user_model_id()
     app = QApplication.instance() or QApplication(sys.argv)
 
     try:
         logger = configure_logging()
         _install_crash_logging(logger)
+        app.setApplicationName("ListenTrace")
+        app.setApplicationDisplayName("ListenTrace")
         apply_theme(app)
         app.setWindowIcon(get_app_icon())
 

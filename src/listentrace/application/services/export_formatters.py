@@ -133,13 +133,14 @@ def _render_material_markdown(material: dict) -> list[str]:
         if not rows:
             lines.append("_No session diagnosis evidence in scope._")
         else:
-            lines.append("| Session | Label | Transcript excerpt | Heard as | Recorded |")
-            lines.append("|---|---|---|---|---|")
+            lines.append("| Session | Label | Transcript excerpt | Heard as | Note | Recorded |")
+            lines.append("|---|---|---|---|---|---|")
             for row in rows:
                 lines.append(
                     f"| #{row['session_id']} | {row['label_key']} | "
                     f"{escape_markdown_line(row['transcript_excerpt'] or '')} | "
-                    f"{escape_markdown_line(row['heard_as'] or '')} | {row['created_at']} |"
+                    f"{escape_markdown_line(row['heard_as'] or '')} | "
+                    f"{escape_markdown_line(row.get('note') or '')} | {row['created_at']} |"
                 )
         lines.append("")
 
@@ -149,12 +150,13 @@ def _render_material_markdown(material: dict) -> list[str]:
         if not rows:
             lines.append("_No current annotations._")
         else:
-            lines.append("| Label | Transcript excerpt | Heard as |")
-            lines.append("|---|---|---|")
+            lines.append("| Label | Transcript excerpt | Heard as | Note |")
+            lines.append("|---|---|---|---|")
             for row in rows:
                 lines.append(
                     f"| {row['label_key']} | {escape_markdown_line(row['transcript_excerpt'] or '')} | "
-                    f"{escape_markdown_line(row['heard_as'] or '')} |"
+                    f"{escape_markdown_line(row['heard_as'] or '')} | "
+                    f"{escape_markdown_line(row.get('note') or '')} |"
                 )
         lines.append("")
 
@@ -180,10 +182,7 @@ def _render_material_markdown(material: dict) -> list[str]:
                     lines.append(f"  - Breakdown: {escape_markdown_line(breakdown)}")
                 if "questions" in row:
                     for q in row["questions"]:
-                        lines.append(
-                            f"  - Q{q['position']} ({q['question_type']}): "
-                            f"{escape_markdown_line(q['source_cue_text'])}"
-                        )
+                        lines.extend(_render_quiz_question_markdown(q))
         lines.append("")
 
     if "shadowing_evidence" in material:
@@ -192,12 +191,12 @@ def _render_material_markdown(material: dict) -> list[str]:
         if not rows:
             lines.append("_No shadowing practice in scope._")
         else:
-            lines.append("| Transcript excerpt | Practice count | Last practiced |")
-            lines.append("|---|---|---|")
+            lines.append("| Transcript excerpt | Practice count | Last practiced | Note |")
+            lines.append("|---|---|---|---|")
             for row in rows:
                 lines.append(
                     f"| {escape_markdown_line(row['transcript_excerpt'] or '')} | {row['practice_count']} | "
-                    f"{row['last_practiced_at']} |"
+                    f"{row['last_practiced_at']} | {escape_markdown_line(row.get('note') or '')} |"
                 )
         lines.append("")
 
@@ -223,6 +222,9 @@ def _render_material_markdown(material: dict) -> list[str]:
                 lines.append(_md_blockquote(row["transcript_excerpt"] or "Note", row["note"]))
         lines.append("")
 
+    if "quick_practice_evidence" in material:
+        lines.extend(_render_quick_practice_markdown(material["quick_practice_evidence"]))
+
     if "vocabulary_and_saved_chunks" in material:
         lines.append("### Vocabulary and Saved Chunks")
         rows = material["vocabulary_and_saved_chunks"]
@@ -235,6 +237,130 @@ def _render_material_markdown(material: dict) -> list[str]:
                 lines.append(
                     f"| {row['item_type']} | {escape_markdown_line(row['text'])} | "
                     f"{escape_markdown_line(row['meaning'] or '')} |"
+                )
+        lines.append("")
+
+    return lines
+
+
+# The correct-answer payload keys that hold readable answer text, in the
+# order each question type actually populates them (see `quiz_service.py`'s
+# `_try_build_*` builders) — checked in order so one lookup covers every
+# free-text question type without a per-type branch.
+_CORRECT_ANSWER_TEXT_KEYS = ("answer_text", "target_text", "correct_text")
+
+
+def _quiz_choice_text(choices: list | None, index: int | None) -> str | None:
+    if choices is None or index is None or not (0 <= index < len(choices)):
+        return None
+    return str(choices[index])
+
+
+def _quiz_correct_answer_text(question: dict) -> str:
+    correct_answer = question.get("correct_answer") or {}
+    choice_text = _quiz_choice_text(
+        question.get("prompt", {}).get("choices"), correct_answer.get("correct_choice_index")
+    )
+    if choice_text is not None:
+        return choice_text
+    for key in _CORRECT_ANSWER_TEXT_KEYS:
+        if correct_answer.get(key):
+            return str(correct_answer[key])
+    return "(unavailable)"
+
+
+def _quiz_learner_answer_text(question: dict) -> str:
+    learner_answer = question.get("learner_answer") or {}
+    choice_text = _quiz_choice_text(
+        question.get("prompt", {}).get("choices"), learner_answer.get("selected_choice_index")
+    )
+    if choice_text is not None:
+        return choice_text
+    if learner_answer.get("raw_answer_text"):
+        return str(learner_answer["raw_answer_text"])
+    return "(no answer)"
+
+
+# Which prompt payload key holds the human-readable proposition/blank being
+# judged, per question type — `audio_transcript_choice` is deliberately
+# absent (its `choices` list is fully represented by the learner/correct
+# answer lines already; listing every distractor would just restate the
+# JSON schema, not add evidence meaning).
+def _quiz_prompt_lines(question: dict) -> list[str]:
+    question_type = question["question_type"]
+    prompt = question.get("prompt") or {}
+
+    if question_type == "keyword_recognition":
+        target = prompt.get("target_text")
+        return [f"    - Prompt (target text judged): {escape_markdown_line(target)}"] if target else []
+
+    if question_type in ("dictation", "review_missed") and prompt.get("mode") == "blank":
+        masked = prompt.get("masked_text")
+        if not masked:
+            return []
+        lines = [f"    - Prompt (masked): {escape_markdown_line(masked)}"]
+        if question_type == "review_missed":
+            if prompt.get("label_key"):
+                lines.append(f"    - Diagnosis label: {escape_markdown_line(str(prompt['label_key']))}")
+            if prompt.get("heard_as"):
+                lines.append(f"    - Heard as: {escape_markdown_line(prompt['heard_as'])}")
+        return lines
+
+    return []
+
+
+def _render_quiz_question_markdown(question: dict) -> list[str]:
+    is_correct = (question.get("learner_answer") or {}).get("is_correct")
+    correctness = "correct" if is_correct else ("incorrect" if is_correct is False else "n/a")
+    lines = [
+        f"  - Q{question['position']} ({question['question_type']}) [{correctness}]: "
+        f"{escape_markdown_line(question['source_cue_text'] or '')}",
+    ]
+    lines.extend(_quiz_prompt_lines(question))
+    lines.append(f"    - Learner answer: {escape_markdown_line(_quiz_learner_answer_text(question))}")
+    lines.append(f"    - Correct answer: {escape_markdown_line(_quiz_correct_answer_text(question))}")
+    return lines
+
+
+def _render_quick_practice_markdown(runs: list[dict]) -> list[str]:
+    lines = ["### Quick Practice", ""]
+    if not runs:
+        lines.append("_No quick practice runs in scope._")
+        lines.append("")
+        return lines
+
+    for run in runs:
+        lines.append(f"#### Quick Practice Run #{run['session_id']} — {run['status']}")
+        lines.append(_md_line("Source type", run.get("source_type")))
+        lines.append(_md_line("Requested / actual count", f"{run.get('requested_count')} / {run.get('actual_count')}"))
+        lines.append(_md_line("Started", run.get("started_at")))
+        lines.append(_md_line("Completed", run.get("completed_at")))
+        lines.append(_md_line("Abandoned", run.get("abandoned_at")))
+        lines.append("")
+
+        items = run.get("items", [])
+        if not items:
+            lines.append("_No items recorded for this run._")
+            lines.append("")
+            continue
+
+        lines.append("| Cue | Recall | Completed | Shadowed | Heard fragment |")
+        lines.append("|---|---|---|---|---|")
+        for item in items:
+            lines.append(
+                f"| #{item['position']} (cue {item['subtitle_cue_id']}) | {item.get('recall_result') or ''} | "
+                f"{item.get('completed')} | {item.get('shadowed')} | "
+                f"{escape_markdown_line(item.get('heard_fragment') or '')} |"
+            )
+        lines.append("")
+
+        for item in items:
+            for diag in item.get("diagnosis", []):
+                lines.append(
+                    f"  - Diagnosis (cue {item['subtitle_cue_id']}): {diag.get('label_key')} — "
+                    f"transcript: {escape_markdown_line(diag.get('transcript_excerpt') or '')}; "
+                    f"heard as: {escape_markdown_line(diag.get('heard_as') or '')}; "
+                    f"note: {escape_markdown_line(diag.get('note') or '')}"
                 )
         lines.append("")
 

@@ -1051,6 +1051,7 @@ def make_metric_tile(icon_name: str, label_text: str, tooltip: str | None = None
     """
     tile = QFrame()
     apply_role(tile, "metric_tile")
+    tile.setMinimumHeight(44)
     layout = QHBoxLayout(tile)
     layout.setContentsMargins(SPACE_NORMAL, SPACE_NORMAL, SPACE_NORMAL, SPACE_NORMAL)
     layout.setSpacing(SPACE_NORMAL)
@@ -1226,16 +1227,24 @@ QLineEdit, QComboBox {{
    with ink text and a blue border -- never a full-blue/white "enterprise"
    selection. This base rule covers every QListWidget by default (dialogs
    without a dedicated role="ruled_list"/etc.), not just the roled ones. */
+QListWidget {{
+    outline: none;
+}}
+QListWidget::item {{
+    outline: none;
+}}
 QListWidget::item:selected, QListWidget::item:selected:active {{
     background-color: {css('accent_subtle', m)};
     color: {css('ink', m)};
     border: {BORDER_WIDTH}px solid {css('accent', m)};
     font-weight: 600;
+    outline: none;
 }}
 QListWidget::item:selected:!active {{
     background-color: {css('accent_subtle', m)};
     color: {css('ink', m)};
     border: {BORDER_WIDTH}px solid {css('accent_border_soft', m)};
+    outline: none;
 }}
 QListWidget::item:hover {{
     background-color: {css('list_hover', m)};
@@ -1433,6 +1442,28 @@ QLabel[role="ruled_row"] {{
     padding: {SPACE_COMPACT + 2}px 0px;
     font-size: 13px;
     color: {css('ink', m)};
+}}
+QFrame[role="dossier_meta_row"] {{
+    border-bottom: 1px solid {css('notebook_rule_blue', m)};
+    padding: {SPACE_COMPACT}px 0px;
+    background: transparent;
+}}
+QLabel[role="dossier_meta_label"] {{
+    color: {css('accent', m)};
+    font-size: 13px;
+    font-weight: 600;
+    min-width: 120px;
+    max-width: 120px;
+}}
+QLabel[role="dossier_meta_value"] {{
+    color: {css('ink', m)};
+    font-size: 13px;
+    font-weight: 400;
+}}
+QLabel[role="dossier_meta_value_missing"] {{
+    color: {css('danger', m)};
+    font-size: 13px;
+    font-weight: 600;
 }}
 
 /* Navigation Directory / Bookmark Pane Items */
@@ -1632,12 +1663,17 @@ QListWidget[role="ruled_list_notebook"] {{
     border: {BORDER_WIDTH}px solid {css('line', m)};
     border-radius: {RADIUS_CARD}px;
     padding: {SPACE_COMPACT}px;
+    outline: none;
 }}
 QListWidget[role="ruled_list_notebook"]::item {{
     padding: {SPACE_NORMAL}px {SPACE_SECTION}px;
+    border-top: none;
+    border-left: 3px solid transparent;
+    border-right: none;
     border-bottom: 2px solid {css('notebook_rule_blue', m)};
     border-radius: {RADIUS_CONTROL}px;
     margin-bottom: 2px;
+    outline: none;
 }}
 QListWidget[role="ruled_list_notebook"]::item:hover {{
     background-color: {css('surface_soft', m)};
@@ -1645,13 +1681,21 @@ QListWidget[role="ruled_list_notebook"]::item:hover {{
 QListWidget[role="ruled_list_notebook"]::item:selected, QListWidget[role="ruled_list_notebook"]::item:selected:active {{
     background-color: {css('accent_subtle', m)};
     color: {css('accent', m)};
+    border-top: none;
+    border-right: none;
+    border-bottom: 2px solid {css('notebook_rule_blue', m)};
     border-left: 3px solid {css('accent', m)};
     font-weight: 600;
+    outline: none;
 }}
 QListWidget[role="ruled_list_notebook"]::item:selected:!active {{
     background-color: {css('accent_subtle', m)};
     color: {css('accent', m)};
+    border-top: none;
+    border-right: none;
+    border-bottom: 2px solid {css('notebook_rule_blue', m)};
     border-left: 3px solid {css('accent_hover', m)};
+    outline: none;
 }}
 /* Compact tab bar so the Annotate/Cue Note/Save Item pages fit without
    Qt's scroll-arrow overflow indicator inside the narrower Annotation

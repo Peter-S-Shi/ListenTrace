@@ -68,6 +68,30 @@ def test_play_button_is_cue_scoped_not_whole_media(qapp, conn, tmp_path):
     window.close()
 
 
+def test_material_renamed_updates_window_title_and_header(qapp, conn, tmp_path):
+    """M14 Corrective Batch A (A2): rename propagation to an already-open
+    dependent window."""
+    from listentrace.ui.widgets.material_metadata_bus import material_metadata_bus
+
+    media_path = tmp_path / "lesson.wav"
+    _make_wav(media_path)
+    srt = tmp_path / "lesson.srt"
+    srt.write_text("1\n00:00:00,000 --> 00:00:01,000\nBonjour\n", encoding="utf-8")
+    result = import_material(conn, media_path, srt, "Shadowing Lesson 3")
+    load_result = load_material_for_player(conn, result.material_id)
+    window = ShadowingPracticeWindow(conn, load_result, tmp_path / "recordings")
+
+    assert window.windowTitle() == "ListenTrace — Shadowing Practice — Shadowing Lesson 3"
+    assert window._header_title_label.text() == "Shadowing Lesson 3"
+
+    material_metadata_bus.material_renamed.emit(result.material_id, "Renamed Shadowing Lesson")
+
+    assert window.windowTitle() == "ListenTrace — Shadowing Practice — Renamed Shadowing Lesson"
+    assert window._header_title_label.text() == "Renamed Shadowing Lesson"
+    assert window._material.title == "Renamed Shadowing Lesson"
+    window.close()
+
+
 def test_loop_settings_button_opens_a_material_loop_settings_dialog(qapp, conn, tmp_path):
     media_path = tmp_path / "lesson.wav"
     _make_wav(media_path)

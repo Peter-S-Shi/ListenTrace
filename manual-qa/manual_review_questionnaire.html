@@ -175,21 +175,27 @@ details.instructions summary{cursor:pointer;font-weight:600;}
 const META = {
   project: "ListenTrace",
   schemaVersion: "1.0.0",
-  questionnaireVersion: "2026-07-27.2",
+  questionnaireVersion: "2026-08-26.3",
+  // Post-M14 / Milestone 15 regression baseline: the base key is kept only as
+  // a namespace prefix. Autosave actually reads/writes a *version-specific*
+  // key (below) so a browser that still has M12-era or M14-era (or any other older
+  // questionnaireVersion) saved state can never silently populate a fresh
+  // run -- old data under the old key is left untouched, not migrated or deleted.
   storageKey: "listentrace_manual_qa_v1"
 };
+META.versionedStorageKey = `${META.storageKey}__${META.questionnaireVersion}`;
 
 const STR = {
   instrTitle: {zh:"使用说明（点击展开/收起）", en:"Instructions (click to expand/collapse)"},
   instrBody: {zh:`
-    <p><b>用途：</b>本问卷是 ListenTrace 的追补式全产品人工核查基线（M12.1-A），供人工逐模块核查真实功能、记录故障与体验反馈，供 Milestone 12 产品加固与后续 Release 使用。</p>
+    <p><b>用途：</b>本问卷起源于 ListenTrace 的追补式全产品人工核查基线（M12.1-A），并在 Milestone 14 Human QA Round 2 中通过了全量人工回归（PASS）。<b>当前版本（2026-08-26.3）作为 post-M14 / Milestone 15（发布候选与交付）的可复用人工回归核查清单</b>：针对已完成 M13 UI 重构与 M14 全产品加固的基准版本执行。完成本轮问卷本身<b>不代表</b> Milestone 15.2（干净机器验收）或 Milestone 15.3（发布候选封版）已经完成。</p>
     <p><b>如何启动产品：</b>开发环境下运行 <code>.venv/Scripts/python -m listentrace.ui.app</code>（见仓库 README.md）；或使用 packaging/ 下已构建的安装包/便携版。</p>
     <p><b>如何使用样本：</b>样本位于 <code>manual-qa/samples/</code>，各模块的“要使用的样本”一栏会点名具体文件；详见 <code>manual-qa/samples/README.md</code>。</p>
     <p><b>如何保存结果：</b>本页所有填写内容会自动保存到浏览器 localStorage（仅本机、仅本问卷）。核查结束后，请点击下方“导出 JSON”保存一份结果文件，需要交给 Agent 分析或与他人交接进度时，发送该 JSON 文件（不要把浏览器 localStorage 当作可交接的存储介质）。也可导出 Markdown 报告便于阅读。</p>
     <p><b>隐私提醒：</b>请勿在“实际表现/证据”等文本字段中填写真实姓名、真实邮箱、账号、真实客户数据或本机真实绝对路径；截图文件名只记录文件名，不在本页粘贴截图内容本身。</p>
     <p><b>Schema：</b>问卷 schema/version：<code>${META.schemaVersion}</code>，questionnaire version：<code>${META.questionnaireVersion}</code>。</p>
   `, en:`
-    <p><b>Purpose:</b> This is ListenTrace's retroactive full-product manual QA baseline (M12.1-A), for module-by-module human verification, defect/UX feedback capture, feeding Milestone 12 hardening and later release work.</p>
+    <p><b>Purpose:</b> This questionnaire originated as ListenTrace's retroactive full-product manual QA baseline (M12.1-A) and passed full manual regression during Milestone 14 Human QA Round 2 (PASS). <b>The current version (2026-08-26.3) serves as the reusable post-M14 / Milestone 15 (Release Candidate & Delivery) manual regression checklist</b>: executed against the baseline product after the M13 UI reconstruction and M14 whole-product hardening. Completing this run does <b>not</b> by itself mean Milestone 15.2 (Clean-Machine Acceptance) or Milestone 15.3 (Release Candidate Closure & Delivery) has completed.</p>
     <p><b>How to launch the product:</b> in a dev environment run <code>.venv/Scripts/python -m listentrace.ui.app</code> (see repo README.md); or use a build already produced under <code>packaging/</code> (installer or portable zip).</p>
     <p><b>How to use the samples:</b> samples live under <code>manual-qa/samples/</code>; each module's "Samples used" field names the exact files. See <code>manual-qa/samples/README.md</code> for details.</p>
     <p><b>How results are saved:</b> everything you fill in autosaves to this browser's localStorage (this machine, this questionnaire only). When you finish, click "Export JSON" below to save a result file. To hand off progress to an Agent or another person, send that JSON file (do not treat localStorage itself as a hand-off medium). A Markdown report export is also available for easy reading.</p>
@@ -241,6 +247,7 @@ const STR = {
   confirmClear: {zh:"确认清空", en:"Yes, clear everything"},
   importInvalid: {zh:"导入失败：文件不是有效的 ListenTrace Manual QA JSON，或 schema 版本不兼容。", en:"Import failed: file is not a valid ListenTrace Manual QA JSON, or its schema version is incompatible."},
   importOk: {zh:"导入成功。", en:"Import succeeded."},
+  importVersionMismatchConfirm: {zh:"这份 JSON 来自问卷版本 {imported}，当前打开的是 {current}。继续导入会把该版本的答案/证据合并进本轮结果，通常只在你确实想引用历史结果时才这样做。是否继续？", en:"This JSON is from questionnaire version {imported}; the one currently open is {current}. Continuing will merge that version's answers/evidence into this run's results -- normally only intended when you deliberately want to reference a historical result. Continue?"},
   savedAt: {zh:"上次自动保存：", en:"Last autosaved:"},
   neverSaved: {zh:"尚未保存", en:"Not saved yet"},
   storageUnavailable: {zh:"警告：浏览器本地存储不可用，填写内容将不会自动保存，请手动导出 JSON。", en:"Warning: browser local storage is unavailable — entries will not autosave. Export JSON manually."}
@@ -267,16 +274,18 @@ const MODULES = [
   purpose:{zh:"验证本地音视频+字幕素材包的导入、校验与库管理（不复制大文件、区分删除记录与删除源文件）。", en:"Verify import/validation of local audio/video + subtitle material packages, and library management (no large-file copying by default, and record-removal vs source-file-deletion stay distinct)."},
   preconditions:{zh:"素材库为空或已有少量素材。", en:"Material library is empty or has only a few materials."},
   samples:{zh:["samples/audio/normal_lesson.wav","samples/subtitles/normal_lesson.srt","samples/subtitles/normal_lesson.vtt","samples/subtitles/boundary_stress.srt","samples/subtitles/invalid_non_numeric_index.srt","samples/subtitles/invalid_timing_backwards.srt","samples/subtitles/invalid_missing_webvtt_header.vtt"], en:["samples/audio/normal_lesson.wav","samples/subtitles/normal_lesson.srt","samples/subtitles/normal_lesson.vtt","samples/subtitles/boundary_stress.srt","samples/subtitles/invalid_non_numeric_index.srt","samples/subtitles/invalid_timing_backwards.srt","samples/subtitles/invalid_missing_webvtt_header.vtt"]},
-  steps:{zh:["导入 normal_lesson.wav + normal_lesson.srt，命名为一个描述性名称","再导入一次 normal_lesson.wav + normal_lesson.vtt 作为第二条素材","尝试用三个 invalid_*.srt/vtt 文件分别导入","导入 normal_lesson.wav + boundary_stress.srt（字幕时长超出音频时长的组合）","对其中一条素材执行改名、归档、还原、移除记录"], en:["Import normal_lesson.wav + normal_lesson.srt under a descriptive name","Import normal_lesson.wav + normal_lesson.vtt again as a second material","Try importing each of the three invalid_*.srt/vtt files","Import normal_lesson.wav + boundary_stress.srt (subtitle duration exceeds audio duration)","Rename, archive, restore, and remove one of the materials"]},
+  steps:{zh:["导入 normal_lesson.wav + normal_lesson.srt，命名为一个描述性名称","再导入一次 normal_lesson.wav + normal_lesson.vtt 作为第二条素材","尝试用三个 invalid_*.srt/vtt 文件分别导入","导入 normal_lesson.wav + boundary_stress.srt（字幕时长超出音频时长的组合）","打开一条素材的 Player，再回库里改名，观察选中态与已开窗口标题","归档、还原、移除记录","打开 Settings... 检查唯一入口","检查 Study Dossier 布局与短窗口滚动"], en:["Import normal_lesson.wav + normal_lesson.srt under a descriptive name","Import normal_lesson.wav + normal_lesson.vtt again as a second material","Try importing each of the three invalid_*.srt/vtt files","Import normal_lesson.wav + boundary_stress.srt (subtitle duration exceeds audio duration)","Open a material's Player, then rename it from the Library, watching selection and the open window's title","Archive, restore, and remove a record","Open Settings... and check it's the one entry point","Check Study Dossier layout and short-window scrolling"]},
   items:[
     {id:"m01-01", text:{zh:"导入 normal_lesson.wav + normal_lesson.srt 为新素材，命名一个描述性名称。", en:"Import normal_lesson.wav + normal_lesson.srt as a new material with a descriptive name."}, expected:{zh:"导入成功，出现在素材库列表中。", en:"Import succeeds; the material appears in the library list."}},
     {id:"m01-02", text:{zh:"用 normal_lesson2.wav（与 normal_lesson.wav 内容相同、文件名不同，用于避免撞上“同一文件路径只能导入一次”的既有规则）配 normal_lesson.vtt（WebVTT 格式）导入，作为第二条素材。", en:"Import normal_lesson2.wav (same audio content as normal_lesson.wav, under a different filename — this avoids the product's intentional “same file path can only be imported once” rule) paired with normal_lesson.vtt (WebVTT) as a second material."}, expected:{zh:"应用识别出内容重复（不同文件名），弹出“Possible Duplicate”确认对话框；点击继续后导入成功。两条素材的字幕内容一致（后续在播放器中核对，见 M02）。（M12 说明：若改用 normal_lesson.wav 本身重复导入，被拒绝是刻意设计的不可覆盖规则，不是 bug——见 HARDENING_BACKLOG.md。）", en:"The app detects duplicate content under a different filename and shows a “Possible Duplicate” confirmation dialog; importing succeeds after confirming. The two materials' subtitle content matches (cross-check in the player later, see M02). (M12 note: reusing normal_lesson.wav itself for a second import is intentionally and unconditionally rejected by design, not a bug — see HARDENING_BACKLOG.md.)"}},
     {id:"m01-03", text:{zh:"分别尝试用 invalid_non_numeric_index.srt、invalid_timing_backwards.srt、invalid_missing_webvtt_header.vtt 导入。", en:"Try importing invalid_non_numeric_index.srt, invalid_timing_backwards.srt, and invalid_missing_webvtt_header.vtt in turn."}, expected:{zh:"应用给出清晰、具体的拒绝/错误提示，而不是静默导入损坏的字幕或崩溃。", en:"The app gives a clear, specific rejection/error rather than silently importing corrupted cues or crashing."}},
     {id:"m01-04", text:{zh:"导入 normal_lesson.wav + boundary_stress.srt（字幕跑到 45 秒，音频只有 28 秒）。", en:"Import normal_lesson.wav + boundary_stress.srt (subtitle runs to 45s while the audio is only 28s)."}, expected:{zh:"能观察到应用如何处理“字幕超出媒体时长”的情况，且不崩溃。", en:"Observe how the app handles subtitle cues extending beyond media duration, without crashing."}},
-    {id:"m01-05", text:{zh:"给某条已导入素材改名。", en:"Rename an already-imported material."}, expected:{zh:"新名称立即反映在库列表及其他显示该素材标题的位置。", en:"The new name is immediately reflected in the library list and anywhere else the material's title is shown."}},
+    {id:"m01-05", text:{zh:"（M14 更新）先为一条素材打开 Open Player（保持窗口开着），再回到素材库，使用库列表的 Rename 按钮修改该素材在 ListenTrace 内部的标题（显示名称）——这不是改磁盘上的源文件名，源文件保持不变。", en:"(Updated for M14) Open Player for a material first (leave that window open), then go back to the Library and use the Library's Rename button to change that material's internal ListenTrace title (its display name) — this is not renaming the source file on disk, which stays untouched."}, expected:{zh:"改名后该条目在库列表中仍保持被选中（无需重新点击才能继续操作），且已经打开的 Player 窗口标题栏和页内标题几乎立即变成新名称，无需关闭重开。这两点底层逻辑已有自动化回归测试覆盖，这里只需确认视觉观感自然、没有明显延迟或残留旧标题。", en:"After renaming, the item stays selected in the Library list (no need to re-click it to keep working), and the already-open Player window's title bar and in-page header switch to the new name almost immediately, without closing and reopening it. The underlying logic is already covered by automated regression tests — this check is only to confirm it visually feels right, with no noticeable delay or leftover old title."}},
     {id:"m01-06", text:{zh:"归档一条素材，再将其还原。", en:"Archive a material, then restore it."}, expected:{zh:"归档状态与活跃素材明显区分，且可以被还原，不是被永久删除。", en:"Archived status is visibly distinct from active materials, and can be restored rather than being permanently deleted."}},
     {id:"m01-07", text:{zh:"移除一条素材记录（不是删除源文件）。", en:"Remove a material record (not the source file)."}, expected:{zh:"该记录从库中消失，但磁盘上的原始 .wav/.srt 文件保持不变。", en:"The record disappears from the library, but the original .wav/.srt files on disk are untouched."}},
-    {id:"m01-08", text:{zh:"先在磁盘上移动或改名某条素材配对的源文件，再尝试打开该素材。", en:"Move or rename a material's paired source file on disk first, then try opening that material."}, expected:{zh:"出现具体、友好的“文件缺失/已移动”错误提示，而不是崩溃。", en:"A specific, friendly missing/moved-file error appears, not a crash."}}
+    {id:"m01-08", text:{zh:"先在磁盘上移动或改名某条素材配对的源文件，再尝试打开该素材。", en:"Move or rename a material's paired source file on disk first, then try opening that material."}, expected:{zh:"出现具体、友好的“文件缺失/已移动”错误提示，而不是崩溃。", en:"A specific, friendly missing/moved-file error appears, not a crash."}},
+    {id:"m01-09", text:{zh:"（M14 新增）点击素材库侧边栏的“Settings...”，确认这是唯一的全局设置入口，里面能看到 Playback 和 Label Colors 两个分类标签。", en:"(New for M14) Click \"Settings...\" in the Library sidebar; confirm this is the single global settings entry point, with Playback and Label Colors as its two category tabs."}, expected:{zh:"只有这一个入口；播放器窗口内不应再有单独的“Label Colors...”按钮。两个分类标签下的设置项都能正常打开和修改。", en:"There is exactly one entry point; the Player window no longer has its own separate \"Label Colors...\" button. Both category tabs open and their settings can be changed normally."}},
+    {id:"m01-10", text:{zh:"（M14 新增）选中一条素材，检查 Material Study Dossier 区域：在正常窗口大小下，标题/状态/语言/媒体文件/字幕格式/字幕文件/cue 数量这 7 行是否同时可见、不互相挤压；然后把主窗口缩到很小的高度，检查该区域是否变为可滚动而不是把内容裁掉；如果条件允许，用一个标题很长或含中日韩文字/emoji 的素材重复这个检查。", en:"(New for M14) Select a material and check the Material Study Dossier area: at a normal window size, confirm all 7 rows (Title/Status/Language/Media/Subtitle format/Subtitle/Cue count) are visible at once without squishing each other; then shrink the main window to a very short height and confirm the area becomes scrollable instead of clipping content; if practical, repeat with a material whose title is very long or contains CJK characters/emoji."}, expected:{zh:"正常尺寸下 7 行一次性可见；极小高度下可以通过滚动看到全部内容，没有文字被截断到看不见；长标题/中日韩/emoji 标题能自动换行而不是溢出裁切。", en:"All 7 rows are visible at once at normal size; at a very short height, all content remains reachable via scrolling rather than being clipped away; a long/CJK/emoji title wraps rather than overflowing and getting cut off."}}
   ]},
 { id:"m02", title:{zh:"同步播放器", en:"Synchronized Player"},
   purpose:{zh:"验证播放与字幕 cue 的时间同步、导航、循环行为。", en:"Verify playback-to-cue time synchronization, navigation, and looping behavior."},
@@ -291,7 +300,8 @@ const MODULES = [
     {id:"m02-05", text:{zh:"开启单条 cue 循环，等待几个循环周期。", en:"Turn on single-cue looping and wait through a few cycles."}, expected:{zh:"音频持续重复该 cue 的范围，直到关闭循环，期间从不会短暂播放到下一条 cue 的音频。", en:"Audio keeps repeating that cue's range until looping is turned off; the next cue's audio is never briefly heard during looping."}},
     {id:"m02-06", text:{zh:"选择跨越多条 cue 的范围并开启范围循环。", en:"Select a range spanning multiple cues and turn on range looping."}, expected:{zh:"到达范围终点后循环回到范围起点。", en:"On reaching the range end, playback loops back to the range start."}},
     {id:"m02-07", text:{zh:"关闭字幕面板显示。", en:"Toggle the transcript panel off."}, expected:{zh:"整个字幕工作区面板（包括文本和任何编辑状态）被隐藏，不只是视觉上变灰。", en:"The whole transcript workspace panel — text and any editing state — is hidden, not just visually greyed out."}},
-    {id:"m02-08", text:{zh:"在 boundary_stress 组合素材中，测试第 4 条约 30 秒的长 cue 循环，以及第 1 条仅 80 毫秒的极短 cue 是否仍可被选中/导航。", en:"In the boundary_stress combination, test looping over cue #4 (~30s long) and confirm cue #1 (only 80ms) is still selectable/navigable despite its very short duration."}, expected:{zh:"长 cue 循环不失步；极短 cue 依然可正常导航。", en:"Looping the long cue stays in sync; the very short cue is still navigable normally."}}
+    {id:"m02-08", text:{zh:"在 boundary_stress 组合素材中，测试第 4 条约 30 秒的长 cue 循环，以及第 1 条仅 80 毫秒的极短 cue 是否仍可被选中/导航。", en:"In the boundary_stress combination, test looping over cue #4 (~30s long) and confirm cue #1 (only 80ms) is still selectable/navigable despite its very short duration."}, expected:{zh:"长 cue 循环不失步；极短 cue 依然可正常导航。", en:"Looping the long cue stays in sync; the very short cue is still navigable normally."}},
+    {id:"m02-09", text:{zh:"（M14 新增）在字幕/cue 列表上选中一个范围后，右键点击，选择“Clear Selection”。", en:"(New for M14) With a range selected in the transcript/cue list, right-click and choose \"Clear Selection\"."}, expected:{zh:"选区被清除；正在播放的 cue 高亮和正在编辑的 cue 都不受影响（不会意外跳走或丢失编辑内容）。", en:"The selection is cleared; the currently-playing cue's highlight and the cue currently being edited are both unaffected (nothing jumps away or loses its edit state unexpectedly)."}}
   ]},
 { id:"m03", title:{zh:"字幕工作区与听力诊断", en:"Transcript Workspace & Listening Diagnosis"},
   purpose:{zh:"验证语义标签标注、Cue Note、保存的词汇/语块条目等听力诊断证据的正确性。", en:"Verify semantic-label annotation, Cue Notes, and saved vocabulary/chunk items as listening-diagnosis evidence."},
@@ -304,7 +314,8 @@ const MODULES = [
     {id:"m03-03", text:{zh:"为一条 cue 保存一条 Cue Note（自由文本），关闭素材后重新打开。", en:"Save a free-text Cue Note for one cue; close the material and reopen it."}, expected:{zh:"重新打开后该 cue 仍显示同一条笔记。", en:"The same note is still attached to that cue after reopening."}},
     {id:"m03-04", text:{zh:"保存一个带释义和备注的词汇/语块条目（Saved Language Item）。", en:"Save a vocabulary/chunk item (Saved Language Item) with a meaning and a note."}, expected:{zh:"条目出现在已保存列表中，来源上下文正确取自该 cue。", en:"The item appears in the saved-items list, with source context correctly copied from that cue."}},
     {id:"m03-05", text:{zh:"从另一条 cue 再次保存文本完全相同（规范化后）的词汇条目。", en:"Save a vocabulary item with identical (normalized) text from a different cue."}, expected:{zh:"应用要求显式确认，而不是静默创建重复条目。", en:"The app asks for explicit confirmation rather than silently creating a duplicate."}},
-    {id:"m03-06", text:{zh:"打开 Label Colors，修改某个标签的颜色。", en:"Open Label Colors and change one label's color."}, expected:{zh:"所有已使用该标签的标注的徽章/高亮颜色立即更新，但不改变实际存储的标签本身。", en:"Every existing annotation using that label immediately updates its badge/highlight color, without changing the stored label itself."}},
+    {id:"m03-06", text:{zh:"（M14 更新：唯一入口）从素材库侧边栏打开 Library → Settings... → Label Colors 标签页，修改某个标签的颜色。此前 Player 窗口内还有一个单独的 Label Colors 按钮，M14 已确认其从未真正接入界面并已移除，现在只有这一个入口。", en:"(Updated for M14: the one entry point) Open Library -> Settings... -> Label Colors tab from the Library sidebar, and change one label's color. The Player window previously had its own separate Label Colors button; M14 confirmed it was never actually wired into the visible UI and has been removed, so this is now the only entry point."}, expected:{zh:"所有已使用该标签的标注的徽章/高亮颜色立即更新，但不改变实际存储的标签本身。", en:"Every existing annotation using that label immediately updates its badge/highlight color, without changing the stored label itself."}},
+    {id:"m03-06b", text:{zh:"（M14 新增）修改颜色前，先在同一台素材上打开一个精听会话（Guided Session）或 Quick Practice，走到有诊断证据可见的步骤；保持该窗口开着，再执行上一题的颜色修改。", en:"(New for M14) Before changing the color, open a Guided Session or Quick Practice run on the same material first, reaching a step where diagnosis evidence is visible; keep that window open, then perform the color change from the previous item."}, expected:{zh:"开着的会话/练习窗口里的诊断颜色也几乎立即更新，不需要关闭重开或切换步骤。底层刷新逻辑已有自动化回归测试覆盖，这里只需确认视觉观感自然。", en:"The already-open session/practice window's diagnosis colors also update almost immediately, without closing and reopening or switching steps. The underlying refresh logic is already covered by automated regression tests — this is only to confirm it visually feels right."}},
     {id:"m03-07", text:{zh:"在 boundary_stress 中含 emoji/中文混排的 cue 内选中一段文字并标注。", en:"In the boundary_stress cue containing emoji/CJK mixed text, select a range and annotate it."}, expected:{zh:"高亮准确落在选中的字符上，不因 emoji 出现偏移。", en:"The highlight lands exactly on the selected characters, with no offset caused by the emoji."}},
     {id:"m03-08", text:{zh:"编辑一个已有标注，同时修改它的标签和文字范围。", en:"Edit an existing annotation, changing both its label and its text range together."}, expected:{zh:"更新被当作真正的编辑保存，而不只是暗中改了备注/heard_as。", en:"The update saves as a genuine edit, not a hidden notes-only change."}}
   ]},
@@ -350,7 +361,8 @@ const MODULES = [
     {id:"m06-05", text:{zh:"尝试在一条录音进行中启动第二条录音。", en:"Try starting a second recording while one is already in progress."}, expected:{zh:"应用阻止同时进行两次录音。", en:"The app prevents two simultaneous captures."}},
     {id:"m06-06", text:{zh:"先删除单条录音，再对该 cue 执行“删除全部录音”。", en:"Delete a single take, then run \"delete all takes for this cue\"."}, expected:{zh:"两种删除范围都按预期生效，录音列表立即更新。", en:"Both deletion scopes work as expected; the take list updates immediately."}},
     {id:"m06-07", text:{zh:"选择一个不可用/已断开的麦克风（或在没有麦克风的环境下操作）。", en:"Select an unavailable/disconnected microphone (or operate in an environment with none)."}, expected:{zh:"应用不会静默切换到另一个设备，而是清楚地提示问题。", en:"The app does not silently fall back to a different device; it clearly surfaces the problem."}},
-    {id:"m06-08", text:{zh:"移除整个素材记录。", en:"Remove the entire material record."}, expected:{zh:"该素材的所有录音文件随数据库行一起被删除，不留下孤立文件。", en:"All of that material's recording files are deleted along with its database rows — no orphaned files remain."}}
+    {id:"m06-08", text:{zh:"移除整个素材记录。", en:"Remove the entire material record."}, expected:{zh:"该素材的所有录音文件随数据库行一起被删除，不留下孤立文件。", en:"All of that material's recording files are deleted along with its database rows — no orphaned files remain."}},
+    {id:"m06-09", text:{zh:"（M14 新增）同时打开两个录音面板（例如两个 Shadowing Practice 窗口，或一个 Shadowing Practice + 一个精听会话 Stage 4），在其中一个开始录音。", en:"(New for M14) Open two recording panels at once (e.g. two Shadowing Practice windows, or one Shadowing Practice plus a Guided Session Stage 4), and start recording in one of them."}, expected:{zh:"另一个面板的“开始录音”按钮应立即变灰不可点，并显示提示文字说明别处正在录音；第一个录音结束/中止后，另一个面板应重新可用。之前旧版本这里点了才会失败，现在应该点之前就已经是灰的。底层逻辑已有自动化回归测试覆盖，这里主要确认真实界面上的观感与提示文字是否清楚。", en:"The other panel's Start Recording button should immediately gray out with a message explaining a recording is in progress elsewhere; once the first recording ends/aborts, the other panel should become usable again. In an older version this used to fail only after clicking; it should now already be disabled before the click. The underlying logic is already covered by automated regression tests — this mainly confirms the real on-screen feel and message clarity."}}
   ]},
 { id:"m07", title:{zh:"Quick Practice 模式", en:"Quick Practice Mode"},
   purpose:{zh:"验证短时低摩擦的 cue 级练习模式：推荐练习/选定 cue、前进式循环、渐进式保存、中断行为。", en:"Verify the short, low-friction cue-based practice mode: Recommended/Selected Cues, the forward-only per-cue cycle, progressive saving, and interruption behavior."},
@@ -381,7 +393,8 @@ const MODULES = [
     {id:"m08-06", text:{zh:"查看 Needs Attention 列表。", en:"Check the Needs Attention list."}, expected:{zh:"每个被标记的素材都给出具体、独立命名的原因，而不是一个笼统的分数。", en:"Each flagged material shows a specific, independently-named reason, not one opaque score."}},
     {id:"m08-07", text:{zh:"从某条历史记录（会话/测验/录音）使用其跳转链接。", en:"Use a history entry's (session/quiz/recording) navigation link."}, expected:{zh:"正确打开对应的实时工作流（恢复会话、打开测验回顾、跳转到 cue 等）。", en:"It opens the correct live workflow (resumes the session, opens the quiz review, jumps to the cue, etc.)."}},
     {id:"m08-08", text:{zh:"检查 Learning History 全部分区，确认任何地方都没有“有效学习时长”“发音得分”或综合“能力/难度”分数。", en:"Check every section of Learning History; confirm nowhere shows an effective study-time total, pronunciation score, or combined ability/difficulty score."}, expected:{zh:"确实没有此类分数。", en:"No such score exists anywhere."}},
-    {id:"m08-09", text:{zh:"（M12 新增）分别在 Session History、Quiz History 对话框，以及 Learning History 的 Quick Practice 分区中，选中一条 Completed 或 Abandoned 的历史记录并点击 Delete；确认对话框会说明具体删除范围与保留范围后，确认删除。之后再选中一条 Active（进行中）的记录，确认 Delete 按钮不可用。", en:"(New in M12) In the Session History dialog, the Quiz History dialog, and the Quick Practice section of Learning History, select a Completed or Abandoned history entry and click Delete; confirm the dialog states what will be removed vs. retained before confirming. Then select an Active (in-progress) entry and confirm Delete is disabled for it."}, expected:{zh:"三处入口都能删除已完结的历史记录，且删除后该条目立即从列表消失；进行中的记录始终不可删除（需先中止/结束）。删除会话产生的标注、已保存词汇/语块、关键词摘录等独立资产不受影响；若该会话关联了跟读录音，录音本身也应保留（仍可在录音列表中找到），只是不再关联到已删除的会话。", en:"All three entries support deleting a finished history record, and the row disappears immediately after deletion. An in-progress record is never deletable (it must be abandoned/closed first). Independent assets created during that session -- annotations, saved vocabulary/chunk items, keyword captures -- are unaffected by the deletion. If the session had an associated Shadowing recording, the recording itself is also retained (still findable in the recording list), just no longer linked to the deleted session."}}
+    {id:"m08-09", text:{zh:"（M12 新增）分别在 Session History、Quiz History 对话框，以及 Learning History 的 Quick Practice 分区中，选中一条 Completed 或 Abandoned 的历史记录并点击 Delete；确认对话框会说明具体删除范围与保留范围后，确认删除。之后再选中一条 Active（进行中）的记录，确认 Delete 按钮不可用。", en:"(New in M12) In the Session History dialog, the Quiz History dialog, and the Quick Practice section of Learning History, select a Completed or Abandoned history entry and click Delete; confirm the dialog states what will be removed vs. retained before confirming. Then select an Active (in-progress) entry and confirm Delete is disabled for it."}, expected:{zh:"三处入口都能删除已完结的历史记录，且删除后该条目立即从列表消失；进行中的记录始终不可删除（需先中止/结束）。删除会话产生的标注、已保存词汇/语块、关键词摘录等独立资产不受影响；若该会话关联了跟读录音，录音本身也应保留（仍可在录音列表中找到），只是不再关联到已删除的会话。", en:"All three entries support deleting a finished history record, and the row disappears immediately after deletion. An in-progress record is never deletable (it must be abandoned/closed first). Independent assets created during that session -- annotations, saved vocabulary/chunk items, keyword captures -- are unaffected by the deletion. If the session had an associated Shadowing recording, the recording itself is also retained (still findable in the recording list), just no longer linked to the deleted session."}},
+    {id:"m08-10", text:{zh:"（M14 新增）打开一个有较多条目的分区（例如 Sessions 或 Activity），把 Learning History 窗口缩到很矮的高度。", en:"(New for M14) Open a section with a fair number of rows (e.g. Sessions or Activity), and shrink the Learning History window to a very short height."}, expected:{zh:"整个分区变为可滚动，所有条目仍可通过滚动到达；鼠标滚轮在列表内部滚动和在外层容器滚动之间切换自然，没有出现双重滚动条打架或滚轮完全没反应的情况。这一项依赖真实窗口尺寸和原生滚轮手感，无法用自动化测试验证。", en:"The whole section becomes scrollable and every row remains reachable by scrolling; the mouse wheel switches naturally between scrolling inside the list and scrolling the outer container, with no fighting double scrollbars or a wheel that does nothing. This depends on real window sizing and native wheel feel, which automation cannot verify."}}
   ]},
 { id:"m09", title:{zh:"结构化导出", en:"Structured Export"},
   purpose:{zh:"验证导出范围、隐私字段可选、预览一致性、原子写入与覆盖确认。", en:"Verify export scope, optional privacy fields, preview consistency, atomic writes, and overwrite confirmation."},
@@ -433,7 +446,8 @@ const MODULES = [
     {id:"m12-02", text:{zh:"分别调整每个主要窗口（播放器、Learning History、精听会话）到较小和较大的尺寸。", en:"Resize each major window (Player, Learning History, Guided Session) to a small and a large size."}, expected:{zh:"两种尺寸下文字和控件都保持可读、不重叠。", en:"Text and controls stay readable and non-overlapping at both sizes."}},
     {id:"m12-03", text:{zh:"回顾本次核查中遇到的所有状态/错误提示文案。", en:"Review every status/error message encountered during this review."}, expected:{zh:"记录任何让你不清楚“发生了什么/该怎么做”的提示。", en:"Note any message that left you unsure what happened or what to do next."}},
     {id:"m12-04", text:{zh:"比较不同窗口中对同一类操作（如“取消”“关闭”“放弃”）的措辞。", en:"Compare wording across windows for what feels like the same action (e.g. Cancel vs Close vs Discard)."}, expected:{zh:"记录任何术语不一致的地方。", en:"Note any inconsistent terminology for what feels like the same action."}},
-    {id:"m12-05", text:{zh:"（主观）哪个窗口或工作流在第一次使用时感觉最令人困惑？为什么？", en:"(Subjective) Which window or workflow felt the most confusing on first use, and why?"}, expected:{zh:"", en:""}, type:"text"}
+    {id:"m12-05", text:{zh:"（主观）哪个窗口或工作流在第一次使用时感觉最令人困惑？为什么？", en:"(Subjective) Which window or workflow felt the most confusing on first use, and why?"}, expected:{zh:"", en:""}, type:"text"},
+    {id:"m12-06", text:{zh:"（M14 新增，若本机 Windows 显示缩放可设为 125%/150% 才能做；此前几轮核查都只在 100% 缩放下验证过）把 Windows 显示缩放调整为 125% 或 150%，重启应用后走一遍 Player、Learning History 等几个主要窗口。", en:"(New for M14 — only possible if this machine can be set to 125%/150% Windows display scaling; every prior review round only verified 100% scaling) Set Windows display scaling to 125% or 150%, relaunch the app, and walk through a few major windows such as Player and Learning History."}, expected:{zh:"文字、图标、控件间距在缩放下依然清晰可读、不重叠、不模糊；若本机条件不允许测试，请明确记录“未测试，本机缩放固定为 100%”而不是留空。", en:"Text, icons, and control spacing stay crisp, readable, non-overlapping, and non-blurry under scaling. If this machine cannot be set to a different scale factor, explicitly record \"not tested — this machine is fixed at 100% scaling\" rather than leaving it blank."}}
   ]},
 { id:"m13", title:{zh:"性能、容量与稳定性", en:"Performance, Capacity & Stability"},
   purpose:{zh:"在较大数据量或高频操作下检查响应速度与稳定性。", en:"Check responsiveness and stability under a larger data volume or rapid repeated actions."},
@@ -470,10 +484,13 @@ let storageOK = true;
 
 function loadState(){
   try{
-    const raw = localStorage.getItem(META.storageKey);
+    const raw = localStorage.getItem(META.versionedStorageKey);
     if(raw){
       const parsed = JSON.parse(raw);
-      if(parsed && parsed.project === META.project){
+      // Defense in depth on top of the version-specific key itself: even if
+      // something ends up under this key with a mismatched questionnaireVersion
+      // (e.g. a future manual copy), never silently load it into the current run.
+      if(parsed && parsed.project === META.project && parsed.questionnaireVersion === META.questionnaireVersion){
         state.meta = Object.assign(state.meta, parsed.meta||{});
         state.items = parsed.items||{};
         state.lang = parsed.lang || "zh";
@@ -487,7 +504,7 @@ function persist(){
   if(!storageOK) return;
   state.savedAt = new Date().toISOString();
   try{
-    localStorage.setItem(META.storageKey, JSON.stringify({
+    localStorage.setItem(META.versionedStorageKey, JSON.stringify({
       project: META.project, schemaVersion: META.schemaVersion,
       questionnaireVersion: META.questionnaireVersion,
       meta: state.meta, items: state.items, lang: state.lang, savedAt: state.savedAt
@@ -738,6 +755,16 @@ function importJSON(evt){
       }
       const majorOk = String(parsed.schemaVersion||"").split(".")[0] === META.schemaVersion.split(".")[0];
       if(!majorOk){ alert(t("importInvalid")); return; }
+      // M14 Human QA Round 2 readiness corrective: a matching project/schema
+      // does not mean this file is from the SAME questionnaire run. Importing
+      // silently would let old-version answers/evidence merge into a
+      // supposedly-fresh Round 2 result. An explicit confirmation makes a
+      // cross-version import an intentional, informed choice rather than an
+      // accident -- see manual-qa/README.md for the documented policy.
+      if(parsed.questionnaireVersion !== META.questionnaireVersion){
+        const proceed = confirm(t("importVersionMismatchConfirm").replace("{imported}", parsed.questionnaireVersion||"?").replace("{current}", META.questionnaireVersion));
+        if(!proceed) return;
+      }
       state.meta = Object.assign(state.meta, parsed.meta||{});
       state.items = Object.assign(state.items, parsed.items||{});
       persist();

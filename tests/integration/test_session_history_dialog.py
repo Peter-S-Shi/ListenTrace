@@ -10,7 +10,7 @@ from listentrace.application.services import practice_session_service as svc
 from listentrace.application.services.material_import_service import import_material
 from listentrace.infrastructure.db.connection import open_connection
 from listentrace.infrastructure.db.migrations import migrate
-from listentrace.ui.time_display import format_local_timestamp
+from listentrace.domain.services.time_display import format_local_timestamp
 from listentrace.ui.windows.session_history_dialog import SessionHistoryDialog
 
 
