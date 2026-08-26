@@ -446,7 +446,7 @@ A whole-product visual/interaction reconstruction across all 16 production surfa
 
 ---
 
-# Milestone 14 — Final Product Hardening & Full Manual Regression (Current)
+# Milestone 14 — Final Product Hardening & Full Manual Regression (Completed, Accepted, Merged)
 
 ## Goal
 
@@ -454,7 +454,7 @@ Final product hardening and full manual acceptance against the reconstructed Not
 
 ## Status
 
-**Current Milestone (In Progress — Human QA Round 2 PASS; a bounded pre-merge repository-hygiene/privacy/Windows-app-identity corrective is the remaining gate before the M14 branch is merge-ready).**
+**Completed, Accepted, and Merged to `main`.** Human QA Round 2 PASS; the pre-merge repository-hygiene/privacy/Windows-app-identity corrective is Product Owner ACCEPTED (Windows taskbar-identity spot-check PASS). Accepted M14 product baseline: the final commit on `milestone/14-final-product-hardening` merged into `main` via the M14 pull request.
 
 - **Phase 0 — Baseline Reconciliation & Immediate Correctives (Complete)**:
   - Macro documentation reconciled to the then-canonical lifecycle: `M12 (Completed) -> M13 (Completed) -> M14 (Current) -> Phase C2 -> Phase D` (superseded by the M14 pre-merge hygiene/privacy/app-identity corrective's `M15 — Release Candidate & Delivery` lifecycle — see "Canonical v1.0 Sequence", below; the former Phase C2/Phase D content was not discarded, only renamed and consolidated into Milestone 15).
@@ -465,8 +465,11 @@ Final product hardening and full manual acceptance against the reconstructed Not
 - **Phase 1 — Whole-Product Hardening Audit (Complete, Product Owner Accepted)**: a read-only, risk-based audit across all in-scope product areas (`docs/M14_PHASE1_WHOLE_PRODUCT_HARDENING_AUDIT.md`) — 6 confirmed defects, 2 governance/documentation drift items, and a proposed corrective batch plan.
 - **Corrective Batches A, B, C (All Complete)**: every confirmed defect from the accepted Phase 1 audit resolved (0 open) — cross-window state consistency (rename/selection/label-color/recording-availability), local-time display correctness, "No Notable Difficulty" availability truthfulness, a permanent remove-while-open-window safety regression test, the two governance drift items closed, and the orphaned Player-local Label Colors compatibility path removed. Automated test suite: 924 passing.
 - **Human QA Round 2 (PASS)**: full manual regression pass against the finalized, corrective-batch-complete product using `manual-qa/manual_review_questionnaire.html` (`2026-08-26.2` — stale M13-era wording corrected, new M14 behavior covered, and items strongly protected by the new automated regression consolidated so the Product Owner isn't asked to repeatedly re-verify what automation already proves). One finding (`m09-04`, structured-export Markdown/JSON evidence parity) was corrected across two focused correctives before Product Owner retest passed; 0 known open Human QA defects.
-- **Pre-Merge Repository Hygiene, Privacy & Windows Product Identity Corrective (In Progress)**: lifecycle/governance naming cleanup (this document), repository-root hygiene and historical-artifact archival, manual-QA/live-database source-control privacy hardening, and a Windows AppUserModelID fix so ListenTrace no longer shares taskbar grouping with unrelated local applications. Not yet merge-ready until this corrective is Product Owner accepted.
-- **Pre-Release Non-Visual Hardening**: Final sweep of error boundaries, missing file handlers, and edge cases.
+- **Pre-Merge Repository Hygiene, Privacy & Windows Product Identity Corrective (Complete, Product Owner Accepted)**: lifecycle/governance naming cleanup (this document), repository-root hygiene and historical-artifact archival, manual-QA/live-database source-control privacy hardening, and a Windows AppUserModelID fix so ListenTrace no longer shares taskbar grouping with unrelated local applications — Product Owner Windows taskbar spot-check **PASS**.
+- **Final `/code-review` exit pass (Complete)**: reviewed the full M14 branch diff against `main` (Standards and Spec axes). Two bounded, real gaps found and fixed with regression coverage — a missing test for `PlayerWindow`'s cross-window rename-propagation handler, and a stale `LabelColorDialog` reference in `README.md`'s architecture tree. No release blocker found otherwise. Final automated suite: 948 passing.
+- **Pre-Release Non-Visual Hardening**: Final sweep of error boundaries, missing file handlers, and edge cases — folded into the above; no additional open items.
+
+**M14 exit summary**: confirmed open defects — 0; M14-internal release blockers — 0. Milestone 14 does not itself perform the `main` merge or clean-machine acceptance; those are Milestone 15's job, below.
 
 ---
 
@@ -550,7 +553,7 @@ Represents all validation already performed on the development machine, formerly
 
 ---
 
-# Milestone 15 — Release Candidate & Delivery (Not Started)
+# Milestone 15 — Release Candidate & Delivery (Current — Not Started)
 
 ## Goal
 
@@ -558,7 +561,7 @@ Take the Milestone 14-hardened, Human-QA-accepted product through a refreshed ca
 
 ## Status
 
-**Not started.** Occurs only after the Milestone 14 branch is merged. Consolidates the former separate "Phase C2" and "Phase D" release-engineering labels (historical names, preserved above under Phase A/B/C1) into three sub-stages of one numbered milestone, so the active lifecycle no longer mixes numbered product milestones with unnumbered release-engineering phases:
+**Not started; ready to begin now that Milestone 14 has merged.** Consolidates the former separate "Phase C2" and "Phase D" release-engineering labels (historical names, preserved above under Phase A/B/C1) into three sub-stages of one numbered milestone, so the active lifecycle no longer mixes numbered product milestones with unnumbered release-engineering phases:
 
 - **Milestone 15.1 — Candidate Build / Packaging Refresh**: rebuild the PyInstaller onedir build and Inno Setup installer against the final, merged Milestone 14 code (including this corrective's Windows AppUserModelID/taskbar-identity fix); confirm packaging identity metadata (icon, AppUserModelID, shortcut/AppId) is internally consistent; refresh version/release metadata.
 - **Milestone 15.2 — Clean-Machine Acceptance**: the remaining final environment-validation gate, occurring after Milestone 14 so the final hardened, final-UI release candidate is what gets tested, not an earlier presentation layer or an unaudited product.
@@ -592,6 +595,14 @@ Possible scope: release-blocking or user-impacting defect fixes; compatibility f
 
 Possible new capabilities may be evaluated only after v1.0 is stabilized and used. Optional Assisted Features (above) remain in the deferred section unless explicitly promoted through a future product decision.
 
+## Candidate: Milestone 16 — Library Organization & Collections
+
+Recorded during real high-frequency post-Human-QA use: the Product Owner identified that ListenTrace will be used across multiple languages (including English and French), and that long-term use will build a large material library where materials serve different learning purposes and skill areas. The current flat Library remains functionally correct for v1.0 but will become increasingly costly to navigate at scale — a product-growth / information-architecture requirement, not an M14 defect or v1.0 release blocker.
+
+Possible future exploration (not designed, not locked): language-aware organization; Collections; optional tags / learning-purpose organization; scalable Library filtering/navigation; relationships between organization metadata and existing Archive / History / Export behavior.
+
+**Explicitly**: not part of Milestone 14; not part of Milestone 15 (Release Candidate & Delivery); no current schema migration; no current UI change; a v1.1 / Milestone 16 candidate only, to be scoped after v1.0 is closed. This is intentional scope control, not a missing v1.0 feature.
+
 ---
 
 # Canonical v1.0 Sequence
@@ -607,8 +618,8 @@ Milestones 1-10 — Core Functional Development
   -> Presentation Complete Gate (Passed)
   -> Milestone 12 — Pre-UI Product Hardening (Completed)
   -> Milestone 13 — Advanced UI/UX Reconstruction (Completed / Human Visual Gate Passed / Merged)
-  -> Milestone 14 — Final Product Hardening & Full Manual Regression (Current — Human QA Round 2 PASS; pre-merge hygiene/privacy/app-identity corrective in progress)
-  -> Milestone 15 — Release Candidate & Delivery (Not Started)
+  -> Milestone 14 — Final Product Hardening & Full Manual Regression (Completed, Accepted, Merged — Human QA Round 2 PASS; pre-merge hygiene/privacy/app-identity corrective Product Owner ACCEPTED)
+  -> Milestone 15 — Release Candidate & Delivery (Current — Not Started)
        -> Milestone 15.1 — Candidate Build / Packaging Refresh
        -> Milestone 15.2 — Clean-Machine Acceptance
        -> Milestone 15.3 — Release Candidate Closure & Delivery

@@ -11,14 +11,14 @@ below), and Phase C1 (development-machine release preflight) is also
 complete. Milestone 11 (UI/UX Presentation Refresh), Milestone 12
 (Pre-UI Product Hardening), and Milestone 13 (Advanced UI/UX Reconstruction)
 are all complete and merged. Milestone 14 (Final Product Hardening &
-Full Manual Regression) is current, not yet merged (Human QA Round 2 is
-PASS; a bounded pre-merge repository-hygiene/privacy/Windows-app-identity
-corrective is the remaining gate before merge). Milestone 15 — Release
-Candidate & Delivery (15.1 Candidate Build/Packaging Refresh, 15.2
+Full Manual Regression) is likewise **complete, accepted, and merged**
+(Human QA Round 2 PASS; the pre-merge repository-hygiene/privacy/
+Windows-app-identity corrective is Product Owner ACCEPTED). Milestone 15 —
+Release Candidate & Delivery (15.1 Candidate Build/Packaging Refresh, 15.2
 Clean-Machine Acceptance, 15.3 Release Candidate Closure & Delivery — the
 former separate "Phase C2"/"Phase D" release-engineering labels, now
-consolidated into one numbered milestone) follows after Milestone 14
-merges — see `ROADMAP.md`'s "Canonical v1.0 Sequence".
+consolidated into one numbered milestone) is the current lifecycle
+milestone, ready to start — see `ROADMAP.md`'s "Canonical v1.0 Sequence".
 
 ## Decisions made in Phase A
 

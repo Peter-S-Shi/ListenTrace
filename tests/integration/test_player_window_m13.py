@@ -218,6 +218,32 @@ def test_player_window_m13_video_widget_preserves_aspect_ratio_without_black_box
     window.close()
 
 
+def test_player_window_material_renamed_updates_window_title_and_header(qapp, db_conn, tmp_path):
+    """M14 Corrective Batch A (A2): rename propagation to an already-open
+    dependent window. PlayerWindow is the bus's own motivating case
+    (`material_metadata_bus.py`'s docstring), but was missing this test
+    while every sibling window (GuidedSessionWindow, QuizWindow,
+    QuickPracticeWindow, ShadowingPracticeWindow,
+    MaterialLoopSettingsDialog) already had one -- found during the M14
+    merge-ready `/code-review` pass."""
+    from listentrace.ui.widgets.material_metadata_bus import material_metadata_bus
+
+    load_res = _sample_player_load(tmp_path)
+    window = PlayerWindow(load_res, db_conn)
+
+    assert window.windowTitle() == "ListenTrace — M13 Audio Lesson"
+    assert window._header_title_label.text() == "M13 Audio Lesson"
+
+    material_metadata_bus.material_renamed.emit(load_res.material.id, "Renamed M13 Lesson")
+
+    assert window.windowTitle() == "ListenTrace — Renamed M13 Lesson"
+    assert window._header_title_label.text() == "Renamed M13 Lesson"
+
+    # A rename for a different material must not affect this window.
+    material_metadata_bus.material_renamed.emit(load_res.material.id + 999, "Someone Else's Lesson")
+    assert window.windowTitle() == "ListenTrace — Renamed M13 Lesson"
+
+
 def test_player_cue_selection_clearing_and_state_coexistence(qapp, db_conn, tmp_path):
     """M14 Phase 0: Test explicit cue selection clearing via context menu or clearSelection,
     confirming it clears multi-selection while preserving editing cue index, active playing cue,
