@@ -11,9 +11,14 @@ below), and Phase C1 (development-machine release preflight) is also
 complete. Milestone 11 (UI/UX Presentation Refresh), Milestone 12
 (Pre-UI Product Hardening), and Milestone 13 (Advanced UI/UX Reconstruction)
 are all complete and merged. Milestone 14 (Final Product Hardening &
-Full Manual Regression), Phase C2 (clean-machine acceptance, scheduled after
-Milestone 14), and Phase D (release candidate) follow — see `ROADMAP.md`'s
-"Canonical v1.0 Sequence".
+Full Manual Regression) is current, not yet merged (Human QA Round 2 is
+PASS; a bounded pre-merge repository-hygiene/privacy/Windows-app-identity
+corrective is the remaining gate before merge). Milestone 15 — Release
+Candidate & Delivery (15.1 Candidate Build/Packaging Refresh, 15.2
+Clean-Machine Acceptance, 15.3 Release Candidate Closure & Delivery — the
+former separate "Phase C2"/"Phase D" release-engineering labels, now
+consolidated into one numbered milestone) follows after Milestone 14
+merges — see `ROADMAP.md`'s "Canonical v1.0 Sequence".
 
 ## Decisions made in Phase A
 
@@ -131,7 +136,7 @@ was never meant to cover, either because they belong to a later phase or
 because the fix lives in application code rather than here:
 
 - Code signing (the exe and installer are unsigned; Windows SmartScreen will
-  warn on first run — a Phase D concern).
+  warn on first run — a Milestone 15.3 concern).
 - Auto-update.
 - macOS/Linux packaging.
 - CI-driven builds (there is still no continuous-integration configuration
@@ -145,8 +150,8 @@ because the fix lives in application code rather than here:
   on this development machine, which already has Python and other developer
   tooling installed (Phase C1 — Development-Machine Release Preflight,
   completed). Genuinely clean-machine testing (no preinstalled Python,
-  fresh user account, non-English paths) is Phase C2's job, scheduled
-  after both Milestone 11 and Milestone 12 so it tests the final hardened,
+  fresh user account, non-English paths) is Milestone 15.2's job, scheduled
+  after Milestone 14 merges so it tests the final hardened,
   final-UI release rather than an earlier presentation layer or an
   unaudited product.
 - Everything else Phase B fixed lives in application code, not this

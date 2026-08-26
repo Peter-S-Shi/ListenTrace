@@ -6,6 +6,7 @@ import sys
 from PySide6.QtWidgets import QMessageBox
 
 from listentrace.ui import app as app_module
+from listentrace.ui.theme import get_app_icon
 
 
 def test_install_crash_logging_logs_and_still_calls_the_previous_hook(caplog):
@@ -65,6 +66,58 @@ def test_main_reports_a_friendly_error_when_startup_fails_before_appdata_is_read
     assert title == "ListenTrace — Startup Error"
     assert "Could not start ListenTrace" in message
     assert "permission denied" in message
+
+
+def test_main_sets_windows_app_user_model_id_before_anything_qapplication_dependent(qapp, monkeypatch, tmp_path):
+    """Regression test for the M14 pre-merge Windows taskbar-identity fix:
+    `set_windows_app_user_model_id()` must run before the app-data/database
+    setup that can fail and show a `QMessageBox` -- otherwise a startup
+    failure could show that dialog under the wrong (generic `python.exe`)
+    taskbar identity."""
+    call_order = []
+    monkeypatch.setattr(
+        app_module,
+        "set_windows_app_user_model_id",
+        lambda: call_order.append("identity") or True,
+    )
+    monkeypatch.setattr(
+        app_module, "get_database_path", lambda: call_order.append("db_path") or tmp_path / "listentrace.db"
+    )
+    monkeypatch.setattr(app_module, "get_recordings_dir", lambda: tmp_path / "recordings")
+    # Stop before a real MainWindow/event loop would be reached -- this test
+    # only needs to observe call order, not run the app.
+    monkeypatch.setattr(
+        app_module,
+        "open_connection",
+        lambda db_path: (_ for _ in ()).throw(OSError("stop before a real MainWindow is constructed")),
+    )
+    monkeypatch.setattr(QMessageBox, "critical", lambda *args, **kwargs: None)
+
+    result = app_module.main()
+
+    assert result == 1
+    assert call_order[0] == "identity"
+
+
+def test_main_sets_qt_application_identity_metadata(qapp, monkeypatch, tmp_path):
+    monkeypatch.setattr(app_module, "get_database_path", lambda: tmp_path / "listentrace.db")
+    monkeypatch.setattr(app_module, "get_recordings_dir", lambda: tmp_path / "recordings")
+    monkeypatch.setattr(
+        app_module,
+        "open_connection",
+        lambda db_path: (_ for _ in ()).throw(OSError("stop before a real MainWindow is constructed")),
+    )
+    monkeypatch.setattr(QMessageBox, "critical", lambda *args, **kwargs: None)
+
+    app_module.main()
+
+    assert qapp.applicationName() == "ListenTrace"
+    assert qapp.applicationDisplayName() == "ListenTrace"
+
+
+def test_app_icon_still_resolves():
+    icon = get_app_icon()
+    assert not icon.isNull()
 
 
 def test_main_reports_a_friendly_error_when_database_initialization_fails(qapp, monkeypatch, tmp_path):
