@@ -18,9 +18,13 @@ Windows-app-identity corrective is Product Owner ACCEPTED). **Milestone
 A/B recipe: it promotes the product version to `1.0.0`, adds a
 single-source-of-truth version-sync mechanism, and adds the GitHub Actions
 release-candidate pipeline described below, against this same final merged
-M14 code. Milestone 15.2 (Clean-Machine Acceptance) and Milestone 15.3
-(Release Candidate Closure & Delivery) remain pending — see `ROADMAP.md`'s
-"Canonical v1.0 Sequence".
+M14 code. **Milestone 15.1 is Product Owner ACCEPTED. Milestone 15.2
+(Clean-Machine Acceptance) is PASS / Product Owner Accepted, and Milestone
+15.3 (Release Candidate Closure & Delivery) is complete** — Milestone 15 as
+a whole is complete, accepted, and merged into `main` via PR #4. The
+canonical validated v1.0.0 release payload remains the exact candidate from
+source SHA `661bca47ce93f1a12a6a17c66f1ed6065d816e43` — see `ROADMAP.md`'s
+"Validated Release Payload Policy" and "Canonical v1.0 Sequence".
 
 ## Version consistency (Milestone 15.1)
 
@@ -198,8 +202,11 @@ below remain out of scope for this directory, either because they belong to
 a later milestone or because the fix lives in application code rather than
 here:
 
-- Code signing (the exe and installer are unsigned; Windows SmartScreen will
-  warn on first run — a Milestone 15.3 concern).
+- Code signing (unsigned v1.0 is Product Owner approved, not a release
+  blocker; the exe and installer are unsigned, and Windows SmartScreen
+  **may** warn on first run depending on download source/reputation/
+  Mark-of-the-Web context — the Milestone 15.2 clean-machine install did
+  not itself encounter a SmartScreen block).
 - Auto-update.
 - macOS/Linux packaging.
 - A final, designed application icon (the current one is a placeholder).

@@ -499,7 +499,7 @@ Not a numbered milestone. There is no current implementation plan, and it is not
 
 Release engineering began once Milestone 10 was accepted and functional feature development entered freeze, organized into phases: A (packaging spike), B (targeted technical release hardening), C1 (release preflight) — interleaved with Milestones 11, 12, 13, and 14 in the Canonical v1.0 Sequence, below. This section was previously named "Post-M10 — Release Engineering and v1.0 Delivery"; it is renamed here only because Milestone 11 now exists after M10, which made a "Post-M10" heading historically awkward — the Phase A/B/C history and decisions below are preserved, not rewritten. Phase A's packaging decisions are locked, Phase B's hardening pass is complete, and Phase C1's development-machine preflight is complete (see below).
 
-The remaining forward-facing release-candidate work — formerly tracked as the separate "Phase C2" and "Phase D" release-engineering labels sitting awkwardly beside numbered product milestones — is now consolidated as **Milestone 15 — Release Candidate & Delivery** (see below), the next numbered milestone after Milestone 14. Milestone 15 is pending and occurs after Milestone 14 (Final Product Hardening & Full Manual Regression). A v1.0 release date is still not chosen.
+The forward-facing release-candidate work — formerly tracked as the separate "Phase C2" and "Phase D" release-engineering labels sitting awkwardly beside numbered product milestones — is consolidated as **Milestone 15 — Release Candidate & Delivery** (see below), the next numbered milestone after Milestone 14, occurring after it in the sequence. A v1.0 release date is still not chosen.
 
 ## Phase A — Packaging Spike (Completed)
 
@@ -553,7 +553,7 @@ Represents all validation already performed on the development machine, formerly
 
 ---
 
-# Milestone 15 — Release Candidate & Delivery (Current — 15.1 ACCEPTED, 15.2 PASS/ACCEPTED, 15.3 in preparation)
+# Milestone 15 — Release Candidate & Delivery (Complete, Accepted, Merged)
 
 ## Goal
 
@@ -561,29 +561,35 @@ Take the Milestone 14-hardened, Human-QA-accepted product through a refreshed ca
 
 ## Status
 
-**15.1 Product Owner ACCEPTED. 15.2 PASS / Product Owner Accepted. 15.3 now current / in preparation.** Consolidates the former separate "Phase C2" and "Phase D" release-engineering labels (historical names, preserved above under Phase A/B/C1) into three sub-stages of one numbered milestone, so the active lifecycle no longer mixes numbered product milestones with unnumbered release-engineering phases:
+**Complete. 15.1 Product Owner ACCEPTED. 15.2 PASS / Product Owner Accepted. 15.3 complete.** Accepted M15 product baseline: the final commit on `milestone/15-release-candidate-delivery` merged into `main` via PR #4. Consolidates the former separate "Phase C2" and "Phase D" release-engineering labels (historical names, preserved above under Phase A/B/C1) into three sub-stages of one numbered milestone, so the active lifecycle no longer mixes numbered product milestones with unnumbered release-engineering phases:
 
-- **Milestone 15.1 — Candidate Build / Packaging Refresh (Product Owner ACCEPTED)**: rebuilds the PyInstaller onedir build and Inno Setup installer against the final, merged Milestone 14 code (including the Windows AppUserModelID/taskbar-identity fix); confirms packaging identity metadata (icon, AppUserModelID, shortcut/AppId) is internally consistent; promotes the product version to `1.0.0` via a new single-source-of-truth mechanism (`scripts/release_version.py`); adds a GitHub Actions Windows release-candidate pipeline (`.github/workflows/release-candidate.yml`) that builds and smoke-tests the portable ZIP and installer from the same onedir output and uploads checksummed/provenance-tracked canonical artifacts. Implemented on branch `milestone/15-release-candidate-delivery`, Draft PR #4 against `main`, CI green end-to-end. Not merged; no `v1.0.0` tag or GitHub Release created — those remain Milestone 15.3 decisions.
+- **Milestone 15.1 — Candidate Build / Packaging Refresh (Product Owner ACCEPTED)**: rebuilds the PyInstaller onedir build and Inno Setup installer against the final, merged Milestone 14 code (including the Windows AppUserModelID/taskbar-identity fix); confirms packaging identity metadata (icon, AppUserModelID, shortcut/AppId) is internally consistent; promotes the product version to `1.0.0` via a new single-source-of-truth mechanism (`scripts/release_version.py`); adds a GitHub Actions Windows release-candidate pipeline (`.github/workflows/release-candidate.yml`) that builds and smoke-tests the portable ZIP and installer from the same onedir output and uploads checksummed/provenance-tracked canonical artifacts. CI green end-to-end.
 - **Milestone 15.2 — Clean-Machine Acceptance (PASS / Product Owner Accepted)**: the environment-validation gate, occurring after Milestone 14 so the final hardened, final-UI release candidate is what gets tested, not an earlier presentation layer or an unaudited product.
 
   Environment used: a clean Windows 11 VMware VM, VMware Tools installed, a clean baseline snapshot, no Python/Git/IDE/developer environment installed — meeting the target baseline below.
 
   Target baseline: Windows 11 x64, Home or Pro, standard non-N edition, normal Windows system updates, no Python installation, no Git, no IDE, no PyInstaller, no Inno Setup, no project source tree, no developer virtual environment, and no manually installed FFmpeg or codec pack required for ListenTrace.
 
-  Candidate validated: version `1.0.0`, source SHA `661bca47ce93f1a12a6a17c66f1ed6065d816e43`, `ListenTrace-Setup-1.0.0.exe` — confirmed to be the exact CI-built canonical artifact bundle (`ListenTrace-1.0.0-candidate-661bca47ce93f1a12a6a17c66f1ed6065d816e43`) produced by Milestone 15.1's pipeline at that commit, not a hand-built or unreconciled binary.
+  **Canonical validated release payload (locked — see "Validated Release Payload Policy" below)**: version `1.0.0`, source SHA `661bca47ce93f1a12a6a17c66f1ed6065d816e43`, artifact bundle `ListenTrace-1.0.0-candidate-661bca47ce93f1a12a6a17c66f1ed6065d816e43` (`ListenTrace-Setup-1.0.0.exe`, `ListenTrace-1.0.0-win64-portable.zip`, `SHA256SUMS.txt`, `provenance.json`) — confirmed via `gh run view`/`gh api` to be the exact CI-built canonical bundle at that commit, and checksums independently re-verified with `sha256sum`. This is the payload that must ship as v1.0.0, regardless of how much further the branch/`main` HEAD has since advanced for documentation/governance purposes.
 
   Human clean-machine evidence, all **PASS**: normal per-user installation; first launch; real MP4/H.264 import and playback; real audio output; SRT/material import; a representative Intensive Practice completion; full app close/reopen with session persistence; Windows taskbar/app identity (own icon, own taskbar group, no shared grouping with an unrelated locally installed application). No release-blocking abnormal behavior observed. Microphone passthrough and display-scaling checks were exercised informally but, by Product Owner decision, were not expanded into additional hard acceptance gates — M15.2 validates the packaged artifact and clean environment, it does not repeat Milestone 14's broad manual regression.
 
   This is a release gate: it must not be marked completed until a genuinely appropriate clean environment has actually been used. If it discovers a release-blocking defect: `M15.2 failure -> return to an M14 corrective batch -> regression -> repeat M15.2`. M15.2 is an environment and packaged-artifact acceptance gate — it does not replace Milestone 14's product-wide hardening and full manual regression.
-- **Milestone 15.3 — Release Candidate Closure & Delivery (Current / In Preparation)**: completion of final versioning; About surface; privacy and local-data explanation; installation and usage documentation; known limitations; release notes (`RELEASE_NOTES.md`, drafted); final icon and release metadata; final privacy audit (re-verified, no regression since M14 closure); complete regression status; RC installer and RC zip (produced by the M15.1 pipeline, provenance-reconciled against the M15.2-tested candidate); release checklist; small real-user acceptance test where practical (satisfied by M15.2's clean-machine session); final v1.0 release decision; tag/release preparation where approved. **Update Awareness is explicitly out of scope, deferred to the first v1.0.x maintenance update.**
+- **Milestone 15.3 — Release Candidate Closure & Delivery (Complete)**: final versioning; privacy and local-data explanation; installation and usage documentation; known limitations; release notes (`RELEASE_NOTES.md`); final privacy audit (re-verified, no regression since M14 closure); complete regression status; RC installer and RC zip (produced by the M15.1 pipeline, provenance-reconciled against the M15.2-tested candidate — see the validated release-payload policy below); release checklist; a small real-user acceptance test (satisfied by M15.2's clean-machine session); unsigned-v1.0 and Update-Awareness-deferral decisions documented. **Update Awareness is explicitly out of scope, deferred to the first v1.0.x maintenance update.**
 
-  M15.1/M15.3 planning and preparation may proceed earlier where useful, but **Milestone 15 cannot be completed, v1.0 cannot be tagged or released, and final Release Ready status cannot be claimed until Milestone 14 and Milestone 15.2 have both passed.** Both have now passed. What remains before a merge/tag/Release decision: independent Product Owner pre-merge review of PR #4's actual HEAD, and the Product Owner's own merge/tag/publish decision. If a blocking problem is discovered during M15.3, return to an M14 corrective batch, rerun affected regression, and repeat any invalidated M15.2/M15.3 checks.
+  **Milestone 14 and Milestone 15.2 have both passed, so Milestone 15 is complete** and, via PR #4, merged into `main`. The `v1.0.0` tag and GitHub Release are deliberately **not** created by this milestone's engineering work — those, and the final `v1.0 — Current Version Complete` declaration, are the Product Owner's own subsequent actions (see below). If a blocking problem is discovered before that publication step, return to an M14 corrective batch, rerun affected regression, and repeat any invalidated M15.2/M15.3 checks.
+
+## Validated Release Payload Policy (locked, Product Owner approved)
+
+The canonical v1.0.0 release payload is, and remains, the exact Milestone 15.2 human-validated candidate — source SHA `661bca47ce93f1a12a6a17c66f1ed6065d816e43`, artifact bundle `ListenTrace-1.0.0-candidate-661bca47ce93f1a12a6a17c66f1ed6065d816e43`. **Test what we ship; ship what we tested.** Later docs-only commits on `milestone/15-release-candidate-delivery` (governance/documentation reconciliation, this closure included) intentionally advance the branch and `main` HEAD past that commit; each such commit's own CI run produces its own workflow artifact under a different commit SHA, but no product/application code changed after `661bca47...`, so those later artifacts are automatically-generated verification evidence for the branch state — **not** a substitute release payload. When the Product Owner tags and publishes `v1.0.0`, the artifact bundle attached to that Release must be the `661bca47...` bundle specifically, not whatever the final merge commit's own CI run produces.
 
 ---
 
 # v1.0 — Current Version Complete
 
 This state means: the approved v1.0 scope is implemented; Functional Feature Freeze was respected; M11 presentation refresh and M13 UI reconstruction are complete; M14 product hardening and manual regression passed; Milestone 15.2 clean-machine acceptance passed; Milestone 15.3 release-candidate checks passed; the release artifact, documentation, known limitations, and repository state are finalized. This does **not** describe the project as permanently complete — see Maintenance and Next-Version Planning, below.
+
+**Status: not yet declared.** Every engineering/acceptance gate above (M11–M14, Milestone 15.1/15.2/15.3) is complete. What remains is the Product Owner's own publication sequence — merging PR #4, authorizing/creating the `v1.0.0` tag, and authorizing/publishing the GitHub Release using the validated `661bca47...` payload — none of which this milestone's engineering work performs. `v1.0 — Current Version Complete` should be declared only once those actions are actually true, not in anticipation of them.
 
 # Maintenance / v1.0.x
 
@@ -617,11 +623,11 @@ Milestones 1-10 — Core Functional Development
   -> Milestone 12 — Pre-UI Product Hardening (Completed)
   -> Milestone 13 — Advanced UI/UX Reconstruction (Completed / Human Visual Gate Passed / Merged)
   -> Milestone 14 — Final Product Hardening & Full Manual Regression (Completed, Accepted, Merged — Human QA Round 2 PASS; pre-merge hygiene/privacy/app-identity corrective Product Owner ACCEPTED)
-  -> Milestone 15 — Release Candidate & Delivery (Current — 15.1/15.2 accepted/passed, 15.3 in preparation)
+  -> Milestone 15 — Release Candidate & Delivery (Completed, Accepted, Merged)
        -> Milestone 15.1 — Candidate Build / Packaging Refresh (Product Owner ACCEPTED)
        -> Milestone 15.2 — Clean-Machine Acceptance (PASS / Product Owner Accepted)
-       -> Milestone 15.3 — Release Candidate Closure & Delivery (In Preparation)
-  -> v1.0 — Current Version Complete (Not Yet Reached)
+       -> Milestone 15.3 — Release Candidate Closure & Delivery (Completed)
+  -> v1.0 — Current Version Complete (Not Yet Declared — pending Product Owner tag/Release publication)
   -> Maintenance / v1.0.x
   -> Next-Version Planning / v1.1+
 ```
