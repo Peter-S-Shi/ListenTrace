@@ -553,7 +553,7 @@ Represents all validation already performed on the development machine, formerly
 
 ---
 
-# Milestone 15 — Release Candidate & Delivery (Current — Not Started)
+# Milestone 15 — Release Candidate & Delivery (Current — 15.1 implemented/CI-green on a Draft PR, not merged)
 
 ## Goal
 
@@ -561,9 +561,9 @@ Take the Milestone 14-hardened, Human-QA-accepted product through a refreshed ca
 
 ## Status
 
-**Not started; ready to begin now that Milestone 14 has merged.** Consolidates the former separate "Phase C2" and "Phase D" release-engineering labels (historical names, preserved above under Phase A/B/C1) into three sub-stages of one numbered milestone, so the active lifecycle no longer mixes numbered product milestones with unnumbered release-engineering phases:
+**15.1 implemented and CI-verified; not merged. 15.2/15.3 not started.** Consolidates the former separate "Phase C2" and "Phase D" release-engineering labels (historical names, preserved above under Phase A/B/C1) into three sub-stages of one numbered milestone, so the active lifecycle no longer mixes numbered product milestones with unnumbered release-engineering phases:
 
-- **Milestone 15.1 — Candidate Build / Packaging Refresh**: rebuild the PyInstaller onedir build and Inno Setup installer against the final, merged Milestone 14 code (including this corrective's Windows AppUserModelID/taskbar-identity fix); confirm packaging identity metadata (icon, AppUserModelID, shortcut/AppId) is internally consistent; refresh version/release metadata.
+- **Milestone 15.1 — Candidate Build / Packaging Refresh**: rebuilds the PyInstaller onedir build and Inno Setup installer against the final, merged Milestone 14 code (including this corrective's Windows AppUserModelID/taskbar-identity fix); confirms packaging identity metadata (icon, AppUserModelID, shortcut/AppId) is internally consistent; promotes the product version to `1.0.0` via a new single-source-of-truth mechanism (`scripts/release_version.py`); adds a GitHub Actions Windows release-candidate pipeline (`.github/workflows/release-candidate.yml`) that builds and smoke-tests the portable ZIP and installer from the same onedir output and uploads checksummed/provenance-tracked canonical artifacts. **Implemented on branch `milestone/15-release-candidate-delivery`, Draft PR against `main`, CI green end-to-end twice** (test suite, build, both packaging smoke checks). Not merged; no `v1.0.0` tag or GitHub Release created — those remain Milestone 15.3 decisions.
 - **Milestone 15.2 — Clean-Machine Acceptance**: the remaining final environment-validation gate, occurring after Milestone 14 so the final hardened, final-UI release candidate is what gets tested, not an earlier presentation layer or an unaudited product.
 
   Target baseline: Windows 11 x64, Home or Pro, standard non-N edition, normal Windows system updates, no Python installation, no Git, no IDE, no PyInstaller, no Inno Setup, no project source tree, no developer virtual environment, and no manually installed FFmpeg or codec pack required for ListenTrace.
