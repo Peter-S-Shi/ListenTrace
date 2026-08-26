@@ -1,18 +1,18 @@
 # ListenTrace — DESIGN.md
 
-> **Status:** M13 Rendering Authority v1.0  
+> **Status:** Normative Rendering Authority v1.0 — Implemented and Accepted in Milestone 13  
 > **Scope:** Final visual rendering, interaction styling, typography, color, paper/notebook treatment, decorative grammar, acoustic feedback, and visual acceptance.  
 > **Product:** ListenTrace  
 > **UI stack:** PySide6 / Qt Widgets  
 > **Primary visual system:** **Notebook Study Desk**  
 > **North Star:** the approved warm spiral-notebook Learning Session / Player composition and the approved final design boards for Quick Practice, Shadowing, Guided Session, Quiz/Review, Learning History, Main Library/Dossier, History dialogs, Settings, Import, and Export.  
-> **Architecture relationship:** Surface architecture, workflow, persistence, domain semantics, and module composition are defined elsewhere. This document begins **after the correct QWidget/layout/module architecture exists** and tells the implementation agent how to render it into the final product.
+> **Architecture relationship:** Surface architecture, workflow, persistence, domain semantics, and module composition are defined elsewhere. This document defines the normative rendering system and visual contract implemented across all 16 production surfaces in Milestone 13.
 
 ---
 
-## 0. Authority and migration rule
+## 0. Authority and implementation rule
 
-This document is the final rendering authority for the current M13 Notebook Study Desk direction.
+This document is the normative rendering authority for the ListenTrace Notebook Study Desk visual system, implemented and accepted across all 16 production surfaces in Milestone 13.
 
 It supersedes older visual directions where they conflict with the approved final design boards, including:
 
@@ -23,15 +23,15 @@ It supersedes older visual directions where they conflict with the approved fina
 - decorative paper texture used only as wallpaper;
 - ad-hoc colors, fonts, radii, and spacing chosen inside individual windows.
 
-The **media viewport may remain black/dark** because it is a media surface. The surrounding Player is a warm Notebook Study Desk, not an app-wide dark control panel.
+The **media viewport remains black/dark** because it is a media surface. The surrounding Player is a warm Notebook Study Desk, not an app-wide dark control panel.
 
-The current codebase already contains useful M13 primitives and tokens. Implementation should **migrate and consolidate them toward this contract**, not create a parallel theme system.
+The codebase implements this contract through `src/listentrace/ui/theme.py`, `src/listentrace/ui/widgets/notebook_paper.py`, and shared role/surface helpers (`apply_surface`, `apply_role`, `make_notebook_surface`, `make_card`). All production surfaces conform to this contract.
 
-If an existing token conflicts with this document:
+When maintaining or extending UI components:
 
 1. preserve behavior and domain semantics;
-2. update the central theme/shared primitive;
-3. update consumers through the shared token/role;
+2. update or reuse the central theme/shared primitives;
+3. update consumers through the shared tokens/roles;
 4. do not patch individual windows with local magic values unless a documented platform exception requires it.
 
 ---

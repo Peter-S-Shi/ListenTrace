@@ -458,25 +458,43 @@ Requires Milestone 11 accepted and the Presentation Complete Gate passed. Phase 
 
 ## Goal
 
-A whole-product visual/interaction reconstruction, distinct from Milestone 11 (a presentation-only theming pass over the existing Qt Widgets structure). M13 is where the UI/layout/playback-interaction *experience* findings intentionally deferred out of M12 Phase 12-A are addressed — not as isolated patches, but as a coherent redesign pass across the whole product.
+A whole-product visual/interaction reconstruction, distinct from Milestone 11 (a presentation-only theming pass over the existing Qt Widgets structure). M13 addresses the UI/layout/playback-interaction *experience* findings across the whole product through a coherent Notebook Study Desk design language.
 
 ## Status
 
-**Not started.** No implementation, prototype, or design work for M13 exists anywhere in the repository as of Phase 12-A's close. `milestone/12-product-hardening` does not begin it, and must not be read as having begun it — every UI-touching change on that branch (e.g. the Loop End Grace Settings dialogs) was explicitly built and documented as visually provisional functional scaffolding, not M13 precedent (see `CONTEXT.md` and the Loop End Grace functional UX contract for that explicit boundary).
+**Completed, Accepted, and Merged to `main`.** Product Owner Human Visual Gate: **PASS**. All 16 production surfaces reconstructed into the modern ListenTrace Notebook Study Desk design system; Axes 1–8 closed; corrective passes resolved StageStepper navigation safety, Learning History information architecture, Player short-screen local-scroll accessibility and aspect-ratio-aware video geometry, Quiz canvas sizing, and all P0/P1/P2 visual/accessibility findings. Automated test suite: 894 passing tests (100% green).
 
-## Main Scope
+## Closeout Summary
 
-To be defined when M13 formally begins: expected to include the specific UI/layout/playback-interaction findings recorded during Phase 12-A's audit and Human QA Round 1, plus whatever Human QA Round 2's eventual full pass (in Phase 12-B) surfaces if run early enough to inform M13 — the exact scope is deliberately not locked here, pending that evidence.
+- **Notebook Study Desk Design System**: unified tokens, surface/role styling (`apply_surface`, `apply_role`), warm study paper surfaces, ruled paper list widgets, margin lines, spiral binding strips, and clear action grammar across all 16 production surfaces.
+- **Deep Surface Interaction Reconstruction**:
+  - **Synchronized Player**: open-book layout with horizontal splitter, persistent quiet active-subtitle HUD, unified playback timeline scrubber, three mini-notebook control cards (Playback, Loop & Practice, Utility), independent right workspace with tabbed Transcript & Cues and ruled Annotation Notebook, local vertical scroll container (`_cinema_scroll_area`) for the left cinema column guaranteeing full control reachability on short screens with horizontal scrolling disabled, and aspect-ratio-aware video viewport (`_PlayerVideoWidget`) preventing raw 1080p/4K frame dimensions from inflating the scroll area.
+  - **Guided Intensive Listening**: persistent 5-stage study book shell with a 5-step horizontal non-clickable StageStepper, stage-specific writing/capture forms, and atomic stage-progression validation (`Save and Continue` properly enforces completion eligibility).
+  - **Quizzes & Recall Practice**: clean question cards with natural content-height ownership, radio answer cards with proper word-wrap, and structured post-submission review dossier (`QuizReviewDialog`).
+  - **Quick Practice**: stable left-two/right-one runtime workspace layout (left column: persistent cue context + step-specific processing workspace; right column: shared RecordingPanel support workspace) and a 4-stage non-clickable progress stepper derived from real session state.
+  - **Standalone Shadowing Practice**: dedicated single-focus study desk studio with cue navigation, reference cue card, and embedded recording panel.
+  - **Learning History**: structured Study Dossier layout with a multi-tab sidebar directory, scan-oriented Overview metric grid, and dedicated tabs for Activity, Sessions, Diagnoses, Quizzes, Shadowing & Recordings, and Needs Attention.
+  - **Material Library & Dialogs**: Study Dossier sidebar and detail panel, themed Session History, Quiz History, Import, Export, Label Colors, and Material Loop Settings sheets.
+- **Axes 1–8 Closure & Corrective Passes**:
+  - Axes 1–5: surface architecture, paper primitives, and card layouts accepted.
+  - Axis 6: residual typography unification into role-based display and readable long-form/CJK-safe content families.
+  - Axis 7: geometry, density, and clipping corrections across all surfaces.
+  - Axis 8: Quick Practice structural redesign into a stable runtime layout.
+  - Final Human-Gate corrective passes: resolved StageStepper accessibility/clipping, Learning History IA/wrapping, Player right-workspace clipping, and P0/P1/P2 findings.
+  - Final Player accessibility/geometry corrective passes: added local left cinema vertical scrolling and aspect-ratio-aware video viewport, eliminating video/HUD overlap and black letterbox inflation.
+- **Database Schema**: zero schema changes; database schema remains stable at version 12.
+- **Automated Tests**: 894 passed (100% green regression and integration test suite).
+- **Human Visual Gate**: formally accepted on native Windows.
 
 ## Boundary
 
-- Does not reopen the Functional Feature Freeze (learning workflow/domain/analytics/AI-cloud scope stays frozen).
-- Does not begin until Phase 12-A is complete (it is, as of this document's current state).
-- Phase 12-B (Final Product Hardening & Full Manual Regression) occurs *after* M13, not before — so it validates the actual final UI.
+- Functional Feature Freeze preserved (no new learning workflows, analytics, or domain capabilities).
+- Schema version 12 preserved.
+- Phase 12-B (Final Product Hardening & Full Manual Regression) follows M13 to validate the finalized UI.
 
 ## Dependencies
 
-Requires Phase 12-A (Pre-UI Product Hardening) complete.
+Milestone 12 Phase 12-A and Milestone 13 are complete and merged into `main`. The next lifecycle phase is **Milestone 12 Phase 12-B — Final Product Hardening & Full Manual Regression**.
 
 ---
 
@@ -620,8 +638,8 @@ Milestones 1-10 — Core Functional Development
   -> Milestone 11 — UI/UX Presentation Refresh (Completed)
   -> Presentation Complete Gate (Passed)
   -> Milestone 12 Phase 12-A — Pre-UI Product Hardening (Completed)
-  -> Milestone 13 — Advanced UI/UX Reconstruction (Next)
-  -> Milestone 12 Phase 12-B — Final Product Hardening & Full Manual Regression
+  -> Milestone 13 — Advanced UI/UX Reconstruction (Completed / Human Visual Gate Passed / Merged)
+  -> Milestone 12 Phase 12-B — Final Product Hardening & Full Manual Regression (Next)
   -> Phase C2 — Clean-Machine Acceptance
   -> Phase D — v1.0 Release Candidate
   -> v1.0 — Current Version Complete

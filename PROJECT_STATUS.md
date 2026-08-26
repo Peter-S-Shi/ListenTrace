@@ -1,6 +1,6 @@
 # ListenTrace Project Status
 
-Last updated: 2026-08-24 (Milestone 13 — Advanced UI/UX Reconstruction Batches 0/1/2A/3A/4A/5A **plus two Pre-HG2 Code + Visual Corrective Passes**: **complete on branch `milestone/13-advanced-ui-ux`, not merged to `main`**. All 16 production surfaces reconstructed into the modern ListenTrace design language; the corrective passes fixed StageStepper navigation-safety/accessibility (including a vertical-clipping regression), a real Learning History information-architecture reconstruction (including directory width/wrapping and a scan-oriented Overview metric grid), Player right-workspace clipping (including the Annotate tab's category-checkbox row), a P0 Guided Session progression-validation regression (`Save and Continue` no longer silently advances past a failed stage), Quiz canvas width/height ownership, and the remaining P1/P2 visual/accessibility findings, verified with 787 passing tests. **HG-2 Whole-Product UI Acceptance: PENDING USER REVIEW** — has not yet passed; Phase 12-B follows HG-2 acceptance and the merge to `main`. `main` is separately at `6ef3997` — Phase 12-A (`milestone/12-product-hardening`) has been merged via PR #1.)
+Last updated: 2026-08-25 (Milestone 13 — Advanced UI/UX Reconstruction: **COMPLETE / ACCEPTED / MERGED TO MAIN** via PR; Product Owner Human Visual Gate **PASS**. All 16 production surfaces reconstructed into the modern ListenTrace Notebook Study Desk design system; Axes 1–8 closed; corrective passes resolved StageStepper navigation safety, Learning History information architecture, Player short-screen local-scroll accessibility and aspect-ratio-aware video geometry, Quiz canvas sizing, and all P0/P1/P2 visual/accessibility findings, verified with 894 passing tests. Current Lifecycle Phase: **Milestone 12 Phase 12-B — Final Product Hardening & Full Manual Regression (Next)**.)
 
 ## Project Purpose
 
@@ -8,7 +8,7 @@ ListenTrace is a local-first desktop application for transcript-guided foreign-l
 
 ## Repository Verification
 
-The remote repository exists, is private, and uses `main` as its default branch. Branch `milestone/13-advanced-ui-ux` contains all M13 design system enhancements, theme tokens, surface styling, and deep interaction architecture reconstructions (Player cinema splitter & HUD, Guided Session 5-stage workspace with Stepper, Quiz option cards & structured review dossier, Quick Practice compact cue workflow, Standalone Shadowing studio, and Learning History Study Dossier).
+The remote repository exists, is private, and uses `main` as its default branch. `main` contains all M13 design system enhancements, theme tokens, surface styling, and deep interaction architecture reconstructions (Player open-book cinema splitter, HUD, and local-scroll accessibility; Guided Session 5-stage workspace with Stepper; Quiz option cards & structured review dossier; Quick Practice stable left-two/right-one runtime workspace; Standalone Shadowing studio; and Learning History Study Dossier).
 
 ## Current Engineering State
 
@@ -21,20 +21,20 @@ The remote repository exists, is private, and uses `main` as its default branch.
 | Desktop shell | All 16 surfaces reconstructed and aligned to M13 Design System (Professional Blue `#2563EB`, Dark Focus `#0F172A`, Paper Study `#FDFBF7`/`#1B1E25`, Ruled notebook lists, clear Primary/Secondary/Quiet/Danger action grammar) |
 | Presentation / theme system | Milestone 13 Design System: `src/listentrace/ui/theme.py` — unified tokens, dynamic QSS generation, surface/role helpers (`apply_surface`, `apply_role`), paper & notebook styling (`make_notebook_surface`, `make_card`), and WCAG contrast compliance |
 | Database schema | Schema version 12 (stable, zero domain regression during M13) |
-| Automated tests | **787 passed** — 100% green regression and integration test suite (as of the final Pre-HG2 corrective pass) |
+| Automated tests | **894 passed** — 100% green regression and integration test suite |
 | Build and packaging | Phase A complete; Phase C2 pending after Phase 12-B |
 
 ## Current Lifecycle Phase
 
-**Milestone 13.4/13.5 Corrective Reconstruction + Pre-HG2 Corrective Pass Complete ➔ HG-2 Pending User Review**
+**Milestone 13 Complete & Merged ➔ Milestone 12 Phase 12-B — Final Product Hardening & Full Manual Regression (Next)**
 
-Status: **HG-2 PENDING USER REVIEW.** All five corrective batches (0, 1, 2A, 3A, 4A, 5A) plus a Pre-HG2 Code + Visual Corrective Pass (StageStepper navigation safety/accessibility, Learning History information-architecture reconstruction, Player right-workspace clipping fix, and the remaining P1 visual/accessibility findings) are complete and verified on branch `milestone/13-advanced-ui-ux`. HG-2 itself has **not** passed — it awaits the user's own review across the 5 HG-2 journeys. Not merged to `main`; Phase 12-B has not started.
+Status: **Milestone 13 is completed, Human Visual Gate passed, and M13 is merged into `main`.** All 16 production surfaces have been reconstructed and accepted. The next engineering lifecycle phase is **Milestone 12 Phase 12-B — Final Product Hardening & Full Manual Regression**, which includes the full Human QA Round 2 questionnaire pass against the final UI. Phase C2 (Clean-Machine Acceptance) and Phase D (v1.0 Release Candidate) remain later release gates.
 
 ## Current Milestone
 
-**Milestone 13 — Advanced UI/UX Reconstruction (HG-2 Human Gate Preparation)**
+**Milestone 12 Phase 12-B — Final Product Hardening & Full Manual Regression**
 
-Status: **In progress — implementation and pre-HG2 corrective work complete on `milestone/13-advanced-ui-ux`, pending HG-2 human acceptance review.** Milestone 13 is **not yet accepted/complete**; M12 overall (both sub-phases) is **not** complete.
+Status: **Next milestone.** Milestone 13 is completed, accepted, and merged into `main`.
 
 Milestone 11 — UI/UX Presentation Refresh is completed and accepted (see the Completed section below and `ROADMAP.md`'s Closeout Summary); the Presentation Complete Gate has passed. Milestone 12.1-A (retroactive manual QA baseline) is complete (`manual-qa/`, commit `1285fcf`). The autonomous overnight pass — M12.1-B Batches 1-5 plus a dedicated M12.4 Performance Decision Gate (a benchmark against synthetic data at realistic and 5x-stress personal-use scale, measuring actual wall-clock time rather than deciding from `EXPLAIN QUERY PLAN` alone — see `scripts/m12_4_performance_gate.py`) — is complete, deferring two performance findings to v1.0.x, neither blocking a merge to `main`. See `HARDENING_BACKLOG.md` for the full itemized list.
 
@@ -47,11 +47,11 @@ The user then completed their first Human QA Round 1 full manual-acceptance pass
 
 Every fix in this corrective pass has a dedicated regression test independently verified via `git stash` to fail against pre-fix code — no exceptions.
 
-**The Loop Cue audible-endpoint defect** (surfaced by Human QA Round 1's Batch B) turned out not to be a single fixable bug: three corrective rounds against a fixed backend constant were each human-retested and found insufficient (the correct amount of post-boundary grace turned out to be material-dependent, not universal). This led to a full architectural redesign into a calibratable **Loop End Grace** feature — a per-Material-overridable, globally-defaulted grace duration, a `PlayerSession` mechanism guaranteeing a live change only takes effect from the next Loop iteration onward (never retroactively mid-iteration), and a provisional (explicitly not Milestone-13-precedent) Settings UI reachable from all five Loop-capable training surfaces. A 3-material human calibration retest found the original 180ms built-in default insufficient on all three materially different samples and 200ms sufficient on all three (complete tail, no next-cue leakage, continuous multi-cue playback); the built-in default was raised accordingly via an additive migration. **Loop audible-end blocker: HUMAN ACCEPTED / CLOSED.**
+**The Loop Cue audible-endpoint defect** (surfaced by Human QA Round 1's Batch B) turned out not to be a single fixable bug: three corrective rounds against a fixed backend constant were each human-retested and found insufficient (the correct amount of post-boundary grace turned out to be material-dependent, not universal). This led to a full architectural redesign into a calibratable **Loop End Grace** feature — a per-Material-overridable, globally-defaulted grace duration, a `PlayerSession` mechanism guaranteeing a live change only takes effect from the next Loop iteration onward (never retroactively mid-iteration), and a provisional Settings UI reachable from all five Loop-capable training surfaces. A 3-material human calibration retest found the original 180ms built-in default insufficient on all three materially different samples and 200ms sufficient on all three (complete tail, no next-cue leakage, continuous multi-cue playback); the built-in default was raised accordingly via an additive migration. **Loop audible-end blocker: HUMAN ACCEPTED / CLOSED.**
 
-**Human QA Round 2 is frozen as a pre-UI baseline / partial acceptance.** The 3-material Loop End Grace retest is the only human-verification activity that happened after Round 1's corrective work landed — it targeted the Loop playback area specifically, not the full product-wide questionnaire. Round 2's original full-questionnaire scope (`manual-qa/manual_review_questionnaire.html`) has **not** run and remains deferred to Phase 12-B, after Milestone 13, so it tests the actual final UI rather than the pre-reconstruction one.
+**Human QA Round 2 is frozen as a pre-UI baseline / partial acceptance.** The 3-material Loop End Grace retest is the only human-verification activity that happened after Round 1's corrective work landed — it targeted the Loop playback area specifically, not the full product-wide questionnaire. Round 2's full-questionnaire scope (`manual-qa/manual_review_questionnaire.html`) has **not** run and belongs to Phase 12-B, where it will validate the finalized post-M13 UI.
 
-Phase 12-A is merged into `main` (PR #1, see Repository State below). M12 overall is still not complete — Phase 12-B has not started; remaining UI/layout/playback-interaction experience findings are intentionally handed to Milestone 13 rather than patched piecemeal here.
+Phase 12-A and Milestone 13 are merged into `main`. The next engineering work is Phase 12-B.
 
 ## Current Release Scope
 
@@ -63,14 +63,14 @@ Functional feature completion was reached after Milestone 10: every planned loca
 
 ## Functional Feature Freeze Status
 
-**Active.** Permitted during freeze: fixing critical defects; fixing data-integrity/privacy/security/core-workflow defects (required, not optional); fixing severe UX defects that prevent reliable use (required); presentation redesign was permitted through Milestone 11 and is now closed out — no further UI redesign is expected outside Milestone 12's own corrective scope. Not permitted without an explicit decision and roadmap update: any new learning workflow, domain capability, analytics concept, user-data semantics, or AI/cloud feature.
+**Active.** Permitted during freeze: fixing critical defects; fixing data-integrity/privacy/security/core-workflow defects (required, not optional); fixing severe UX defects that prevent reliable use (required); presentation redesign was permitted through Milestone 11 and Milestone 13 and is now closed out — no further UI redesign is expected outside Milestone 12's own corrective scope. Not permitted without an explicit decision and roadmap update: any new learning workflow, domain capability, analytics concept, user-data semantics, or AI/cloud feature.
 
 ## Open Release Blockers
 
-- Milestone 12 Phase 12-A (Pre-UI Product Hardening) is **complete** — the overnight agent audit, Human QA Round 1's corrective work, and the Loop Cue audible-endpoint defect chain (now closed, human-calibrated) are all done (see `HARDENING_BACKLOG.md`). Milestone 13 — Advanced UI/UX Reconstruction implementation and its pre-HG2 corrective pass are **complete on `milestone/13-advanced-ui-ux`**, pending HG-2 human acceptance review — **not yet merged to `main`**. Phase 12-B — Final Product Hardening & Full Manual Regression (which includes Human QA Round 2's full-questionnaire pass) occurs after Milestone 13 is accepted and **has not started**.
-- Full manual GUI acceptance not completed — Human QA Round 2's full-questionnaire pass is frozen as a pre-UI baseline/partial acceptance (the Loop End Grace 3-material retest only), pending in full after Milestone 13 is accepted at HG-2.
-- HG-2 Whole-Product UI Acceptance itself is pending the user's own review; it has not passed.
-- Phase C2 clean-machine validation pending (occurs after both Phase 12-A and Phase 12-B).
+- Milestone 12 Phase 12-A (Pre-UI Product Hardening) and Milestone 13 (Advanced UI/UX Reconstruction) are **complete and merged into `main`**.
+- Full manual GUI acceptance not completed — Human QA Round 2's full-questionnaire pass is frozen as a pre-UI baseline/partial acceptance (the Loop End Grace 3-material retest only), scheduled in full for Milestone 12 Phase 12-B against the final UI.
+- Milestone 12 Phase 12-B — Final Product Hardening & Full Manual Regression is pending.
+- Phase C2 clean-machine validation pending (occurs after Phase 12-B).
 - Real clean-machine MP4/H.264 validation pending (not tested anywhere yet — Phase C1 had no H.264 encoder available to produce a sample).
 - Phase D not completed.
 - v1.0 not release-ready.
@@ -79,24 +79,24 @@ Functional feature completion was reached after Milestone 10: every planned loca
 ## Hardening Progress
 
 - Phase B — targeted technical release hardening: **completed** (migration atomicity, startup-crash-before-`QApplication`, crash logging, schema version 10 indexes, partial long-path mitigation, shutdown audit — see `ARCHITECTURE.md`'s "Resolved in Post-M10 Phase B").
-- Milestone 11 — UI/UX Presentation Refresh: **completed and accepted** (see the Completed section below and `ROADMAP.md`'s Closeout Summary). Presentation-only, per its own scope boundary — the only behavior changes were two independently-flagged, regression-tested corrective fixes for pre-existing defects found during visual review, not new presentation work.
-- Milestone 12 Phase 12-A — Pre-UI Product Hardening: **complete**. M12.1-A (manual QA baseline) complete. The overnight autonomous pass (M12.1-B Batches 1-5 plus the M12.4 Performance Decision Gate) is complete — see `HARDENING_BACKLOG.md`'s "Session summary" for the full breakdown. The user's Human QA Round 1 manual-acceptance pass then surfaced systemic playback/layout/workflow findings, handled through a Phase 0 read-only audit (`M12_CORRECTIVE_DIVERGENCE_MAP.md`, human-reviewed and explicitly authorized before any code changed) followed by Batches A (release blockers), B (Round 1 Playback Contract), C (Round 2 Layout Contract), an approved History Deletion feature (Round 4 Feasibility Gate), and QA fixture/wording corrections — all complete, all with pre-fix-verified regression tests. The Loop Cue audible-endpoint defect (Batch B's Loop Cue toggle fix did not resolve the underlying audible clipping) went through three further corrective rounds, all human-retested and found insufficient, before a full redesign into a calibratable Loop End Grace mechanism with a 3-material human calibration retest — **closed, HUMAN ACCEPTED**. Human QA Round 2's full-questionnaire pass (the user's full retest) is frozen as a pre-UI baseline/partial acceptance and has not run in full — see "Current Milestone" above.
-- Milestone 13 — Advanced UI/UX Reconstruction: implementation plus the pre-HG2 code + visual corrective pass are **complete on `milestone/13-advanced-ui-ux`**, **HG-2 PENDING USER REVIEW**, **not merged to `main`**. Remaining UI/layout/playback-interaction experience findings were handled inside this dedicated phase rather than patched piecemeal inside M12.
-- Milestone 12 Phase 12-B — Final Product Hardening & Full Manual Regression: **not started** (occurs after Milestone 13 passes HG-2 and merges to `main`).
+- Milestone 11 — UI/UX Presentation Refresh: **completed and accepted** (see the Completed section below and `ROADMAP.md`'s Closeout Summary). Presentation-only, per its own scope boundary.
+- Milestone 12 Phase 12-A — Pre-UI Product Hardening: **completed and merged into `main`**. M12.1-A (manual QA baseline) complete. The overnight autonomous pass (M12.1-B Batches 1-5 plus the M12.4 Performance Decision Gate) is complete — see `HARDENING_BACKLOG.md`'s "Session summary" for the full breakdown. The user's Human QA Round 1 manual-acceptance pass then surfaced systemic playback/layout/workflow findings, handled through a Phase 0 read-only audit (`M12_CORRECTIVE_DIVERGENCE_MAP.md`) followed by Batches A (release blockers), B (Round 1 Playback Contract), C (Round 2 Layout Contract), an approved History Deletion feature (Round 4 Feasibility Gate), and QA fixture/wording corrections — all complete, all with pre-fix-verified regression tests. The Loop Cue audible-endpoint defect was resolved via a calibratable Loop End Grace mechanism with a 3-material human calibration retest — **closed, HUMAN ACCEPTED**.
+- Milestone 13 — Advanced UI/UX Reconstruction: **completed, accepted, and merged into `main`**. Whole-product Notebook Study Desk reconstruction across all 16 production surfaces, Axes 1–8 accepted, Product Owner Human Visual Gate **PASS**, short-screen accessibility and aspect-ratio-aware video geometry verified.
+- Milestone 12 Phase 12-B — Final Product Hardening & Full Manual Regression: **next lifecycle phase** (validates the finalized post-M13 UI through Human QA Round 2 full manual regression).
 
-Phase B was a targeted technical pass against eleven specific failure categories, not a product-wide GUI audit; it does not by itself satisfy Milestone 12's exit criteria. Milestone 11 made the UI consistent and coherent; it does not by itself satisfy Milestone 12's workflow-correctness/robustness/privacy/performance audit either. Phase 12-A's completion does not by itself satisfy M12's exit criteria either — Phase 12-B (after Milestone 13) is required for that.
+Phase B was a targeted technical pass against eleven specific failure categories, not a product-wide GUI audit; it does not by itself satisfy Milestone 12's exit criteria. Milestone 11 made the UI consistent and coherent; it does not by itself satisfy Milestone 12's workflow-correctness/robustness/privacy/performance audit either. Phase 12-A's and Milestone 13's completion does not by itself satisfy M12's exit criteria either — Phase 12-B is required for that.
 
 ## Verification Status
 
-- **Automated tests**: 787 passing as of the final Milestone 13 Pre-HG2 corrective pass (759 at the close of Phase 12-A — 666 through Human QA Round 1's corrective work, plus 93 across the Loop Cue audible-endpoint defect chain through Calibration Closure, see `HARDENING_BACKLOG.md` — plus 28 added across Milestone 13's reconstruction and corrective passes).
-- **Manual GUI QA**: the user has completed one full product-wide manual-acceptance pass (Human QA Round 1) against a real, non-offscreen build, plus the retroactive M12.1-A baseline, plus a targeted 3-material human calibration retest of the Loop End Grace feature specifically (result: HUMAN ACCEPTED / CLOSED). Human QA Round 2's full-questionnaire pass is frozen as a pre-UI baseline/partial acceptance — the full retest against the final UI is deferred to Phase 12-B, after Milestone 13.
+- **Automated tests**: **894 passing** as of Milestone 13 completion and merge (759 at the close of Phase 12-A + 135 added across Milestone 13's reconstruction, theme, geometry, and corrective passes). 100% green suite.
+- **Manual GUI QA / Human Visual Gate**: the user has completed Human QA Round 1 (Phase 12-A), the retroactive M12.1-A baseline, the 3-material Loop End Grace calibration retest, and the **Milestone 13 Product Owner Human Visual Gate (PASS)**. Human QA Round 2's full-questionnaire pass against the final post-M13 UI is scheduled for Phase 12-B.
 - **Packaged preflight**: Phase C1 complete (development machine only) — see `ROADMAP.md`. During Milestone 11 Closeout, the onedir build was rebuilt from the final M11 code, relaunched, and its runtime icon/theme visually confirmed; icon resolution was additionally confirmed programmatically from a portable-ZIP-style relocated path. The installed-application (Inno Setup) context was not freshly rebuilt this session (Inno Setup is not installed in this environment) — reasoned by code equivalence only.
-- **Migration**: schema version 12, every migration 1→12 covered by an automated upgrade test with real data present. Migrations 11-12 (both additive) are the Loop End Grace persistence schema and the Calibration Closure default-value bump respectively; migration 12's `UPDATE` is conditional (`WHERE grace_ms = 180`) so it never overwrites an already-customized global default. Milestone 11 introduced no schema change (confirmed: its branch's diff against `main` touches only `src/listentrace/ui/`, `tests/integration/test_theme.py`, and the packaging spec's icon `datas` entry).
-- **Privacy/secret scan**: performed and clean on every documentation/code change to date, including this one, and on every Milestone 11 commit individually (diffs, commit messages, and the full list of files ever touched on the `m11-ui-ux-refresh` branch were all reviewed; no screenshot, scratchpad artifact, or local path was ever committed).
-- **Clean-machine validation**: not started (Phase C2, pending, scheduled after M12).
+- **Migration**: schema version 12, every migration 1→12 covered by an automated upgrade test with real data present. Migrations 11-12 (both additive) are the Loop End Grace persistence schema and the Calibration Closure default-value bump respectively; migration 12's `UPDATE` is conditional (`WHERE grace_ms = 180`) so it never overwrites an already-customized global default. Milestone 13 introduced zero schema changes.
+- **Privacy/secret scan**: performed and clean on every documentation/code change to date, including Milestone 13 closure.
+- **Clean-machine validation**: not started (Phase C2, pending, scheduled after M12 Phase 12-B).
 - **MP4/H.264**: a real, locally-generated H.264/MP4 clip was verified at the dev-source level during Milestone 3 (pre-packaging; see `README.md`'s Current Limitations). Real **packaged-build** MP4/H.264 playback has not been tested anywhere — Phase C1's preflight had no H.264 encoder available in that environment to produce a sample, so only the bundled FFmpeg plugin's presence in the packaged build was confirmed structurally, not its actual MP4/H.264 decoding.
 - **Display scaling / DPI**: only 100% Windows display scaling (`devicePixelRatio` 1.0, 96 logical DPI) has ever been available on this development machine; a 125%/150% scaled pass of Milestone 11's presentation layer remains unverified.
-- **Repository/remote verification**: local `main` and `origin/main` confirmed matching via `git ls-remote` after every push to date, including the Milestone 11 merge (see Repository State below).
+- **Repository/remote verification**: local `main` and `origin/main` confirmed matching via `git ls-remote` after every push to date, including the Milestone 13 merge (see Repository State below).
 
 ## Deferred Features
 
@@ -104,13 +104,12 @@ Phase B was a targeted technical pass against eleven specific failure categories
 
 ## Next Engineering Objective
 
-Phase 12-A (Pre-UI Product Hardening) is complete and merged into `main` (PR #1, `main` now at `6ef3997`) — see `HARDENING_BACKLOG.md` for the M12.1-B/Human-QA-Round-1 itemized finding list and this document's Completed section below for the Loop Cue audible-endpoint defect chain's full record, including the 3-material human calibration evidence. Milestone 13 — Advanced UI/UX Reconstruction (implementation plus its pre-HG2 corrective passes) is complete on branch `milestone/13-advanced-ui-ux`, pushed to `origin`, not yet merged into `main`. Next, in order: (1) the user's own HG-2 Whole-Product UI Acceptance review of `milestone/13-advanced-ui-ux` (not yet passed); (2) `milestone/13-advanced-ui-ux` merged into `main` once HG-2 passes; (3) Phase 12-B — Final Product Hardening & Full Manual Regression, including Human QA Round 2's full-questionnaire pass (`manual-qa/manual_review_questionnaire.html`) against the final UI; (4) Phase C2; (5) Phase D. No release-blocking defect is currently known; no claim of HG-2 passing, Full Manual Acceptance, M12 completion, or Release Ready is made.
+Milestone 12 Phase 12-A and Milestone 13 (Advanced UI/UX Reconstruction) are complete and merged into `main`. The next engineering objective is **Milestone 12 Phase 12-B — Final Product Hardening & Full Manual Regression**, which includes: (1) running Human QA Round 2's full questionnaire (`manual-qa/manual_review_questionnaire.html`) against the finalized UI; (2) resolving any remaining non-visual hardening defects; (3) proceeding to Phase C2 (Clean-Machine Acceptance) and Phase D (v1.0 Release Candidate).
 
 ## Repository State
 
-- `main` branch: last verified matching `origin/main` at commit `6ef3997` (`git ls-remote origin main`) — PR #1 merging `milestone/12-product-hardening` (Phase 12-A) into `main` has been merged. Milestone 13 work has not been merged into `main`.
-- `milestone/12-product-hardening`: Phase 12-A work, merged into `main` via PR #1. No further work expected on this branch.
-- `milestone/13-advanced-ui-ux`: active work branch for Milestone 13 — Advanced UI/UX Reconstruction, pushed to `origin`. Implementation plus its pre-HG2 corrective passes are complete on this branch. Not merged to `main`; no PR opened for this branch; HG-2 has not passed.
+- `main` branch: contains Phase 12-A (`milestone/12-product-hardening`) and Milestone 13 (`milestone/13-advanced-ui-ux`), last verified synchronized with `origin/main`.
+- `milestone/13-advanced-ui-ux`: Milestone 13 work branch, accepted and merged into `main`.
 - Continuous integration: not configured.
 
 ## Completed
@@ -326,6 +325,26 @@ Launch and open a valid material; confirm Milestone 3 playback still works; sele
   - **93 new automated tests** on top of the prior 666 — **759 total, all passing**; every behavior-changing fix has a dedicated regression test independently confirmed to fail against its pre-fix code.
   - **Explicitly not delivered in Phase 12-A**: any UI/layout/playback-interaction visual redesign beyond the Loop End Grace settings' minimum functional scaffolding (deliberately provisional, not Milestone-13 precedent — see the functional UX contract referenced from `CONTEXT.md`); Human QA Round 2's full-questionnaire pass (frozen as a pre-UI baseline/partial acceptance — the Loop End Grace retest only); Phase C2; Phase D; a `main` merge (PR prepared, not yet merged as of this writing).
   - Privacy/secret scan: performed and clean on every commit across Phase 12-A, matching the discipline established in every prior milestone.
+
+- Milestone 13 — Advanced UI/UX Reconstruction (branch `milestone/13-advanced-ui-ux`, merged into `main`; Product Owner Human Visual Gate: **PASS**; **no database schema change** — schema remains stable at version 12):
+  - **Notebook Study Desk Visual System**: comprehensive reconstruction of all 16 production surfaces into the accepted Notebook Study Desk design system (`ui/theme.py`, `ui/widgets/notebook_paper.py`), replacing generic UI styling with warm study paper surfaces, ruled paper list widgets, margin lines, spiral binding strips, clear action grammar (Primary Hero, Secondary, Quiet Utility, Danger), and WCAG-compliant contrast.
+  - **Deep Surface Interaction Reconstruction**:
+    - **Synchronized Player**: open-book layout with horizontal splitter, persistent quiet active-subtitle HUD below the media frame, unified playback timeline scrubber, three mini-notebook control cards (Playback, Loop & Practice, Utility), independent right workspace with tabbed Transcript & Cues and ruled Annotation Notebook, local vertical scroll container (`_cinema_scroll_area`) for the left cinema column guaranteeing full control reachability on short screens with horizontal scrolling disabled, and aspect-ratio-aware video viewport (`_PlayerVideoWidget`) preventing raw 1080p/4K frame dimensions from inflating the scroll area's black viewport.
+    - **Guided Intensive Listening**: persistent 5-stage study book shell with a 5-step horizontal non-clickable StageStepper, stage-specific writing/capture forms, and atomic stage-progression validation (`Save and Continue` properly enforces completion eligibility).
+    - **Quizzes & Recall Practice**: clean question cards with natural content-height ownership, radio answer cards with proper word-wrap, and structured post-submission review dossier (`QuizReviewDialog`).
+    - **Quick Practice**: stable left-two/right-one runtime workspace layout (left column: persistent cue context + step-specific processing workspace; right column: shared RecordingPanel support workspace) and a 4-stage non-clickable progress stepper derived from real session state.
+    - **Standalone Shadowing Practice**: dedicated single-focus study desk studio with cue navigation, reference cue card, and embedded recording panel.
+    - **Learning History**: structured Study Dossier layout with a multi-tab sidebar directory, scan-oriented Overview metric grid, and dedicated tabs for Activity, Sessions, Diagnoses, Quizzes, Shadowing & Recordings, and Needs Attention.
+    - **Material Library & Dialogs**: Study Dossier sidebar and detail panel, themed Session History, Quiz History, Import, Export, Label Colors, and Material Loop Settings sheets.
+  - **Axes 1–8 Closure & Corrective Passes**:
+    - Axes 1–5: surface architecture, paper primitives, and card layouts accepted.
+    - Axis 6: residual typography unification into role-based display and readable long-form/CJK-safe content families.
+    - Axis 7: geometry, density, and clipping corrections across all surfaces.
+    - Axis 8: Quick Practice structural redesign into a stable runtime layout.
+    - Final Human-Gate corrective passes: resolved StageStepper accessibility/clipping, Learning History IA/wrapping, Player right-workspace clipping, and P0/P1/P2 findings.
+    - Final Player accessibility/geometry corrective passes: added local left cinema vertical scrolling and aspect-ratio-aware video viewport, eliminating video/HUD overlap and black letterbox inflation.
+  - **135 new automated tests** added across Milestone 13 — **894 total, all passing**; 100% green test suite.
+  - **Human Visual Gate**: formally reviewed and accepted by the Product Owner on native Windows.
 
 ## Known Risks
 

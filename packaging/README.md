@@ -8,12 +8,12 @@ was to **decide and validate** a Windows packaging approach, not to
 finalize release engineering — Phase B (targeted technical hardening) has
 since added one packaging-level fix of its own (the manifest addition
 below), and Phase C1 (development-machine release preflight) is also
-complete. Phase B/C1 are targeted technical passes, not the final,
-system-wide product-hardening audit that Milestone 12 still has to
-perform. Milestone 11 (UI/UX Presentation Refresh), Milestone 12 (Product
-Hardening & Full Manual Acceptance), Phase C2 (clean-machine acceptance,
-scheduled after both M11 and M12), and Phase D (release candidate) all
-still remain — see `ROADMAP.md`'s "Canonical v1.0 Sequence".
+complete. Milestone 11 (UI/UX Presentation Refresh), Milestone 12 Phase 12-A
+(Pre-UI Product Hardening), and Milestone 13 (Advanced UI/UX Reconstruction)
+are all complete and merged. Milestone 12 Phase 12-B (Final Product Hardening &
+Full Manual Regression), Phase C2 (clean-machine acceptance, scheduled after
+Phase 12-B), and Phase D (release candidate) follow — see `ROADMAP.md`'s
+"Canonical v1.0 Sequence".
 
 ## Decisions made in Phase A
 
