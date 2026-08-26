@@ -398,67 +398,29 @@ Do not claim presentation completion before M11 is implemented and accepted.
 
 ## Goal
 
-M12 is not a new-feature milestone. Its purpose is to make the final M1-M11 product reliable, consistent, understandable, maintainable, and ready to enter clean-machine and release-candidate validation.
-
-> Audit and harden the complete v1.0 product after the final presentation layer
-> is in place, repair release-relevant defects, and complete full regression and
-> real-user-workflow acceptance without expanding the frozen product scope.
-
-**M12 is split into two sub-phases, separated by Milestone 13 — Advanced UI/UX Reconstruction (below).** This split was decided during M12 itself, once the audit and the user's Human QA Round 1 pass surfaced UI/layout/playback-interaction findings substantial enough to warrant their own dedicated whole-product reconstruction phase rather than being patched piecemeal inside M12:
-
-- **Phase 12-A — Pre-UI Product Hardening (Completed).** Covers M12.1 (System Audit), M12.2 (Correctness and Data Integrity), most of M12.3 (Workflow and UX Consistency — the correctness/reliability half, not visual/interaction redesign), and M12.4 (Robustness, Privacy, and Performance), plus the Loop Cue audible-endpoint defect chain through to a human-calibrated, closed resolution. See `PROJECT_STATUS.md`'s Completed section for the full record. Human QA Round 2 is **frozen as a pre-UI baseline / partial acceptance** at the point Phase 12-A closed: it verified the corrected areas from Round 1 plus the Loop End Grace calibration, not a full fresh product-wide pass — the remainder of Round 2's original full-questionnaire scope is deferred to Phase 12-B, after Milestone 13, so it tests the actual final UI rather than the pre-reconstruction one.
-- **Milestone 13 — Advanced UI/UX Reconstruction** (below): remaining UI/layout/playback-interaction *experience* findings from Phase 12-A's audit and Human QA Round 1/2 are intentionally handed to this dedicated phase rather than fixed piecemeal here.
-- **Phase 12-B — Final Product Hardening & Full Manual Regression (Pending, after Milestone 13).** M12.5, the original exit stage below, occurs here: a full regression pass and the user's complete Human QA Round 2 questionnaire against the *final* UI, not the pre-reconstruction one. M12 as a whole is not complete until Phase 12-B passes.
-
-M12 is organized conceptually into five stages.
-
-### M12.1 — System Audit and Defect Inventory
-
-A product-wide audit through realistic GUI workflows, not only isolated service calls. Covers at minimum: material and subtitle import; Material Library; Player; Transcript Workspace; Intensive Practice; Quiz; Shadowing and Recording; Learning History; Export; Quick Practice; restart and reopen; cancel/close/resume/abandon/discard/interrupted states; empty data, old data, invalid input, missing files, and failure paths. M12.1's purpose is to discover and classify problems, not to pre-invent a defect list before the audit runs. Findings are classified as: release-blocking defect; data-integrity/privacy/security defect; core-workflow or severe UX defect; medium/low-impact issue; architecture debt; or new feature request.
-
-### M12.2 — Correctness and Data Integrity
-
-Addresses confirmed problems involving data loss/overwrite/duplicate writes/partial success; session/quiz/recording/Quick Practice state transitions; deletion consistency between database records and retained files; migration and upgrade safety; transaction rollback; crash recovery; export atomicity and privacy redaction; historical calculations and evidence semantics; restart durability; legacy-data compatibility. Any critical defect fixed here gets regression coverage or a documented verification procedure.
-
-### M12.3 — Workflow and UX Consistency
-
-Audits whether the final M11 interface lets users complete existing promises reliably: consistent equivalent operations; clear Back/Cancel/Close/Resume/Restart/Abandon/Discard/Delete semantics; disabled controls that explain why; empty/error states; confirmation flows; navigation and return paths; status naming; workflow continuity across windows; whether core learning journeys form understandable end-to-end loops. M11 improves presentation and cognitive clarity; M12 verifies that the resulting workflows are correct and reliable. A severe UX defect that breaks or misrepresents an existing workflow belongs in M12, not Deferred Features.
-
-### M12.4 — Robustness, Privacy, and Performance
-
-Audits large histories; large subtitle files and long media; long-running sessions; repeated clicks; disk-full and permission failures where practical; moved or missing media; codec and playback failures; microphone disconnect/unavailability; logs and crash reports; accidental exposure of transcript text, personal paths, recordings, or other local data; installer/runtime resource behavior; foreseeable performance bottlenecks; third-party dependency and packaging risks. An untested condition is documented as unverified, never claimed as proven safe.
-
-### M12.5 — Full Regression and Manual Acceptance
-
-M12's exit stage. M12 can be completed only when: no known release-blocking defects remain; no known high-risk data-integrity/privacy/security defects remain; all defined core workflows pass manual GUI acceptance; the automated test suite passes; each fixed critical defect has regression coverage or a documented verification procedure; known deferred issues and limitations are documented; new feature requests are outside the frozen v1.0 scope; `ROADMAP.md`/`PROJECT_STATUS.md`/`README.md`/product documentation/packaging documentation/release planning agree; privacy and secret-safety checks pass; the verified local commit matches the intended remote `main` branch. M12 completion means product-wide hardening is complete — it does not by itself prove clean-machine compatibility or complete Phase D.
-
-## Phase 12-A Closeout Summary
-
-Delivered on branch `milestone/12-product-hardening`, prepared for merge to `main` via PR (not yet merged as of this writing — see `PROJECT_STATUS.md`'s Repository State for the exact commit):
-
-- **M12.1-B autonomous overnight audit** (Batches 1-5 + the M12.4 Performance Decision Gate): 18 findings, 8 fixed (5 with pre-fix-verified regression tests), 4 verified already correct, 4 accepted with rationale, 2 deferred to v1.0.x by measurement — see `HARDENING_BACKLOG.md`.
-- **Human QA Round 1** (the user's first full manual-acceptance pass) surfaced systemic playback/layout/workflow findings, handled through a read-only Phase 0 audit (`M12_CORRECTIVE_DIVERGENCE_MAP.md`, human-reviewed before any fix) then Batches A (release blockers: Guided Session completion-explainability, ghost-recording-Take, UTC-to-local-time display), B (Round 1 Playback Contract: cue-scoped Play, Previous/Next-Cue fix, Loop Cue toggle label, transcript auto-follow), C (Round 2 Layout Contract: Player workspace scroll/min-height fix, Quiz answer word-wrap), a new History Deletion capability (Round 4 Feasibility Gate), and 2 QA fixture/wording corrections — 10 further fixes, every one with a pre-fix-verified regression test.
-- **The Loop Cue audible-endpoint defect** (surfaced by Human QA Round 1): three corrective rounds against a single fixed constant were each human-retested and found insufficient, leading to a full architectural redesign — a calibratable **Loop End Grace** mechanism (per-Material override, global default, a `PlayerSession` snapshot mechanism guaranteeing a live change never retroactively edits an in-flight Loop iteration) plus a provisional (explicitly not M13-precedent) Settings UI reachable from all five Loop-capable training surfaces. **Human-calibrated and closed**: a 3-material retest found the original 180ms default insufficient on all three, 200ms sufficient on all three (complete tail, no next-cue leakage, continuous multi-cue playback) — the built-in default was raised accordingly (migration 12, additive). **Loop audible-end blocker: HUMAN ACCEPTED / CLOSED.**
-- This 3-material Loop End Grace retest is the only human-verification activity that happened after Human QA Round 1's corrective work landed. It is **not** a full product-wide Human QA Round 2 pass — see the note under Phase 12-A above. Human QA Round 2's original full-questionnaire scope (`manual-qa/manual_review_questionnaire.html`) remains pending, deferred to Phase 12-B after Milestone 13.
-- **Tests**: grew from 666 (Human QA Round 1 close) to 759 (Phase 12-A close) — every behavior-changing fix across this phase has an independently pre-fix-verified regression test, no exceptions taken.
-
-**Not delivered in Phase 12-A, by design:** any UI/layout/playback-interaction visual redesign beyond the minimum needed to expose the Loop End Grace settings (explicitly provisional scaffolding, not to be read as Milestone 13 precedent); Human QA Round 2's full questionnaire pass; Phase C2; Phase D; a `main` merge (pending PR review at the time of this writing).
-
-## HARDENING_BACKLOG.md Policy
-
-`HARDENING_BACKLOG.md` does not exist yet and is not created merely to satisfy process formality. M12.1 performs the audit first; `HARDENING_BACKLOG.md` is created only if the resulting issue set is large enough to need multiple repair batches or structured severity/reproduction tracking. If only a small number of findings exist, they are recorded in `PROJECT_STATUS.md`, an M12 working document, or repository issues, as appropriate. If created later, it tracks per finding: ID, title, category, severity, affected workflow, evidence/reproduction, expected/current behavior, decision, target repair batch, status, verification, and deferred reason.
-
-## Dependencies
-
-Requires Milestone 11 accepted and the Presentation Complete Gate passed. Phase C2 — Clean-Machine Acceptance occurs after M12 (both sub-phases, i.e. after Phase 12-B, not after Phase 12-A alone), not directly after M11.
-
----
-
-# Milestone 13 — Advanced UI/UX Reconstruction
+# Milestone 12 — Pre-UI Product Hardening (Completed)
 
 ## Goal
 
-A whole-product visual/interaction reconstruction, distinct from Milestone 11 (a presentation-only theming pass over the existing Qt Widgets structure). M13 addresses the UI/layout/playback-interaction *experience* findings across the whole product through a coherent Notebook Study Desk design language.
+Audit and harden the pre-reconstruction v1.0 product, repair release-relevant defects, and complete initial system audits and automated regression baselines without expanding the frozen product scope.
+
+## Status
+
+**Completed, Accepted, and Merged to `main`.**
+
+- **M12.1-B autonomous overnight audit** (Batches 1-5 + the M12.4 Performance Decision Gate): 18 findings, 8 fixed (5 with pre-fix-verified regression tests), 4 verified already correct, 4 accepted with rationale, 2 deferred to v1.0.x by measurement — see `HARDENING_BACKLOG.md`.
+- **Human QA Round 1** (the user's first full manual-acceptance pass) surfaced systemic playback/layout/workflow findings, handled through a read-only Phase 0 audit (`M12_CORRECTIVE_DIVERGENCE_MAP.md`, human-reviewed before any fix) then Batches A (release blockers: Guided Session completion-explainability, ghost-recording-Take, UTC-to-local-time display), B (Round 1 Playback Contract: cue-scoped Play, Previous/Next-Cue fix, Loop Cue toggle label, transcript auto-follow), C (Round 2 Layout Contract: Player workspace scroll/min-height fix, Quiz answer word-wrap), a new History Deletion capability (Round 4 Feasibility Gate), and 2 QA fixture/wording corrections — 10 further fixes, every one with a pre-fix-verified regression test.
+- **The Loop Cue audible-endpoint defect** (surfaced by Human QA Round 1): resolved through the calibratable **Loop End Grace** mechanism (per-Material override, global default, a `PlayerSession` snapshot mechanism guaranteeing a live change never retroactively edits an in-flight Loop iteration) plus settings dialogs. **Human-calibrated and closed**: a 3-material retest verified 200ms default sufficient on all three samples — **HUMAN ACCEPTED / CLOSED**.
+- **Human QA Round 2**: frozen as a pre-UI baseline/partial acceptance (Loop End Grace calibration only). Full-questionnaire manual regression pass against the finalized UI was cleanly transitioned to Milestone 14.
+- **Automated Tests**: reached 759 passing tests upon M12 completion.
+
+---
+
+# Milestone 13 — Advanced UI/UX Reconstruction (Completed)
+
+## Goal
+
+A whole-product visual/interaction reconstruction across all 16 production surfaces, replacing the legacy UI with the modern ListenTrace Notebook Study Desk design system.
 
 ## Status
 
@@ -486,15 +448,26 @@ A whole-product visual/interaction reconstruction, distinct from Milestone 11 (a
 - **Automated Tests**: 894 passed (100% green regression and integration test suite).
 - **Human Visual Gate**: formally accepted on native Windows.
 
-## Boundary
+---
 
-- Functional Feature Freeze preserved (no new learning workflows, analytics, or domain capabilities).
-- Schema version 12 preserved.
-- Phase 12-B (Final Product Hardening & Full Manual Regression) follows M13 to validate the finalized UI.
+# Milestone 14 — Final Product Hardening & Full Manual Regression (Current)
 
-## Dependencies
+## Goal
 
-Milestone 12 Phase 12-A and Milestone 13 are complete and merged into `main`. The next lifecycle phase is **Milestone 12 Phase 12-B — Final Product Hardening & Full Manual Regression**.
+Final product hardening and full manual acceptance against the reconstructed Notebook Study Desk interface, resolving remaining edge-case defects, and preparing the codebase for clean-machine packaging and v1.0 release.
+
+## Status
+
+**Current Milestone (In Progress).**
+
+- **Phase 0 — Baseline Reconciliation & Immediate Correctives (Complete)**:
+  - Macro documentation reconciled to canonical lifecycle: `M12 (Completed) -> M13 (Completed) -> M14 (Current) -> Phase C2 -> Phase D`.
+  - Interface-sound system explicitly excluded from product/design specs (decorative audio removed; learning audio fully intact).
+  - Material Study Dossier in `MainWindow` aligned to approved wireframe (structured 7-row ruled metadata panel with blue ink labels, spiral dots, and action suite).
+  - Global Settings consolidated under Library sidebar `Settings...` with categorized `Playback` and `Label Colors` tabs; redundant Player entry point removed.
+  - Cue selection clearing via right-click context menu implemented; selection box border clipping normalized; automated test suite expanded to 899 passing tests.
+- **Human QA Round 2**: Full manual regression pass against the finalized UI using `manual-qa/manual_review_questionnaire.html`.
+- **Pre-Release Non-Visual Hardening**: Final sweep of error boundaries, missing file handlers, and edge cases.
 
 ---
 
@@ -637,9 +610,9 @@ Milestones 1-10 — Core Functional Development
   -> Phase C1 — Development-Machine Release Preflight (Completed)
   -> Milestone 11 — UI/UX Presentation Refresh (Completed)
   -> Presentation Complete Gate (Passed)
-  -> Milestone 12 Phase 12-A — Pre-UI Product Hardening (Completed)
+  -> Milestone 12 — Pre-UI Product Hardening (Completed)
   -> Milestone 13 — Advanced UI/UX Reconstruction (Completed / Human Visual Gate Passed / Merged)
-  -> Milestone 12 Phase 12-B — Final Product Hardening & Full Manual Regression (Next)
+  -> Milestone 14 — Final Product Hardening & Full Manual Regression (Current)
   -> Phase C2 — Clean-Machine Acceptance
   -> Phase D — v1.0 Release Candidate
   -> v1.0 — Current Version Complete

@@ -60,6 +60,7 @@ from listentrace.ui.windows.quick_practice_window import QuickPracticeWindow
 from listentrace.ui.windows.quiz_history_dialog import QuizHistoryDialog
 from listentrace.ui.windows.quiz_window import QuizWindow
 from listentrace.ui.windows.session_history_dialog import SessionHistoryDialog
+from listentrace.ui.windows.settings_dialog import SettingsDialog
 from listentrace.ui.windows.shadowing_practice_window import ShadowingPracticeWindow
 
 _SETTINGS_ORG = "ListenTrace"
@@ -71,6 +72,34 @@ _DEFAULT_SIDEBAR_WIDTH = 190
 _DEFAULT_QUIZ_QUESTION_COUNT = 10
 _MIN_QUIZ_QUESTION_COUNT = 1
 _MAX_QUIZ_QUESTION_COUNT = 50
+
+
+class _DossierRow(QFrame):
+    """A ruled metadata row inside the Material Study Dossier matching the approved wireframe."""
+
+    def __init__(self, label: str, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        apply_role(self, "dossier_meta_row")
+        row_layout = QHBoxLayout(self)
+        row_layout.setContentsMargins(0, 4, 0, 4)
+        row_layout.setSpacing(SPACE_NORMAL)
+
+        self._label = QLabel(label)
+        apply_role(self._label, "dossier_meta_label")
+        self._label.setFixedWidth(120)
+        self._label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
+        row_layout.addWidget(self._label)
+
+        self._value = QLabel("")
+        apply_role(self._value, "dossier_meta_value")
+        self._value.setWordWrap(True)
+        self._value.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        row_layout.addWidget(self._value, 1)
+
+    def set_value(self, text: str, is_missing: bool = False) -> None:
+        self._value.setText(text)
+        apply_role(self._value, "dossier_meta_value_missing" if is_missing else "dossier_meta_value")
+
 
 class MainWindow(QMainWindow):
     """M13 Reconstructed Main Workspace & Material Library Window.
@@ -105,6 +134,7 @@ class MainWindow(QMainWindow):
         self._shadowing_practice_window: ShadowingPracticeWindow | None = None
         self._learning_history_window: LearningHistoryWindow | None = None
         self._quick_practice_window: QuickPracticeWindow | None = None
+        self._settings_dialog: SettingsDialog | None = None
         self._playback_settings_dialog: PlaybackSettingsDialog | None = None
 
         self._init_ui()
@@ -176,11 +206,12 @@ class MainWindow(QMainWindow):
         self._learning_history_button.clicked.connect(self._on_learning_history_clicked)
         sidebar_layout.addWidget(self._learning_history_button)
 
-        self._playback_settings_button = QPushButton("Playback Settings...")
-        apply_role(self._playback_settings_button, "nav_item")
-        set_button_icon(self._playback_settings_button, "settings", color_token="secondary")
-        self._playback_settings_button.clicked.connect(self._on_open_playback_settings)
-        sidebar_layout.addWidget(self._playback_settings_button)
+        self._settings_button = QPushButton("Settings...")
+        apply_role(self._settings_button, "nav_item")
+        set_button_icon(self._settings_button, "settings", color_token="secondary")
+        self._settings_button.clicked.connect(self._on_open_settings)
+        self._playback_settings_button = self._settings_button
+        sidebar_layout.addWidget(self._settings_button)
 
         sidebar_layout.addStretch(1)
 
@@ -252,22 +283,50 @@ class MainWindow(QMainWindow):
         self._content_splitter.addWidget(list_card)
 
         # --- Spiral Notebook Study Dossier Panel (Right) ---
-        dossier_card, dossier_inner_layout = make_notebook_surface("Material Study Dossier")
+        dossier_card, dossier_inner_layout = make_notebook_surface("Material Study Dossier", context_label="Study Dossier")
 
+        # Ruled Metadata Rows Block (matching Frozen Module Wireframe)
+        self._dossier_meta_widget = QWidget()
+        dossier_meta_layout = QVBoxLayout(self._dossier_meta_widget)
+        dossier_meta_layout.setContentsMargins(0, 0, 0, 0)
+        dossier_meta_layout.setSpacing(0)
+
+        self._dossier_empty_label = QLabel("Select a material in the archive to load its study dossier.")
+        apply_role(self._dossier_empty_label, "ruled_row")
+        self._dossier_empty_label.setWordWrap(True)
+        dossier_meta_layout.addWidget(self._dossier_empty_label)
+
+        self._row_title = _DossierRow("Title")
+        self._row_status = _DossierRow("Status")
+        self._row_language = _DossierRow("Language")
+        self._row_media = _DossierRow("Media")
+        self._row_sub_format = _DossierRow("Subtitle format")
+        self._row_subtitle = _DossierRow("Subtitle")
+        self._row_cue_count = _DossierRow("Cue count")
+
+        self._dossier_rows = [
+            self._row_title,
+            self._row_status,
+            self._row_language,
+            self._row_media,
+            self._row_sub_format,
+            self._row_subtitle,
+            self._row_cue_count,
+        ]
+        for row in self._dossier_rows:
+            row.setVisible(False)
+            dossier_meta_layout.addWidget(row)
+
+        # Detail label preserved for backward compatibility in automated tests
         self._detail_label = QLabel("Select a material to see details.")
         self._detail_label.setWordWrap(True)
-        apply_role(self._detail_label, "ruled_row")
+        self._detail_label.setVisible(False)
+        dossier_meta_layout.addWidget(self._detail_label)
 
         detail_scroll = QScrollArea()
         detail_scroll.setWidgetResizable(True)
         detail_scroll.setFrameShape(QFrame.Shape.NoFrame)
-        detail_widget = QWidget()
-        detail_inner_layout = QVBoxLayout(detail_widget)
-        detail_inner_layout.setContentsMargins(0, 0, 0, 0)
-        detail_inner_layout.setSpacing(SPACE_NORMAL)
-        detail_inner_layout.addWidget(self._detail_label)
-        detail_inner_layout.addStretch(1)
-        detail_scroll.setWidget(detail_widget)
+        detail_scroll.setWidget(self._dossier_meta_widget)
         dossier_inner_layout.addWidget(detail_scroll, 1)
 
         # Action Suite with Strict Hierarchy
@@ -431,6 +490,10 @@ class MainWindow(QMainWindow):
             empty_item.setFlags(Qt.ItemFlag.NoItemFlags)
             self._material_list.addItem(empty_item)
             self._set_action_buttons_enabled(False)
+            self._dossier_empty_label.setText("Select a material in the archive to load its study dossier.")
+            self._dossier_empty_label.setVisible(True)
+            for row in self._dossier_rows:
+                row.setVisible(False)
             self._detail_label.setText("Select a material to see details.")
             self._detail_label.setToolTip("")
             return
@@ -464,6 +527,10 @@ class MainWindow(QMainWindow):
         material_id = current.data(Qt.ItemDataRole.UserRole) if current is not None else None
         if material_id is None:
             self._set_action_buttons_enabled(False)
+            self._dossier_empty_label.setText("Select a material in the archive to load its study dossier.")
+            self._dossier_empty_label.setVisible(True)
+            for row in self._dossier_rows:
+                row.setVisible(False)
             self._detail_label.setText("Select a material to see details.")
             self._detail_label.setToolTip("")
             return
@@ -472,6 +539,10 @@ class MainWindow(QMainWindow):
         try:
             detail = library.get_material_detail(self._connection, material_id)
         except MaterialNotFoundError:
+            self._dossier_empty_label.setText("This material no longer exists.")
+            self._dossier_empty_label.setVisible(True)
+            for row in self._dossier_rows:
+                row.setVisible(False)
             self._detail_label.setText("This material no longer exists.")
             self._detail_label.setToolTip("")
             self.refresh_library()
@@ -482,21 +553,34 @@ class MainWindow(QMainWindow):
         )
 
         subtitle_display = Path(detail.subtitle_source_path).name if detail.subtitle_source_path else "(none)"
-        subtitle_line = f"Subtitle: {subtitle_display}"
-        if detail.subtitle_source_path is not None and not detail.subtitle_available:
-            subtitle_line += "  [MISSING]"
+        sub_missing = detail.subtitle_source_path is not None and not detail.subtitle_available
+        if sub_missing:
+            subtitle_display += "  [MISSING]"
 
-        media_line = f"Media: {Path(detail.media_path).name}"
-        if not detail.media_available:
-            media_line += "  [MISSING]"
+        media_display = Path(detail.media_path).name
+        media_missing = not detail.media_available
+        if media_missing:
+            media_display += "  [MISSING]"
+
+        # Populate structured 7-row ruled dossier metadata
+        self._dossier_empty_label.setVisible(False)
+        self._row_title.set_value(detail.title)
+        self._row_status.set_value(detail.status)
+        self._row_language.set_value(detail.language or "(not set)")
+        self._row_media.set_value(media_display, is_missing=media_missing)
+        self._row_sub_format.set_value(detail.subtitle_format or "(none)")
+        self._row_subtitle.set_value(subtitle_display, is_missing=sub_missing)
+        self._row_cue_count.set_value(str(detail.cue_count))
+        for row in self._dossier_rows:
+            row.setVisible(True)
 
         lines = [
             f"Title: {detail.title}",
             f"Status: {detail.status}",
             f"Language: {detail.language or '(not set)'}",
-            media_line,
+            media_line := (f"Media: {media_display}"),
             f"Subtitle format: {detail.subtitle_format or '(none)'}",
-            subtitle_line,
+            subtitle_line := (f"Subtitle: {subtitle_display}"),
             f"Cue count: {detail.cue_count}",
         ]
         self._detail_label.setText("\n".join(lines))
@@ -505,6 +589,7 @@ class MainWindow(QMainWindow):
             f"Subtitle path: {detail.subtitle_source_path or '(none)'}",
         ]
         self._detail_label.setToolTip("\n".join(tooltip_lines))
+        self._dossier_meta_widget.setToolTip("\n".join(tooltip_lines))
 
     def _set_action_buttons_enabled(self, enabled: bool) -> None:
         self._rename_button.setEnabled(enabled)
@@ -544,12 +629,16 @@ class MainWindow(QMainWindow):
         if dialog.exec() == QDialog.DialogCode.Accepted:
             self.refresh_library()
 
+    def _on_open_settings(self) -> None:
+        if self._settings_dialog is None:
+            self._settings_dialog = SettingsDialog(self._connection, self)
+            self._playback_settings_dialog = self._settings_dialog
+        self._settings_dialog.show()
+        self._settings_dialog.raise_()
+        self._settings_dialog.activateWindow()
+
     def _on_open_playback_settings(self) -> None:
-        if self._playback_settings_dialog is None:
-            self._playback_settings_dialog = PlaybackSettingsDialog(self._connection, self)
-        self._playback_settings_dialog.show()
-        self._playback_settings_dialog.raise_()
-        self._playback_settings_dialog.activateWindow()
+        self._on_open_settings()
 
     def _on_material_double_clicked(self, item: QListWidgetItem) -> None:
         if self._showing_archived:

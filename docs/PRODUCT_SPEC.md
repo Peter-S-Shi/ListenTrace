@@ -362,7 +362,7 @@ The design should eventually support:
 - readable focus states;
 - category labels that do not depend on color alone;
 - adjustable transcript size;
-- captions and text equivalents for interface sounds.
+- visual feedback for all system state changes without reliance on UI sound effects.
 
 ## Explicit Non-Goals for Early Development
 

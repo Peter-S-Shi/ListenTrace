@@ -77,8 +77,34 @@ def test_main_window_material_selection_and_action_hierarchy(qapp, db_conn, tmp_
     assert "Test Lesson M13" in window._detail_label.text()
     assert "Cue count: 1" in window._detail_label.text()
 
+    # Verify structured 7-row ruled dossier metadata values
+    assert window._row_title._value.text() == "Test Lesson M13"
+    assert window._row_status._value.text() == "active"
+    assert window._row_media._value.text() == "sample.mp3"
+    assert window._row_sub_format._value.text() == "srt"
+    assert window._row_subtitle._value.text() == "sample.srt"
+    assert window._row_cue_count._value.text() == "1"
+
     # Check primary role
     assert window._open_player_button.property("role") == "primary"
     assert window._remove_button.property("role") == "danger"
 
+    window.close()
+
+
+def test_main_window_settings_button_opens_settings_dialog(qapp, db_conn, tmp_path):
+    conn, db_file = db_conn
+    window = MainWindow(conn, db_file, tmp_path / "recordings")
+    window.show()
+
+    assert window._settings_button.text() == "Settings..."
+    assert window._settings_button.property("role") == "nav_item"
+
+    # Click settings button to open SettingsDialog
+    window._settings_button.click()
+    assert window._settings_dialog is not None
+    assert window._settings_dialog.isVisible() is True
+    assert window._settings_dialog.windowTitle() == "Settings"
+
+    window._settings_dialog.close()
     window.close()

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import sqlite3
 
-from PySide6.QtCore import QEvent, QSize, Qt
+from PySide6.QtCore import QEvent, QPoint, QSize, Qt
 from PySide6.QtGui import QColor, QIcon, QKeyEvent, QPixmap, QTextCursor
 from PySide6.QtMultimediaWidgets import QVideoWidget
 from PySide6.QtWidgets import (
@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
     QListWidget,
     QListWidgetItem,
     QMainWindow,
+    QMenu,
     QMessageBox,
     QPlainTextEdit,
     QPushButton,
@@ -400,10 +401,10 @@ class PlayerWindow(QMainWindow):
         apply_role(self._loop_settings_button, "quiet")
         utility_layout.addWidget(self._loop_settings_button)
 
+        # Global label colors preference lives in Library Settings; kept as
+        # attribute for programmatic/test backward compatibility without UI duplication.
         self._label_colors_button = QPushButton("Label Colors...")
         self._label_colors_button.clicked.connect(self._on_open_label_colors)
-        apply_role(self._label_colors_button, "quiet")
-        utility_layout.addWidget(self._label_colors_button)
 
         self._transcript_button = QPushButton("Hide Transcript")
         self._transcript_button.clicked.connect(self._on_toggle_transcript)
@@ -483,6 +484,8 @@ class PlayerWindow(QMainWindow):
         self._cue_list = QListWidget()
         apply_role(self._cue_list, "ruled_list_notebook")
         self._cue_list.setSelectionMode(QAbstractItemView.SelectionMode.ContiguousSelection)
+        self._cue_list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self._cue_list.customContextMenuRequested.connect(self._on_cue_list_context_menu)
         self._cue_list.setMinimumHeight(160)
         self._cue_list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self._cue_rows: list[_CueTranscriptRow] = []
@@ -1230,6 +1233,16 @@ class PlayerWindow(QMainWindow):
     def _show_workspace_status(self, message: str) -> None:
         self._workspace_status_label.setText(message)
         self._workspace_status_label.setVisible(bool(message))
+
+    def _on_cue_list_context_menu(self, pos: QPoint) -> None:
+        menu = QMenu(self._cue_list)
+        theme.apply_surface(menu, "popup")
+        clear_action = menu.addAction("Clear Cue Selection")
+        clear_action.triggered.connect(self._on_clear_cue_selection)
+        menu.exec(self._cue_list.mapToGlobal(pos))
+
+    def _on_clear_cue_selection(self) -> None:
+        self._cue_list.clearSelection()
 
     def _on_editing_cue_changed(self, current: QListWidgetItem, previous: QListWidgetItem) -> None:
         if current is None:

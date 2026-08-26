@@ -2,7 +2,7 @@
 
 Retroactive full-product manual QA baseline (Milestone 12.1-A). This is a
 living artifact: it established the pre-M12 baseline, was exercised in Human
-QA Round 1 (Phase 12-A), and will be run in full in Milestone 12 Phase 12-B
+QA Round 1 (Milestone 12), and will be run in full in Milestone 14
 against the final Notebook Study Desk UI reconstructed in Milestone 13.
 
 ## Purpose
@@ -97,11 +97,11 @@ read it directly.
 
 ## Using this for Hardening and regression
  
- - Milestone 12 Phase 12-A: Human QA Round 1 used this questionnaire to surface
-   systemic findings, resolved in Batches A-C, History Deletion, and Loop End Grace.
- - Milestone 12 Phase 12-B: run the full questionnaire as the full manual regression
-   pass against the finalized post-M13 UI; failed/blocked items become the Phase 12-B
-   defect inventory.
+- Milestone 12: Human QA Round 1 used this questionnaire to surface
+  systemic findings, resolved in Batches A-C, History Deletion, and Loop End Grace.
+- Milestone 14: run the full questionnaire as the full manual regression
+  pass against the finalized post-M13 UI; failed/blocked items become the Milestone 14
+  defect inventory.
  - After a repair batch: only re-run the affected modules/items, not the
    whole questionnaire, unless the change is broad.
  - Before a release candidate: run the full questionnaire again as the final

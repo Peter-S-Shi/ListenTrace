@@ -218,3 +218,41 @@ def test_player_window_m13_video_widget_preserves_aspect_ratio_without_black_box
     window.close()
 
 
+def test_player_cue_selection_clearing_and_state_coexistence(qapp, db_conn, tmp_path):
+    """M14 Phase 0: Test explicit cue selection clearing via context menu or clearSelection,
+    confirming it clears multi-selection while preserving editing cue index, active playing cue,
+    and annotation workspace state."""
+    load_res = _sample_player_load(tmp_path)
+    window = PlayerWindow(load_res, db_conn)
+    window.show()
+    qapp.processEvents()
+
+    # Set current row and select both cues in the list
+    window._cue_list.setCurrentRow(0)
+    window._cue_list.item(0).setSelected(True)
+    window._cue_list.item(1).setSelected(True)
+    assert len(window._cue_list.selectedItems()) == 2
+    assert window._editing_cue_index == 0
+
+    # Simulate active playing cue on cue 1 (start 1000ms - end 2500ms)
+    window._on_position_changed(1500)
+    assert window._cue_rows[1]._marker_label.text() == "▶"
+
+    # Context menu exists on cue list
+    assert window._cue_list.contextMenuPolicy() == Qt.ContextMenuPolicy.CustomContextMenu
+
+    # Clear explicit selection
+    window._on_clear_cue_selection()
+
+    # Selected items must be cleared
+    assert len(window._cue_list.selectedItems()) == 0
+    assert window._selected_cue_indices() == []
+
+    # Editing cue index, current row, and active playing cue are preserved
+    assert window._editing_cue_index == 0
+    assert window._session.active_cue_index == 1
+    assert window._cue_rows[1]._marker_label.text() == "▶"
+
+    window.close()
+
+
