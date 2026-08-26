@@ -9,7 +9,6 @@ from PySide6.QtWidgets import (
     QButtonGroup,
     QCheckBox,
     QFrame,
-    QGridLayout,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -51,7 +50,15 @@ from listentrace.ui.text_offset_conversion import (
     codepoint_index_to_qt_offset,
     qt_offset_to_codepoint_index,
 )
-from listentrace.ui.theme import SPACE_COMPACT, SPACE_NORMAL, SPACE_PAGE, SPACE_SECTION, apply_role, apply_surface
+from listentrace.ui.theme import (
+    SPACE_COMPACT,
+    SPACE_NORMAL,
+    SPACE_PAGE,
+    SPACE_SECTION,
+    FlowLayout,
+    apply_role,
+    apply_surface,
+)
 from listentrace.ui.widgets.loop_grace_change_bus import loop_grace_change_bus
 from listentrace.ui.widgets.recording_panel import RecordingPanel
 from listentrace.ui.windows.material_loop_settings_dialog import MaterialLoopSettingsDialog
@@ -546,23 +553,23 @@ class QuickPracticeWindow(QMainWindow):
         apply_role(self._heard_fragment_reference_label, "ui_label")
         layout.addWidget(self._heard_fragment_reference_label)
 
-        # A single QHBoxLayout row can't hold all five label names (the
-        # longest, "connected reduced speech", forces the others to squish
-        # or truncate at this card's width) -- a fixed-column grid keeps
-        # every label fully readable regardless of window width.
-        _LABEL_GRID_COLUMNS = 3
-        label_grid = QGridLayout()
-        label_grid.setHorizontalSpacing(SPACE_NORMAL)
-        label_grid.setVerticalSpacing(SPACE_COMPACT)
+        # M13 Axis 7: a rigid fixed-column grid clips/hard-packs whichever
+        # label lands in a too-narrow column once the Axis-6 display font
+        # widened these checkbox labels -- a wrapping FlowLayout (the same
+        # shared primitive Quick Practice's own recommendation-reason tags
+        # use) reflows however many labels actually fit the real available
+        # width onto each line instead of a column count baked in ahead of
+        # time.
+        label_grid_widget = QWidget()
+        label_grid = FlowLayout(label_grid_widget, h_spacing=SPACE_SECTION, v_spacing=SPACE_NORMAL)
         self._diagnosis_label_checkboxes: dict[str, QCheckBox] = {}
-        for index, label in enumerate(AnnotationLabel):
+        for label in AnnotationLabel:
             checkbox = QCheckBox(label.value.replace("_", " "))
             apply_role(checkbox, "ui_label")
             checkbox.stateChanged.connect(self._on_diagnosis_label_checkbox_changed)
             self._diagnosis_label_checkboxes[label.value] = checkbox
-            row, column = divmod(index, _LABEL_GRID_COLUMNS)
-            label_grid.addWidget(checkbox, row, column)
-        layout.addLayout(label_grid)
+            label_grid.addWidget(checkbox)
+        layout.addWidget(label_grid_widget)
 
         heard_as_row = QHBoxLayout()
         heard_lbl = QLabel("Heard as:")

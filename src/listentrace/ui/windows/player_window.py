@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import sqlite3
 
-from PySide6.QtCore import QEvent, Qt
+from PySide6.QtCore import QEvent, QSize, Qt
 from PySide6.QtGui import QColor, QIcon, QKeyEvent, QPixmap, QTextCursor
 from PySide6.QtMultimediaWidgets import QVideoWidget
 from PySide6.QtWidgets import (
@@ -75,6 +75,59 @@ _SEEK_STEP_MS = 5000
 _ACTIVE_CUE_HIGHLIGHT = theme.qcolor("cue_active")
 _OVERLAP_HIGHLIGHT = theme.qcolor("text_overlap")
 _BADGE_SIZE = 12
+# M13 Axis 7: the Transcript & Cues list's two visible columns (Timetable /
+# Cue Text) -- fixed so every row's timestamp column lines up under the
+# header regardless of that row's own timestamp/text length, per the
+# Product Owner's explicit "real two-column table, not concatenated list
+# rows" requirement.
+_CUE_MARKER_COLUMN_WIDTH_PX = 14
+_CUE_TIME_COLUMN_WIDTH_PX = 92
+# Must mirror the vertical chrome `QListWidget[role="ruled_list_notebook"]
+# ::item` paints around every row in theme.py: padding-top + padding-bottom
+# (SPACE_NORMAL each) + border-bottom (2px) + margin-bottom (2px). Distinct
+# from `theme.RULED_LIST_ITEM_VERTICAL_CHROME_PX`, which is the *different*
+# `role="ruled_list"` role's own chrome -- the two roles' QSS numbers are
+# not the same, so this list needs its own constant rather than reusing
+# that helper's.
+_CUE_ROW_VERTICAL_CHROME_PX = (SPACE_NORMAL * 2) + 2 + 2
+
+
+class _CueTranscriptRow(QWidget):
+    """One `Timetable | Cue Text` row of the Player's Transcript & Cues
+    table (M13 Axis 7). A real `QListWidgetItem.setItemWidget()` row --
+    not a single concatenated string -- so the timestamp and cue text
+    render as two genuinely separate, aligned columns under the
+    `Timetable`/`Cue Text` header built alongside `_build_workspace_panel`.
+
+    `set_active()` renders the currently-playing-cue marker (a leading ▶,
+    the same non-color indicator the old single-string row used) directly
+    on this row, since a widget-hosted `QListWidgetItem` no longer paints
+    its own `item.setText()` content.
+    """
+
+    def __init__(self, time_text: str, cue_text: str, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        row_layout = QHBoxLayout(self)
+        row_layout.setContentsMargins(0, 0, 0, 0)
+        row_layout.setSpacing(SPACE_NORMAL)
+
+        self._marker_label = QLabel("")
+        self._marker_label.setFixedWidth(_CUE_MARKER_COLUMN_WIDTH_PX)
+        row_layout.addWidget(self._marker_label)
+
+        self._time_label = QLabel(time_text)
+        apply_role(self._time_label, "monospace")
+        self._time_label.setFixedWidth(_CUE_TIME_COLUMN_WIDTH_PX)
+        self._time_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
+        row_layout.addWidget(self._time_label)
+
+        self._text_label = QLabel(cue_text)
+        self._text_label.setWordWrap(True)
+        apply_role(self._text_label, "transcript_cue")
+        row_layout.addWidget(self._text_label, 1)
+
+    def set_active(self, active: bool) -> None:
+        self._marker_label.setText("▶" if active else "")
 
 
 def _is_text_entry_widget(widget: object) -> bool:
@@ -205,7 +258,13 @@ class PlayerWindow(QMainWindow):
             self._audio_placeholder.setMinimumHeight(120)
             apply_role(self._audio_placeholder, "media_placeholder")
             stage_layout.addWidget(self._audio_placeholder)
-        cinema_layout.addWidget(stage_card)
+        # M13 Axis 7: give the media viewport the stretch instead of leaving
+        # it to a trailing addStretch() below -- the right (Transcript/
+        # Annotation) column's own natural content height was setting the
+        # whole window's height, so any leftover vertical space used to sit
+        # as dead blank space beneath the mini-notebook button row instead
+        # of growing the one region actually meant to use it.
+        cinema_layout.addWidget(stage_card, 1)
 
         # Quiet Active Subtitle / Status Strip below the media frame
         self._active_subtitle_hud = QLabel("[Ready to play]")
@@ -321,7 +380,6 @@ class PlayerWindow(QMainWindow):
         notebooks_row.addWidget(utility_card, 1)
 
         cinema_layout.addLayout(notebooks_row)
-        cinema_layout.addStretch(1)
 
         self._main_splitter.addWidget(self._cinema_stage_widget)
 
@@ -351,16 +409,42 @@ class PlayerWindow(QMainWindow):
         transcript_header_row.addWidget(self._return_to_playing_button)
         transcript_content.addLayout(transcript_header_row)
 
-        # Cue Card Stream List
+        # M13 Axis 7: a real `Timetable | Cue Text` column header, aligned
+        # with each row's own fixed-width timestamp column below.
+        table_header_row = QHBoxLayout()
+        table_header_row.setContentsMargins(0, 0, 0, 0)
+        table_header_row.setSpacing(SPACE_NORMAL)
+        marker_header_spacer = QLabel("")
+        marker_header_spacer.setFixedWidth(_CUE_MARKER_COLUMN_WIDTH_PX)
+        table_header_row.addWidget(marker_header_spacer)
+        timetable_header = QLabel("Timetable")
+        apply_role(timetable_header, "section_header")
+        timetable_header.setFixedWidth(_CUE_TIME_COLUMN_WIDTH_PX)
+        table_header_row.addWidget(timetable_header)
+        cue_text_header = QLabel("Cue Text")
+        apply_role(cue_text_header, "section_header")
+        table_header_row.addWidget(cue_text_header, 1)
+        transcript_content.addLayout(table_header_row)
+
+        # Cue Card Stream List -- a real two-column table row per cue
+        # (`_CueTranscriptRow`), not a single concatenated "[time] text"
+        # string, so Timetable and Cue Text render as genuinely separate
+        # columns beneath the header above.
         self._cue_list = QListWidget()
         apply_role(self._cue_list, "ruled_list_notebook")
         self._cue_list.setSelectionMode(QAbstractItemView.SelectionMode.ContiguousSelection)
         self._cue_list.setMinimumHeight(160)
-        self._cue_list.setWordWrap(True)
         self._cue_list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self._cue_rows: list[_CueTranscriptRow] = []
         for cue in self._session.cues:
-            label = f"[{_format_time(cue.start_ms)}-{_format_time(cue.end_ms)}] {cue.text}"
-            self._cue_list.addItem(QListWidgetItem(label))
+            time_text = f"{_format_time(cue.start_ms)}-{_format_time(cue.end_ms)}"
+            row = _CueTranscriptRow(time_text, cue.text)
+            item = QListWidgetItem()
+            hint = row.sizeHint()
+            item.setSizeHint(QSize(hint.width(), hint.height() + _CUE_ROW_VERTICAL_CHROME_PX))
+            self._cue_list.addItem(item)
+            self._cue_list.setItemWidget(item, row)
+            self._cue_rows.append(row)
         self._cue_list.currentItemChanged.connect(self._on_editing_cue_changed)
         transcript_content.addWidget(self._cue_list, 1)
         right_layout.addWidget(transcript_notebook, 1)
@@ -748,16 +832,11 @@ class PlayerWindow(QMainWindow):
                 continue
             is_active = i == active_index
             item.setBackground(_ACTIVE_CUE_HIGHLIGHT if is_active else QColor(0, 0, 0, 0))
-
-            # Non-color indicator: add ▶ prefix for playing cue, remove it otherwise.
-            # Strip any existing marker first to avoid accumulating ▶▶▶ on repeated calls.
-            raw_text = item.text()
-            if raw_text.startswith("▶ "):
-                raw_text = raw_text[2:]
-            if is_active:
-                item.setText(f"▶ {raw_text}")
-            else:
-                item.setText(raw_text)
+            # Non-color indicator: the row widget renders its own leading ▶
+            # marker (item.setText() has no visual effect once a widget is
+            # attached via setItemWidget()).
+            if 0 <= i < len(self._cue_rows):
+                self._cue_rows[i].set_active(is_active)
 
         if self._follow_playback and active_index is not None:
             self._scroll_to_cue_if_needed(active_index)

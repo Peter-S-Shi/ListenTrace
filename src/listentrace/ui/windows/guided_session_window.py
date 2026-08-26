@@ -10,7 +10,6 @@ from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QFrame,
-    QGridLayout,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -63,6 +62,7 @@ from listentrace.ui.theme import (
     SPACE_NORMAL,
     SPACE_PAGE,
     SPACE_SECTION,
+    FlowLayout,
     apply_role,
     apply_surface,
 )
@@ -1008,23 +1008,22 @@ class GuidedSessionWindow(QMainWindow):
         self._diagnosis_transcript_view.setMaximumHeight(110)
         right_column.addWidget(self._diagnosis_transcript_view)
 
-        # A single QHBoxLayout row can't hold all five label names (the
-        # longest, "connected reduced speech", forces the others to squish
-        # or truncate at this splitter pane's width) -- a fixed-column grid
-        # keeps every label fully readable regardless of window/pane width.
-        _LABEL_GRID_COLUMNS = 3
-        label_grid = QGridLayout()
-        label_grid.setHorizontalSpacing(SPACE_NORMAL)
-        label_grid.setVerticalSpacing(SPACE_COMPACT)
+        # M13 Axis 7: a rigid fixed-column grid clips/hard-packs whichever
+        # label lands in a too-narrow column once the Axis-6 display font
+        # widened these checkbox labels -- a wrapping FlowLayout (the same
+        # shared primitive Quick Practice's recommendation-reason tags use)
+        # reflows however many labels actually fit the real available width
+        # onto each line instead of a column count baked in ahead of time.
+        label_grid_widget = QWidget()
+        label_grid = FlowLayout(label_grid_widget, h_spacing=SPACE_SECTION, v_spacing=SPACE_NORMAL)
         self._diagnosis_label_checkboxes: dict[str, QCheckBox] = {}
-        for index, label in enumerate(AnnotationLabel):
+        for label in AnnotationLabel:
             checkbox = QCheckBox(label.value.replace("_", " "))
             apply_role(checkbox, "ui_label")
             checkbox.stateChanged.connect(self._on_diagnosis_label_checkbox_changed)
             self._diagnosis_label_checkboxes[label.value] = checkbox
-            row, column = divmod(index, _LABEL_GRID_COLUMNS)
-            label_grid.addWidget(checkbox, row, column)
-        right_column.addLayout(label_grid)
+            label_grid.addWidget(checkbox)
+        right_column.addWidget(label_grid_widget)
 
         heard_as_row = QHBoxLayout()
         heard_lbl = QLabel("Heard as:")
