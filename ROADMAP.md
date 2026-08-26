@@ -469,7 +469,7 @@ Final product hardening and full manual acceptance against the reconstructed Not
 - **Final `/code-review` exit pass (Complete)**: reviewed the full M14 branch diff against `main` (Standards and Spec axes). Two bounded, real gaps found and fixed with regression coverage — a missing test for `PlayerWindow`'s cross-window rename-propagation handler, and a stale `LabelColorDialog` reference in `README.md`'s architecture tree. No release blocker found otherwise. Final automated suite: 948 passing.
 - **Pre-Release Non-Visual Hardening**: Final sweep of error boundaries, missing file handlers, and edge cases — folded into the above; no additional open items.
 
-**M14 exit summary**: confirmed open defects — 0; M14-internal release blockers — 0. Milestone 14 does not itself perform the `main` merge or clean-machine acceptance; those are Milestone 15's job, below.
+**M14 exit summary**: confirmed open defects — 0; M14-internal release blockers — 0. Milestone 14 does not itself perform clean-machine acceptance or release-candidate delivery; those are Milestone 15's job, below.
 
 ---
 

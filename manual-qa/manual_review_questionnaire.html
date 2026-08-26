@@ -175,13 +175,12 @@ details.instructions summary{cursor:pointer;font-weight:600;}
 const META = {
   project: "ListenTrace",
   schemaVersion: "1.0.0",
-  questionnaireVersion: "2026-08-26.2",
-  // M14 Human QA Round 2 readiness corrective: the base key is kept only as
+  questionnaireVersion: "2026-08-26.3",
+  // Post-M14 / Milestone 15 regression baseline: the base key is kept only as
   // a namespace prefix. Autosave actually reads/writes a *version-specific*
-  // key (below) so a browser that still has M12-era (or any other older
+  // key (below) so a browser that still has M12-era or M14-era (or any other older
   // questionnaireVersion) saved state can never silently populate a fresh
-  // Round 2 run -- old data under the old key is left untouched, not
-  // migrated or deleted.
+  // run -- old data under the old key is left untouched, not migrated or deleted.
   storageKey: "listentrace_manual_qa_v1"
 };
 META.versionedStorageKey = `${META.storageKey}__${META.questionnaireVersion}`;
@@ -189,14 +188,14 @@ META.versionedStorageKey = `${META.storageKey}__${META.questionnaireVersion}`;
 const STR = {
   instrTitle: {zh:"使用说明（点击展开/收起）", en:"Instructions (click to expand/collapse)"},
   instrBody: {zh:`
-    <p><b>用途：</b>本问卷起源于 ListenTrace 的追补式全产品人工核查基线（M12.1-A）。<b>当前这一轮运行是 Milestone 14 Human QA Round 2 / 全量人工回归</b>：针对已完成 M13 重构、且 M14 Corrective Batch A/B/C 均已完成的最终产品版本执行。本轮发现的失败/受阻项将用于 M14 剩余的收尾决策；完成本轮问卷本身<b>不代表</b> Phase C2（干净机器验收）或 Phase D（发布候选）已经通过。</p>
+    <p><b>用途：</b>本问卷起源于 ListenTrace 的追补式全产品人工核查基线（M12.1-A），并在 Milestone 14 Human QA Round 2 中通过了全量人工回归（PASS）。<b>当前版本（2026-08-26.3）作为 post-M14 / Milestone 15（发布候选与交付）的可复用人工回归核查清单</b>：针对已完成 M13 UI 重构与 M14 全产品加固的基准版本执行。完成本轮问卷本身<b>不代表</b> Milestone 15.2（干净机器验收）或 Milestone 15.3（发布候选封版）已经完成。</p>
     <p><b>如何启动产品：</b>开发环境下运行 <code>.venv/Scripts/python -m listentrace.ui.app</code>（见仓库 README.md）；或使用 packaging/ 下已构建的安装包/便携版。</p>
     <p><b>如何使用样本：</b>样本位于 <code>manual-qa/samples/</code>，各模块的“要使用的样本”一栏会点名具体文件；详见 <code>manual-qa/samples/README.md</code>。</p>
     <p><b>如何保存结果：</b>本页所有填写内容会自动保存到浏览器 localStorage（仅本机、仅本问卷）。核查结束后，请点击下方“导出 JSON”保存一份结果文件，需要交给 Agent 分析或与他人交接进度时，发送该 JSON 文件（不要把浏览器 localStorage 当作可交接的存储介质）。也可导出 Markdown 报告便于阅读。</p>
     <p><b>隐私提醒：</b>请勿在“实际表现/证据”等文本字段中填写真实姓名、真实邮箱、账号、真实客户数据或本机真实绝对路径；截图文件名只记录文件名，不在本页粘贴截图内容本身。</p>
     <p><b>Schema：</b>问卷 schema/version：<code>${META.schemaVersion}</code>，questionnaire version：<code>${META.questionnaireVersion}</code>。</p>
   `, en:`
-    <p><b>Purpose:</b> This questionnaire originated as ListenTrace's retroactive full-product manual QA baseline (M12.1-A). <b>The current run is Milestone 14 Human QA Round 2 / Full Manual Regression</b>: executed against the finalized product, after the M13 reconstruction and with M14 Corrective Batches A/B/C all complete. Failures/blocked items from this run feed the remaining M14 closure decision; completing this run does <b>not</b> by itself mean Phase C2 (Clean-Machine Acceptance) or Phase D (Release Candidate) has passed.</p>
+    <p><b>Purpose:</b> This questionnaire originated as ListenTrace's retroactive full-product manual QA baseline (M12.1-A) and passed full manual regression during Milestone 14 Human QA Round 2 (PASS). <b>The current version (2026-08-26.3) serves as the reusable post-M14 / Milestone 15 (Release Candidate & Delivery) manual regression checklist</b>: executed against the baseline product after the M13 UI reconstruction and M14 whole-product hardening. Completing this run does <b>not</b> by itself mean Milestone 15.2 (Clean-Machine Acceptance) or Milestone 15.3 (Release Candidate Closure & Delivery) has completed.</p>
     <p><b>How to launch the product:</b> in a dev environment run <code>.venv/Scripts/python -m listentrace.ui.app</code> (see repo README.md); or use a build already produced under <code>packaging/</code> (installer or portable zip).</p>
     <p><b>How to use the samples:</b> samples live under <code>manual-qa/samples/</code>; each module's "Samples used" field names the exact files. See <code>manual-qa/samples/README.md</code> for details.</p>
     <p><b>How results are saved:</b> everything you fill in autosaves to this browser's localStorage (this machine, this questionnaire only). When you finish, click "Export JSON" below to save a result file. To hand off progress to an Agent or another person, send that JSON file (do not treat localStorage itself as a hand-off medium). A Markdown report export is also available for easy reading.</p>

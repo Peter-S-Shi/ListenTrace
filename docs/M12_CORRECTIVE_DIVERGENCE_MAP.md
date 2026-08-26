@@ -1,8 +1,11 @@
 # M12 Corrective Divergence Map — Phase 0 (Read-Only Audit)
 
-**Status: DRAFT, pending human review. Not committed. No product code or existing
+> [!NOTE]
+> **Archival Record**: This divergence map was drafted during Milestone 12 Phase 0 as a read-only audit. It was subsequently reviewed, approved, and fully executed across Milestone 12 Corrective Batches A, B, and C and the Loop End Grace calibration closure. It is preserved here as a historical audit artifact for traceability.
+
+**Historical Status at Drafting**: DRAFT, pending human review. Not committed. No product code or existing
 tracked documentation (`HARDENING_BACKLOG.md`, `PROJECT_STATUS.md`, the manual QA
-artifact) was modified while producing this file.**
+artifact) was modified while producing this file.
 
 Scope: maps the first Human QA pass's findings to `M12.QA feedback-round 1–4`
 (Playback Contract / Desktop Layout Contract / Workflow-Data Semantics Contract /

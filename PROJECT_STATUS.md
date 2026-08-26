@@ -1,6 +1,6 @@
 # ListenTrace Project Status
 
-Last updated: 2026-08-26 (Milestone 14 — Final Product Hardening & Full Manual Regression: **COMPLETE / ACCEPTED / MERGED**. Accepted M14 product baseline: the final commit on `milestone/14-final-product-hardening` merged into `main` via the M14 pull request. Milestone 12 and Milestone 13 are complete, accepted, and merged into `main`. Milestone 14 Phase 0 completed. Milestone 14 Phase 1 (Whole-Product Hardening Audit) complete and Product Owner accepted, producing `docs/M14_PHASE1_WHOLE_PRODUCT_HARDENING_AUDIT.md`. Corrective Batches A (Cross-Window State Consistency), B (Semantic & Time-Display Correctness), and C (Final QA Reconciliation) are all complete — every confirmed defect from the accepted Phase 1 audit is resolved (0 open). Human QA Round 2 is **PASS** (0 open Human QA defects; the one finding, `m09-04` structured-export Markdown/JSON parity, was corrected across two focused correctives before Product Owner retest passed). The pre-merge repository-hygiene/privacy/Windows-app-identity corrective is **Product Owner ACCEPTED** (Windows taskbar-identity spot-check PASS). M14 confirmed open defects: **0**. M14-internal release blockers: **0**. Automated test suite: 947 passing. **Milestone 15 — Release Candidate & Delivery is the current/next lifecycle milestone and is ready to start; implementation has not begun** (15.1/15.2/15.3 not completed). Schema remains version 12. v1.0 is not yet Release Ready / not yet Current Version Complete.)
+Last updated: 2026-08-26 (Milestone 14 — Final Product Hardening & Full Manual Regression: **COMPLETE / ACCEPTED / MERGED**. Accepted M14 product baseline: the final commit on `milestone/14-final-product-hardening` merged into `main` via the M14 pull request. Milestone 12 and Milestone 13 are complete, accepted, and merged into `main`. Milestone 14 Phase 0 completed. Milestone 14 Phase 1 (Whole-Product Hardening Audit) complete and Product Owner accepted, producing `docs/M14_PHASE1_WHOLE_PRODUCT_HARDENING_AUDIT.md`. Corrective Batches A (Cross-Window State Consistency), B (Semantic & Time-Display Correctness), and C (Final QA Reconciliation) are all complete — every confirmed defect from the accepted Phase 1 audit is resolved (0 open). Human QA Round 2 is **PASS** (0 open Human QA defects; the one finding, `m09-04` structured-export Markdown/JSON parity, was corrected across two focused correctives before Product Owner retest passed). The pre-merge repository-hygiene/privacy/Windows-app-identity corrective is **Product Owner ACCEPTED** (Windows taskbar-identity spot-check PASS). M14 confirmed open defects: **0**. M14-internal release blockers: **0**. Automated test suite: 948 passing. **Milestone 15 — Release Candidate & Delivery is the current/next lifecycle milestone and is ready to start; implementation has not begun** (15.1/15.2/15.3 not completed). Schema remains version 12. v1.0 is not yet Release Ready / not yet Current Version Complete.)
 
 ## Project Purpose
 
@@ -21,7 +21,7 @@ The remote repository exists, is private, and uses `main` as its default branch.
 | Desktop shell | All 16 surfaces reconstructed and aligned to M13 Design System (Professional Blue `#2563EB`, Dark Focus `#0F172A`, Paper Study `#FDFBF7`/`#1B1E25`, Ruled notebook lists, clear Primary/Secondary/Quiet/Danger action grammar) |
 | Presentation / theme system | Milestone 13 Design System: `src/listentrace/ui/theme.py` — unified tokens, dynamic QSS generation, surface/role helpers (`apply_surface`, `apply_role`), paper & notebook styling (`make_notebook_surface`, `make_card`), and WCAG contrast compliance |
 | Database schema | Schema version 12 (stable, zero domain regression during M13/M14) |
-| Automated tests | **947 passed** — 100% green regression and integration test suite |
+| Automated tests | **948 passed** — 100% green regression and integration test suite |
 | Build and packaging | Phase A/B/C1 complete; Milestone 15.1 (Candidate Build/Packaging Refresh) and 15.2 (Clean-Machine Acceptance) pending, ready to start |
 
 ## Current Lifecycle Phase
@@ -77,7 +77,7 @@ Functional feature completion was reached after Milestone 10: every planned loca
 
 - Milestone 15.1 (Candidate Build/Packaging Refresh) not completed.
 - Milestone 15.2 clean-machine validation pending.
-- Real clean-machine MP4/H.264 validation pending (not tested anywhere yet — Phase C1 had no H.264 encoder available to produce a sample).
+- Real clean-machine packaged MP4/H.264 validation pending (dev-source playback was verified during Milestone 3; packaged playback in a genuine clean Windows environment without developer codecs remains pending Milestone 15.2).
 - Milestone 15.3 (Release Candidate Closure & Delivery) not completed.
 - v1.0 not release-ready.
 - Two narrower gaps from Milestone 11 Closeout, deferred rather than blocking: a 125%/150% Windows display-scale pass was never available on this development machine and remains unverified; the installed-application (Inno Setup) runtime-icon context was reasoned by code equivalence rather than freshly rebuilt and re-observed, since Inno Setup is not installed in this environment.
@@ -113,8 +113,8 @@ Begin Milestone 15 — Release Candidate & Delivery: 15.1 (Candidate Build/Packa
 
 ## Repository State
 
-- `main` branch: contains Milestone 12 and Milestone 13, synchronized with `origin/main` at merge commit `495dfbae9b9454c5f5788f1f3a2cee3318e27d00`.
-- `milestone/14-final-product-hardening`: active Milestone 14 working branch.
+- `main` branch: contains the accepted Milestone 12, Milestone 13, and Milestone 14 baselines after the M14 pull request merge (historical pre-M14 `main` baseline was merge commit `495dfbae9b9454c5f5788f1f3a2cee3318e27d00`).
+- `milestone/14-final-product-hardening`: completed Milestone 14 working branch (historical).
 - Continuous integration: not configured.
 
 ## Completed
