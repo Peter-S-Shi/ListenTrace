@@ -25,6 +25,7 @@ from listentrace.ui import theme
 from listentrace.ui.widgets.notebook_paper import GrainedDeskWidget
 from listentrace.ui.theme import SPACE_COMPACT, SPACE_NORMAL, SPACE_PAGE, SPACE_SECTION, apply_role, apply_surface
 from listentrace.ui.widgets.loop_grace_change_bus import loop_grace_change_bus
+from listentrace.ui.widgets.material_metadata_bus import material_metadata_bus
 from listentrace.ui.widgets.recording_panel import RecordingPanel, recording_change_bus
 from listentrace.ui.windows.material_loop_settings_dialog import MaterialLoopSettingsDialog
 from listentrace.ui.windows.player_window import _format_time
@@ -63,6 +64,7 @@ class ShadowingPracticeWindow(QMainWindow):
         self._loop_settings_dialog: MaterialLoopSettingsDialog | None = None
         loop_grace_change_bus.global_default_changed.connect(self._on_loop_grace_global_default_changed)
         loop_grace_change_bus.material_override_changed.connect(self._on_loop_grace_material_override_changed)
+        material_metadata_bus.material_renamed.connect(self._on_material_renamed)
         self._playback_usable = True
         self._cue_index: int | None = 0 if self._cues else None
         if initial_cue_id is not None:
@@ -90,6 +92,7 @@ class ShadowingPracticeWindow(QMainWindow):
         # -------------------------------------------------------------------
         header = theme.make_surface_header(self._material.title)
         header_row = header.top_bar
+        self._header_title_label = header.title_label
         self._progress_label = QLabel("")
         apply_role(self._progress_label, "caption")
         header.title_row.addWidget(self._progress_label, 1)
@@ -282,6 +285,15 @@ class ShadowingPracticeWindow(QMainWindow):
     def _refresh_loop_end_grace(self) -> None:
         grace_ms = loop_grace_service.effective_loop_end_grace_ms(self._connection, self._material.id)
         self._player_session.set_loop_end_grace_ms(grace_ms)
+
+    def _on_material_renamed(self, material_id: int, new_title: str) -> None:
+        # M14 Corrective Batch A (A2): only title-derived presentation
+        # refreshes -- recording/takes state is untouched.
+        if material_id != self._material.id:
+            return
+        self._material.title = new_title
+        self.setWindowTitle(f"ListenTrace — Shadowing Practice — {new_title}")
+        self._header_title_label.setText(new_title)
 
     # ---- shared playback plumbing ----
 

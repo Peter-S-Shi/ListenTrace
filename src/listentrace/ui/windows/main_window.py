@@ -50,6 +50,7 @@ from listentrace.ui.theme import (
     make_surface_header,
     set_button_icon,
 )
+from listentrace.ui.widgets.material_metadata_bus import material_metadata_bus
 from listentrace.ui.widgets.recording_panel import recording_change_bus
 from listentrace.ui.windows.guided_session_window import GuidedSessionWindow
 from listentrace.ui.windows.import_dialog import ImportDialog
@@ -486,6 +487,13 @@ class MainWindow(QMainWindow):
             set_button_icon(self._toggle_sidebar_button, "hide", color_token="secondary")
 
     def refresh_library(self) -> None:
+        # M14 Corrective Batch A (A1): preserve selection by stable material
+        # identity, not by row index/title -- a rebuilt list has neither. If
+        # the previously selected material isn't in the rebuilt list (e.g. it
+        # was archived/restored/removed, so it correctly left this view), no
+        # item below matches and selection is simply left empty, which is the
+        # correct "expected disappearance" behavior for those actions.
+        previously_selected_id = self._selected_material_id()
         self._material_list.clear()
 
         materials = (
@@ -529,6 +537,8 @@ class MainWindow(QMainWindow):
             else:
                 item.setIcon(get_icon("material", color_token="accent"))
             self._material_list.addItem(item)
+            if previously_selected_id is not None and material.id == previously_selected_id:
+                self._material_list.setCurrentItem(item)
 
     def _selected_material_id(self) -> int | None:
         item = self._material_list.currentItem()
@@ -889,7 +899,13 @@ class MainWindow(QMainWindow):
             self, "Rename Material", "New title:", text=detail.title
         )
         if ok and new_title.strip():
-            library.rename_material(self._connection, material_id, new_title.strip())
+            stripped_title = new_title.strip()
+            library.rename_material(self._connection, material_id, stripped_title)
+            # M14 Corrective Batch A (A2): notify already-open dependent
+            # windows (Player/Guided Session/Quiz/Quick Practice/Shadowing)
+            # so their stale window title/header presentation refreshes
+            # without requiring them to be closed and reopened.
+            material_metadata_bus.material_renamed.emit(material_id, stripped_title)
             self.refresh_library()
 
     def _on_archive_restore_clicked(self) -> None:

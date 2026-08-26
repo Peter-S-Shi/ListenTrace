@@ -10,7 +10,9 @@
 
 `6fea917` is a remote-pushed commit whose direct parent is `2e5a038876fa21a6375af37f6f966001b155cbbd` — the branch HEAD the Phase 1 kickoff prompt itself names as "the accepted Phase 0 baseline." `6fea917`'s own diff (`fix(learning-history): wrap section workspace tabs in scroll area and prevent metric/list squishing`, `theme.py` + `learning_history_window.py`, 77 insertions / 49 deletions) is the Learning History scroll/metric correction referenced throughout this audit — it was already present on the branch, already reviewed by its own commit, and predates this read-only audit entirely. This audit did not author, and does not take credit for, that change; it is cited here only as prior context for the Learning History findings below.
 
-**Revision note**: this is a corrected version of the Phase 1 audit. Product Owner review identified three classification errors in the first draft (a UI-unreachable dead-code path misclassified as a confirmed P1 defect; four semantically distinct list actions incorrectly grouped as one defect; a not-yet-reproduced scenario placed in the confirmed-defect inventory instead of verification-required). All three are corrected below with new evidence gathered specifically to resolve them. No corrective implementation has occurred — this remains a read-only planning document.
+**Revision note**: this is a corrected version of the Phase 1 audit. Product Owner review identified three classification errors in the first draft (a UI-unreachable dead-code path misclassified as a confirmed P1 defect; four semantically distinct list actions incorrectly grouped as one defect; a not-yet-reproduced scenario placed in the confirmed-defect inventory instead of verification-required). All three are corrected below with new evidence gathered specifically to resolve them.
+
+**Batch A status update (post-acceptance)**: the Phase 1 audit below was Product Owner **ACCEPTED**. Corrective Batch A — Cross-Window State Consistency — has since been implemented and closes **P2-1, P2-2, P2-3, and P2-4** (all four are marked `[RESOLVED — Batch A]` in Section B below, with their implementation/regression-test evidence). This document is left otherwise unchanged from its accepted form, per instruction — findings, corrections, and reasoning below still reflect the state of the product *before* Batch A, except where a `[RESOLVED — Batch A]` marker says otherwise. P2-5, P3-1, G-1, and G-2 remain open. See the end of Section F for what remains.
 
 ---
 
@@ -24,7 +26,8 @@
   - CONFIRMED GOVERNANCE/DOCUMENTATION DRIFT: 2
   - TEST COVERAGE GAP: 10
   - HUMAN-ONLY VERIFICATION REQUIRED: 4
-  - ACCEPTED LIMITATION / NON-DEFECT (positively verified, no action needed): 17
+  - ACCEPTED LIMITATION / NON-DEFECT (positively verified, no action needed): 20 (corrected from an earlier draft's miscount of 17 against Section H's actual 20-item list; Section H is the source of truth)
+  - **Post-acceptance**: 4 of the 6 confirmed defects (P2-1, P2-2, P2-3, P2-4) are now `[RESOLVED — Batch A]`; 2 remain open (P2-5, P3-1).
 
 ---
 
@@ -36,25 +39,29 @@
 
 ### P2
 
-**P2-1. Guided Session Stage 3 and Quick Practice diagnosis panels never subscribe to `label_color_change_bus`**
+**P2-1. `[RESOLVED — Batch A / A3]` Guided Session Stage 3 and Quick Practice diagnosis panels never subscribe to `label_color_change_bus`**
+- **Resolution**: both windows now import `label_color_change_bus`, connect it in `__init__`, and implement a narrow `_refresh_diagnosis_presentation_colors()` that reapplies transcript highlighting and walks the existing `DiagnosisNoteRow` list items calling `.set_color(...)` in place — deliberately *not* the full `_refresh_diagnosis_cue_panels()`/`_populate_diagnose()` reload path, since those also clear the in-progress diagnosis edit form (checkboxes, heard-as, note draft) as a side effect, which the corrective prompt explicitly required preserving. Regression tests: `test_label_color_live_refresh_preserves_diagnosis_editing_state` in both `tests/integration/test_guided_session_window.py` and `tests/integration/test_quick_practice_window.py` — each saves one diagnosis, leaves an unsaved draft note, triggers the bus, and asserts both the color updated and the draft note text is untouched.
 - Files: `guided_session_window.py`, `quick_practice_window.py` (zero references to `label_color_change_bus` in either file, confirmed by repo-wide grep — vs. `player_window.py:236`, which connects, and `settings_dialog.py:238`, which emits after a real edit).
 - Trigger: user has a Guided Session Stage 3 panel or a Quick Practice diagnosis panel open, opens the (real, reachable) Settings dialog in parallel — both are independent, non-modal top-level windows, nothing prevents this — and changes a label color there.
 - Observed vs expected: per the bus's own docstring ("every already-open study desk surface"), diagnosis-evidence colors should update live in these panels too; in practice they only refresh the next time the window/stage is opened.
 - Existing tests: none reference `label_color_change_bus` from either window's test file.
 - Human retest: yes, for the fix (a live two-window check that Guided Session/Quick Practice repaint mid-session).
 
-**P2-2. Start Recording stays clickable in a second `RecordingPanel` while another panel is actively recording — click fails only after the fact**
+**P2-2. `[RESOLVED — Batch A / A4]` Start Recording stays clickable in a second `RecordingPanel` while another panel is actively recording — click fails only after the fact**
+- **Resolution**: `_RecordingChangeBus` gained two payload-free `recording_started`/`recording_stopped` signals (payload-free because the underlying domain/database invariant is global, not per-material/cue — migration 8's partial unique index allows at most one `status = 'recording'` row app-wide). `RecordingPanel` now tracks a separate `_external_recording_active` flag alongside its own `_active_recording`, emits `recording_started` right after starting its own capture and `recording_stopped` from all three paths that clear `_active_recording` (normal stop/finish via `_on_recorder_stopped`, `abort_active_recording`, and `_on_recording_error`), and `_update_recording_buttons()` now disables Start Recording and shows "Another recording is in progress elsewhere." on a sibling panel while blocked. The domain/database invariant remains the ultimate safety guard — this only makes UI availability truthful before the click, per the corrective prompt's own framing. Regression test: `test_sibling_panel_start_button_becomes_truthful_while_another_panel_is_recording` in `tests/integration/test_recording_panel.py`.
 - Files: `recording_panel.py:393-406` (`_update_recording_buttons`, panel-local only); `_RecordingChangeBus` (`recording_panel.py:29-43`) carries `cue_changed`/`material_changed` but no "recording started/stopped" event.
 - Observed vs expected: clicking calls `recording_service.begin_recording`, which raises `RecordingValidationError("recording_in_progress", ...)` — no data loss (the DB unique index and service pre-check fully protect the invariant), but the button visibly offers an action guaranteed to fail.
 - Human retest: not required for the fix; UI-only, deterministic from signal wiring.
 
-**P2-3. Renaming a material loses its Library-list selection (narrowed from the original draft — see Correction 2)**
+**P2-3. `[RESOLVED — Batch A / A1]` Renaming a material loses its Library-list selection (narrowed from the original draft — see Correction 2)**
+- **Resolution**: `refresh_library()` now captures `_selected_material_id()` before clearing the list, and re-selects the matching item by `material_id` (not row index/title) once the list is rebuilt — a no-op when the id genuinely isn't in the rebuilt list, which correctly preserves Correction 2's finding that Archive/Restore/Remove should *not* keep a selection. Regression tests: `test_rename_preserves_library_selection_by_material_id` (selection survives a rename that also changes alphabetical position) and `test_archiving_correctly_leaves_selection_empty_not_a_regression` (archive still correctly clears selection) in `tests/integration/test_main_window_m13.py`.
 - Files: `main_window.py:883-893` (`_on_rename_clicked`) → `refresh_library()` (`:488-531`) does `self._material_list.clear()` and rebuilds with no `setCurrentItem`/`setCurrentRow` call anywhere in the file.
 - Scope check performed: `list_materials_by_status` (`repository.py:203-208`) orders by `title COLLATE NOCASE`, and a rename never changes a material's `status`, so the renamed item **always remains in the currently-displayed list** (it may move to a new alphabetical position, but it does not leave the view). This is what makes selection loss here a genuine defect rather than expected disappearance — see Correction 2 for why archive/restore/remove are different and are *not* included in this finding.
 - Observed vs expected: after renaming, the dossier blanks and all action buttons disable; the user must re-click the (still-visible, just-renamed) item to continue a natural follow-up action.
 - Human retest: not required; deterministic from code.
 
-**P2-4. Renaming a material does not notify already-open dependent windows on that material (narrowed from the original draft — see Correction 3)**
+**P2-4. `[RESOLVED — Batch A / A2]` Renaming a material does not notify already-open dependent windows on that material (narrowed from the original draft — see Correction 3)**
+- **Resolution**: a new, narrowly-scoped `material_metadata_bus` (`src/listentrace/ui/widgets/material_metadata_bus.py`, one `material_renamed(material_id, new_title)` signal — deliberately not a repurposed `recording_change_bus`, per the corrective prompt's explicit instruction against misleading ownership, and deliberately not a generic material-changed event, since rename is the only signal currently needed). `MainWindow._on_rename_clicked` emits it after a successful rename. `PlayerWindow`, `GuidedSessionWindow`, `QuizWindow`, `QuickPracticeWindow`, and `ShadowingPracticeWindow` — the five material-bound long-lived surfaces identified by auditing every `setWindowTitle` call site that bakes in a material title — each connect it and refresh only their window title and in-body header label (`theme.make_surface_header`'s `title_label`) plus `self._material.title` itself (so any later-opened child dialog reading it fresh, e.g. Loop Settings, also picks up the new title); no other session/playback/quiz/recording state is touched. Regression tests: one per window (`test_material_renamed_updates_window_title_and_header` in each of `test_guided_session_window.py`, `test_quick_practice_window.py`, `test_shadowing_practice_window.py`, plus a Quiz variant in `test_ui_smoke.py`), each also asserting a rename for a *different* material_id is correctly ignored; and one end-to-end test (`test_rename_propagates_to_open_player_window_title_and_header` in `test_main_window_m13.py`) driving the real `MainWindow → PlayerWindow` path.
 - Files: no signal of any kind is emitted from `_on_rename_clicked` (`main_window.py:883-893`); contrast with `_on_remove_clicked`, which does emit `recording_change_bus.material_changed` (`:925`).
 - Observed vs expected: a `PlayerWindow`/`GuidedSessionWindow`/`QuizWindow` already open on material X keeps showing the stale title indefinitely after a rename from the Library — the only one of the four mutating actions with a live-window consistency gap and *zero* signal of any kind (see Correction 3: archive/restore and remove were independently re-investigated this revision and are **not** included here).
 - Human retest: not required for the fix; the effect (a stale title on an open window) is deterministic and observable.
@@ -176,7 +183,7 @@ Only gaps judged meaningful (i.e., an area a defect could hide in, or already hi
 
 Grouped by shared root cause/surface. Re-derived this revision now that no P1 exists — ordering below reflects everyday workflow frequency and evidenced risk, not a mechanical "highest label wins" rule.
 
-### Batch 1 — Rename consistency (Library selection + cross-window staleness)
+### Batch 1 — `[DONE — implemented as M14 Corrective Batch A1/A2]` Rename consistency (Library selection + cross-window staleness)
 - **Goal**: preserve Library-list selection after a rename; notify already-open dependent windows so their title stops going stale.
 - **Findings included**: P2-3, P2-4.
 - **Why first**: rename is exercised by essentially every user in ordinary Library management, and both findings are narrowly scoped, code-verifiable, and now precisely bounded to one action (not four) after Correction 2/3 — the cheapest batch to close correctly.
@@ -193,15 +200,16 @@ Grouped by shared root cause/surface. Re-derived this revision now that no P1 ex
 - **Human retest**: not required; fully code-verifiable.
 - **Dependencies**: none. Can run fully in parallel with Batch 1.
 
-### Batch 3 — Live-refresh bus completeness for diagnosis panels
+### Batch 3 — `[DONE — implemented as M14 Corrective Batch A3]` Live-refresh bus completeness for diagnosis panels
 - **Goal**: extend `label_color_change_bus` subscription to Guided Session Stage 3 and Quick Practice diagnosis panels; resolve the `LabelColorDialog`/`_label_colors_button` dead-code cleanup decision (delete, or add an explicit non-reachability test) from Correction 1.
 - **Findings included**: P2-1, plus the Correction-1 cleanup item.
 - **Likely files**: `guided_session_window.py`, `quick_practice_window.py`, `label_color_dialog.py`/`player_window.py` (cleanup).
 - **Regression strategy**: bus-subscription tests for both windows (test gap 2); a deliberate reachability test either way for the cleanup item (test gap 1).
 - **Human retest**: recommended smoke check for the live-refresh half.
 - **Dependencies**: none.
+- **Status**: P2-1 done (see P2-1's `[RESOLVED]` entry in Section B). The Correction-1 dead-code cleanup item (`LabelColorDialog`/`_label_colors_button`) was explicitly **deferred to Batch C** by the Batch A kickoff instruction ("Cleanup may be deferred to Batch C unless removing it is trivially safe and all affected tests are updated") and remains untouched — still filed as a TEST COVERAGE GAP, not a defect.
 
-### Batch 4 — Cross-panel recording-button awareness
+### Batch 4 — `[DONE — implemented as M14 Corrective Batch A4]` Cross-panel recording-button awareness
 - **Goal**: give `_RecordingChangeBus` a "recording started/stopped" event so a sibling `RecordingPanel` disables Start Recording proactively instead of failing post-click.
 - **Findings included**: P2-2.
 - **Likely files**: `recording_panel.py`.
@@ -267,10 +275,16 @@ Positively verified during this audit (including this revision's corrections) as
 
 ## I. Recommended Next Action
 
-Start corrective implementation with **Batch 1 (rename consistency)**. It closes the two findings that touch the single most frequently exercised Library-management action, both are now precisely scoped after this revision's correction (one action, not four), both are fully code-verifiable, and neither has any dependency on a human-only investigation. Batch 2 (local-time sweep) is equally low-risk and fully independent — it may run in parallel with or immediately after Batch 1 at the Product Owner's discretion.
+~~Start corrective implementation with **Batch 1 (rename consistency)**...~~ — **superseded by the Batch A implementation below.**
 
-Batches 3 and 4 address the same structural "incomplete rollout" pattern (Section C, Pattern 1 and 2) but each requires two windows to be open simultaneously to manifest, making them lower real-world frequency than Batches 1–2; they may be resequenced after either, or combined into one "cross-window awareness" sweep if the Product Owner prefers a single batch over two.
+**Post-acceptance update**: Batches 1, 3, and 4 (findings P2-3, P2-4, P2-1, P2-2 — everything in Section C's Pattern 1 "incomplete bus rollout" and Pattern 2 "truthful-before-click" instances that Batch A's scope covered) are implemented, tested, and merged to this branch as **M14 Corrective Batch A — Cross-Window State Consistency**. See each finding's `[RESOLVED — Batch A]` marker in Section B for implementation/test detail.
 
-Batch 5 is pure cleanup and may be folded into whichever other batch lands first with no separate scheduling needed.
+**What remains**:
+- **Batch 2 — Local-time display sweep** (P2-5): not started. Fully independent of Batch A, code-verifiable, no human retest required. Recommended next.
+- **Batch 5 — Small UX correctness + governance cleanup** (P3-1, G-1, G-2, the remove-while-open-window permanent regression test from test gap 8): not started. Low risk, foldable into Batch 2 or shipped standalone.
+- The Correction-1 dead-code cleanup (`LabelColorDialog`/`_label_colors_button`) remains explicitly deferred, per the Batch A kickoff's own instruction, to a later "Batch C."
+- Human QA questionnaire reconciliation (Section D) is deliberately deferred until the remaining corrective batches stabilize, per instruction, to avoid repeated document churn.
+
+Do not begin Phase C2/Phase D until the remaining batches close and Human QA Round 2 runs against the corrected product, per the Phase 1 kickoff's own scope boundary (unchanged from the original recommendation).
 
 Do not begin Phase C2 (clean-machine acceptance) or Phase D (release candidate) until this batch sequence is closed and Human QA Round 2 has run against the corrected product, per the Phase 1 kickoff's own scope boundary.

@@ -502,6 +502,39 @@ def test_quiz_history_dialog_delete_requires_confirmation_and_removes_the_row(qa
     dialog.close()
 
 
+def test_quiz_window_material_renamed_updates_title_and_header(qapp, tmp_path):
+    """M14 Corrective Batch A (A2): rename propagation to an already-open
+    dependent window."""
+    from listentrace.application.services.player_loading_service import load_material_for_player
+    from listentrace.ui.widgets.material_metadata_bus import material_metadata_bus
+    from listentrace.ui.windows.quiz_window import QuizWindow
+
+    connection = open_connection(tmp_path / "smoke_quiz_rename.db")
+    migrate(connection)
+
+    media = tmp_path / "lesson.wav"
+    _make_wav(media)
+    subtitle = tmp_path / "lesson.srt"
+    subtitle.write_text(_MULTI_CUE_SRT, encoding="utf-8")
+    result = import_material(connection, media, subtitle, "Quiz Lesson")
+    attempt = quiz_service.create_material_quiz(connection, result.material_id, requested_count=5, seed=1)
+
+    load_result = load_material_for_player(connection, result.material_id)
+    quiz_window = QuizWindow(connection, load_result, attempt.id, None)
+
+    assert quiz_window.windowTitle() == "ListenTrace — Quiz — Quiz Lesson"
+    assert quiz_window._header_title_label.text() == "Quiz Lesson"
+
+    material_metadata_bus.material_renamed.emit(result.material_id, "Renamed Quiz Lesson")
+
+    assert quiz_window.windowTitle() == "ListenTrace — Quiz — Renamed Quiz Lesson"
+    assert quiz_window._header_title_label.text() == "Renamed Quiz Lesson"
+    assert quiz_window._material.title == "Renamed Quiz Lesson"
+
+    quiz_window.close()
+    connection.close()
+
+
 def test_quiz_window_full_take_submit_and_review_flow(qapp, tmp_path):
     connection = open_connection(tmp_path / "smoke.db")
     migrate(connection)

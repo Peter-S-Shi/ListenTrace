@@ -299,6 +299,57 @@ def test_m4_annotation_semantics_reused_misheard_requires_heard_as(qapp, conn, t
     window.close()
 
 
+def test_material_renamed_updates_window_title_and_header(qapp, conn, tmp_path):
+    """M14 Corrective Batch A (A2): rename propagation to an already-open
+    dependent window."""
+    from listentrace.ui.widgets.material_metadata_bus import material_metadata_bus
+
+    window, material_id, _ = _open_guided_window(conn, tmp_path)
+    assert "Guided Lesson" in window.windowTitle()
+    assert window._header_title_label.text() == "Guided Lesson"
+
+    material_metadata_bus.material_renamed.emit(material_id, "Renamed Guided Lesson")
+
+    assert window.windowTitle() == "ListenTrace — Guided Practice — Renamed Guided Lesson"
+    assert window._header_title_label.text() == "Renamed Guided Lesson"
+    assert window._material.title == "Renamed Guided Lesson"
+
+    # A different material_id must be ignored.
+    material_metadata_bus.material_renamed.emit(material_id + 999, "Someone Else's Lesson")
+    assert window._header_title_label.text() == "Renamed Guided Lesson"
+    window.close()
+
+
+def test_label_color_live_refresh_preserves_diagnosis_editing_state(qapp, conn, tmp_path, monkeypatch):
+    """M14 Corrective Batch A (A3): a Settings-driven label-color change must
+    repaint Stage 3 diagnosis colors live without clearing the in-progress
+    diagnosis edit form (an unsaved draft note) as a side effect."""
+    from PySide6.QtGui import QColor
+
+    from listentrace.application.services import label_preference_service
+    from listentrace.ui.widgets.label_color_change_bus import label_color_change_bus
+
+    monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.StandardButton.Yes)
+    window, _, session_id = _open_guided_window(conn, tmp_path)
+    window._show_stage("transcript_diagnosis")
+    window._diagnosis_cue_list.setCurrentRow(0)
+
+    window._diagnosis_label_checkboxes["keyword"].setChecked(True)
+    window._on_save_diagnosis_clicked()
+    assert window._diagnosis_list.count() == 1
+
+    # Leave an unsaved draft in the note field -- must survive a color-only repaint.
+    window._diagnosis_note_edit.setText("unsaved draft note")
+
+    label_preference_service.update_label_color(conn, "keyword", "#123456")
+    label_color_change_bus.label_colors_changed.emit()
+
+    row = window._diagnosis_list.itemWidget(window._diagnosis_list.item(0))
+    assert QColor(row.color_hex).name() == QColor("#123456").name()
+    assert window._diagnosis_note_edit.text() == "unsaved draft note"
+    window.close()
+
+
 def test_one_diagnosis_evidence_object_produces_exactly_one_diagnosis_list_row(qapp, conn, tmp_path, monkeypatch):
     """M13 Axis 4 corrective: `_refresh_diagnosis_cue_panels()` previously called
     `self._diagnosis_list.addItem(list_item)` both before building the

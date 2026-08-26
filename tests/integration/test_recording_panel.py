@@ -90,6 +90,55 @@ def test_deleting_a_take_in_one_panel_refreshes_a_second_open_panel_on_the_same_
     panel_b.deleteLater()
 
 
+def test_sibling_panel_start_button_becomes_truthful_while_another_panel_is_recording(
+    qapp, conn, recordings_dir, monkeypatch
+):
+    """M14 Corrective Batch A (A4): the domain/database invariant (migration
+    8's partial unique index -- at most one `status = 'recording'` row across
+    the whole app) already rejects a second simultaneous capture, but before
+    this fix a sibling panel's Start Recording button stayed enabled and only
+    failed the click. It must now reflect the true global state before the
+    click, and must re-enable once the recording panel that started it stops
+    (covering the abort/cancel path here specifically)."""
+    from listentrace.infrastructure.media.recording import AudioInputDevice, RecordingController
+
+    monkeypatch.setattr(QMessageBox, "information", lambda *a, **k: None)
+    fake_device = AudioInputDevice(device_id="dev-1", description="Fake Mic", is_default=True)
+    monkeypatch.setattr(RecordingPanel, "_selected_device", lambda self: fake_device)
+    monkeypatch.setattr(RecordingController, "set_device", lambda self, device_id: True)
+    monkeypatch.setattr(RecordingController, "start", lambda self, path: None)
+
+    material_id, cues = _make_material_with_cues(conn)
+
+    panel_a = RecordingPanel(conn, recordings_dir)
+    panel_a.set_context(material_id, cues[0].id, None)
+    panel_b = RecordingPanel(conn, recordings_dir)
+    panel_b.set_context(material_id, cues[1].id, None)
+
+    assert panel_a._start_recording_button.isEnabled() is True
+    assert panel_b._start_recording_button.isEnabled() is True
+
+    panel_a._on_start_recording_clicked()
+    assert panel_a._active_recording is not None
+    assert panel_a._start_recording_button.isEnabled() is False  # its own capture
+
+    assert panel_b._start_recording_button.isEnabled() is False, (
+        "a sibling panel's Start Recording must become truthfully disabled "
+        "once ANY panel begins recording, not just fail after the click"
+    )
+    assert "Another recording is in progress" in panel_b._recording_state_label.text()
+
+    panel_a.abort_active_recording()
+
+    assert panel_b._start_recording_button.isEnabled() is True, (
+        "the sibling panel must re-enable once the recording that blocked it stops"
+    )
+    assert panel_b._recording_state_label.text() == ""
+
+    panel_a.deleteLater()
+    panel_b.deleteLater()
+
+
 def test_re_deleting_an_already_gone_take_clears_the_stale_row_without_raising(
     qapp, conn, recordings_dir, monkeypatch
 ):
