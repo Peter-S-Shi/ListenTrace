@@ -584,6 +584,91 @@ def test_quiz_window_full_take_submit_and_review_flow(qapp, tmp_path):
     quiz_window.close()
 
 
+def test_quiz_window_submit_button_confirms_submits_reviews_then_closes(qapp, tmp_path, monkeypatch):
+    """M14 Corrective Batch C (C3): exercises the real `_on_submit_clicked`
+    UI handler end-to-end (confirmation dialog, unanswered-count warning
+    text, submit, review-then-close sequencing) rather than only the
+    service-level `quiz_service.submit_quiz` -- the gap the Phase 1 audit
+    flagged as untested."""
+    from listentrace.application.services.player_loading_service import load_material_for_player
+    from listentrace.ui.windows.quiz_review_dialog import QuizReviewDialog
+    from listentrace.ui.windows.quiz_window import QuizWindow
+
+    connection = open_connection(tmp_path / "smoke_quiz_submit.db")
+    migrate(connection)
+    media = tmp_path / "lesson.wav"
+    _make_wav(media)
+    subtitle = tmp_path / "lesson.srt"
+    subtitle.write_text(_MULTI_CUE_SRT, encoding="utf-8")
+    result = import_material(connection, media, subtitle, "Lesson One")
+    attempt = quiz_service.create_material_quiz(connection, result.material_id, requested_count=5, seed=1)
+    load_result = load_material_for_player(connection, result.material_id)
+    quiz_window = QuizWindow(connection, load_result, attempt.id, None)
+    quiz_window.show()
+
+    import json
+
+    from listentrace.domain.enums.question_type import QuestionType
+
+    # Answer only the first question -- the rest stay unanswered so the
+    # confirmation dialog's "N question(s) still unanswered" text is real.
+    state = quiz_service.load_quiz_state(connection, attempt.id)
+    quiz_window._show_question(0)
+    correct = json.loads(state.questions[0].correct_answer_payload)
+    if state.questions[0].question_type in (QuestionType.DICTATION.value, QuestionType.REVIEW_MISSED.value):
+        quiz_window._answer_line_edit.setText(correct["answer_text"])
+    else:
+        quiz_window._choice_radio_buttons[correct["correct_choice_index"]].setChecked(True)
+
+    seen_messages = []
+
+    def _fake_question(self, title, message, buttons):
+        seen_messages.append(message)
+        return QMessageBox.StandardButton.Yes
+
+    monkeypatch.setattr(QMessageBox, "question", _fake_question)
+    review_opened = []
+    monkeypatch.setattr(QuizReviewDialog, "exec", lambda self: review_opened.append(True))
+
+    quiz_window._on_submit_clicked()
+
+    assert any("still unanswered" in m for m in seen_messages), (
+        "the unanswered-count warning must actually appear in the confirmation text"
+    )
+    completed = quiz_service.get_quiz_attempt(connection, attempt.id)
+    assert completed.status == "completed"
+    assert review_opened == [True], "review must open automatically right after a successful submit"
+    assert quiz_window.isVisible() is False, "the quiz window must close after submit+review"
+
+
+def test_quiz_window_submit_declined_confirmation_leaves_quiz_active(qapp, tmp_path, monkeypatch):
+    """The "No" branch of the submit confirmation must leave the attempt
+    active and the window open -- submission is not forced."""
+    from listentrace.application.services.player_loading_service import load_material_for_player
+    from listentrace.ui.windows.quiz_window import QuizWindow
+
+    connection = open_connection(tmp_path / "smoke_quiz_decline.db")
+    migrate(connection)
+    media = tmp_path / "lesson.wav"
+    _make_wav(media)
+    subtitle = tmp_path / "lesson.srt"
+    subtitle.write_text(_MULTI_CUE_SRT, encoding="utf-8")
+    result = import_material(connection, media, subtitle, "Lesson One")
+    attempt = quiz_service.create_material_quiz(connection, result.material_id, requested_count=5, seed=1)
+    load_result = load_material_for_player(connection, result.material_id)
+    quiz_window = QuizWindow(connection, load_result, attempt.id, None)
+    quiz_window.show()
+
+    monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.StandardButton.No)
+
+    quiz_window._on_submit_clicked()
+
+    still_active = quiz_service.get_quiz_attempt(connection, attempt.id)
+    assert still_active.status == "active"
+    assert quiz_window.isVisible() is True
+    quiz_window.close()
+
+
 def test_quiz_window_loop_settings_button_opens_a_material_loop_settings_dialog(qapp, tmp_path):
     from listentrace.application.services.player_loading_service import load_material_for_player
     from listentrace.ui.windows.material_loop_settings_dialog import MaterialLoopSettingsDialog

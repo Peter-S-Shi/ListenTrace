@@ -1,6 +1,6 @@
 # ListenTrace Project Status
 
-Last updated: 2026-08-26 (Milestone 14 — Final Product Hardening & Full Manual Regression: **CURRENT / IN PROGRESS** on branch `milestone/14-final-product-hardening`. Milestone 12 and Milestone 13 are complete, accepted, and merged into `main`. Milestone 14 Phase 0 completed: baseline documentation reconciled, interface-sound system excluded, Material Study Dossier aligned with approved wireframe, Settings IA consolidated, and cue selection clearing implemented with 899 passing tests.)
+Last updated: 2026-08-26 (Milestone 14 — Final Product Hardening & Full Manual Regression: **CURRENT / IN PROGRESS** on branch `milestone/14-final-product-hardening`. Milestone 12 and Milestone 13 are complete, accepted, and merged into `main`. Milestone 14 Phase 0 completed. Milestone 14 Phase 1 (Whole-Product Hardening Audit) complete and Product Owner accepted, producing `M14_PHASE1_WHOLE_PRODUCT_HARDENING_AUDIT.md`. Corrective Batches A (Cross-Window State Consistency), B (Semantic & Time-Display Correctness), and C (Final QA Reconciliation) are all complete — every confirmed defect from the accepted Phase 1 audit is resolved (0 open). Automated test suite: 924 passing. Human QA Round 2 is next/pending — Milestone 14 remains open until it runs and passes.)
 
 ## Project Purpose
 
@@ -21,20 +21,20 @@ The remote repository exists, is private, and uses `main` as its default branch.
 | Desktop shell | All 16 surfaces reconstructed and aligned to M13 Design System (Professional Blue `#2563EB`, Dark Focus `#0F172A`, Paper Study `#FDFBF7`/`#1B1E25`, Ruled notebook lists, clear Primary/Secondary/Quiet/Danger action grammar) |
 | Presentation / theme system | Milestone 13 Design System: `src/listentrace/ui/theme.py` — unified tokens, dynamic QSS generation, surface/role helpers (`apply_surface`, `apply_role`), paper & notebook styling (`make_notebook_surface`, `make_card`), and WCAG contrast compliance |
 | Database schema | Schema version 12 (stable, zero domain regression during M13/M14) |
-| Automated tests | **900 passed** — 100% green regression and integration test suite |
+| Automated tests | **924 passed** — 100% green regression and integration test suite |
 | Build and packaging | Phase A complete; Phase C2 pending after Milestone 14 |
 
 ## Current Lifecycle Phase
 
 **Milestone 12 (Completed) ➔ Milestone 13 (Completed) ➔ Milestone 14 — Final Product Hardening & Full Manual Regression (Current)**
 
-Status: **Milestone 12 and Milestone 13 are completed, accepted, and merged into `main`.** The active engineering lifecycle phase is **Milestone 14 — Final Product Hardening & Full Manual Regression**, which includes: Phase 0 immediate correctives (completed), the full Human QA Round 2 questionnaire pass against the finalized UI, and edge-case hardening sweeps. Phase C2 (Clean-Machine Acceptance) and Phase D (v1.0 Release Candidate) remain subsequent release gates.
+Status: **Milestone 12 and Milestone 13 are completed, accepted, and merged into `main`.** The active engineering lifecycle phase is **Milestone 14 — Final Product Hardening & Full Manual Regression**, which includes: Phase 0 immediate correctives (completed), Phase 1 Whole-Product Hardening Audit (completed, Product Owner accepted), Corrective Batches A/B/C (all completed — every confirmed defect from the accepted Phase 1 audit is resolved), and the full Human QA Round 2 questionnaire pass against the finalized UI (**next / pending** — Milestone 14 remains open until it runs and passes). Phase C2 (Clean-Machine Acceptance) and Phase D (v1.0 Release Candidate) remain subsequent release gates.
 
 ## Current Milestone
 
 **Milestone 14 — Final Product Hardening & Full Manual Regression**
 
-Status: **In progress (Phase 0 completed).** Milestone 12 and Milestone 13 are completed, accepted, and merged into `main`.
+Status: **In progress (Phase 0, Phase 1 audit, and Corrective Batches A/B/C completed; Human QA Round 2 next/pending).** Milestone 12 and Milestone 13 are completed, accepted, and merged into `main`.
 
 Milestone 11 — UI/UX Presentation Refresh is completed and accepted (see the Completed section below and `ROADMAP.md`'s Closeout Summary); the Presentation Complete Gate has passed. Milestone 12.1-A (retroactive manual QA baseline) is complete (`manual-qa/`, commit `1285fcf`). The autonomous overnight pass — M12.1-B Batches 1-5 plus a dedicated M12.4 Performance Decision Gate — is complete.
 
@@ -50,6 +50,13 @@ Milestone 13 (Advanced UI/UX Reconstruction) reconstructed all 16 production sur
 - Live label color preference propagation across open Player surfaces implemented and verified via `label_color_change_bus`.
 - Cue selection clearing via right-click context menu implemented; selection box border clipping normalized; automated test suite expanded to 900 passing tests.
 
+**Milestone 14 Phase 1 (Whole-Product Hardening Audit)** is complete and **Product Owner accepted**: a read-only, risk-based audit across all in-scope product areas, producing `M14_PHASE1_WHOLE_PRODUCT_HARDENING_AUDIT.md` — 6 confirmed defects (P2×5, P3×1), 2 governance/documentation drift items, and a proposed corrective batch structure.
+
+**M14 Corrective Batches A, B, and C are all complete.** Every confirmed defect from the accepted Phase 1 audit is now resolved (0 open):
+- **Batch A — Cross-Window State Consistency**: Library-list selection preserved by material_id across rename; already-open dependent windows (Player/Guided Session/Quiz/Quick Practice/Shadowing/`MaterialLoopSettingsDialog`) refresh their title live on rename via a new `material_metadata_bus`; Guided Session Stage 3 and Quick Practice diagnosis panels now live-refresh on label-color changes; sibling `RecordingPanel`s reflect true cross-panel recording state via an authoritative `recording_service.has_active_recording()` query rather than only historical event receipt.
+- **Batch B — Semantic & Time-Display Correctness**: every remaining raw-UTC timestamp in Learning History (Continue Learning, Activity, Diagnoses, Shadowing, the quiz accuracy chart) now renders in local time via `format_local_timestamp` (relocated to `domain/services/time_display.py`); Guided Session's "No Notable Difficulty" action is now gated on the same evidence-count precondition the service enforces; the remove-while-open-window safety property is now permanently regression-tested.
+- **Batch C — Final QA Reconciliation**: governance drift G-1 (test-count wording) and G-2 (path-elision convention — re-verified consistent, no code change needed) closed; the orphaned Player-local Label Colors compatibility path (`LabelColorDialog`, `_label_colors_button`) confirmed unreachable and removed; remaining meaningful test gaps closed (`QuizWindow._on_submit_clicked`, non-BMP annotation highlighting, `create_material_package` transaction rollback, Learning History's 7 scroll-wrapped sections); `manual-qa/manual_review_questionnaire.html` reconciled against the final post-M13/post-M14-corrective-batches product (version `2026-08-26.1`).
+
 ## Current Release Scope
 
 The frozen v1.0 functional scope is Milestones 1-10 (material import, synchronized player, transcript workspace, guided Intensive Practice, Quizzes, Shadowing/Recording, Learning History, structured Export, Quick Practice). Milestone 11's presentation refresh and Milestone 13's UI/UX reconstruction are complete. Remaining v1.0 work is hardening and validation: Milestone 14 (final hardening and full manual acceptance), Phase C2 (clean-machine acceptance), and Phase D (release candidate). No new functional scope is planned before v1.0.
@@ -64,7 +71,7 @@ Functional feature completion was reached after Milestone 10: every planned loca
 
 ## Open Release Blockers
 
-- Milestone 14 — Final Product Hardening & Full Manual Regression is in progress (Phase 0 completed, Human QA Round 2 pending).
+- Milestone 14 — Final Product Hardening & Full Manual Regression is in progress (Phase 0, Phase 1 audit, and Corrective Batches A/B/C completed; Human QA Round 2 next/pending).
 - Phase C2 clean-machine validation pending (occurs after Milestone 14).
 - Real clean-machine MP4/H.264 validation pending (not tested anywhere yet — Phase C1 had no H.264 encoder available to produce a sample).
 - Phase D not completed.
@@ -77,12 +84,12 @@ Functional feature completion was reached after Milestone 10: every planned loca
 - Milestone 11 — UI/UX Presentation Refresh: **completed and accepted**. Presentation-only, per its own scope boundary.
 - Milestone 12 — Pre-UI Product Hardening: **completed and merged into `main`**.
 - Milestone 13 — Advanced UI/UX Reconstruction: **completed, accepted, and merged into `main`**. Whole-product Notebook Study Desk reconstruction across all 16 production surfaces, Axes 1–8 accepted, Product Owner Human Visual Gate **PASS**, short-screen accessibility and aspect-ratio-aware video geometry verified.
-- Milestone 14 — Final Product Hardening & Full Manual Regression: **current lifecycle phase** (Phase 0 completed; Human QA Round 2 full manual regression pending).
+- Milestone 14 — Final Product Hardening & Full Manual Regression: **current lifecycle phase** (Phase 0, Phase 1 audit, and Corrective Batches A/B/C completed; Human QA Round 2 full manual regression next/pending).
 
 ## Verification Status
 
-- **Automated tests**: **900 passing** as of Milestone 14 Phase 0. 100% green suite.
-- **Manual GUI QA / Human Visual Gate**: the user has completed Human QA Round 1 (Phase 12-A), the retroactive M12.1-A baseline, the 3-material Loop End Grace calibration retest, and the **Milestone 13 Product Owner Human Visual Gate (PASS)**. Human QA Round 2's full-questionnaire pass against the final post-M13 UI is scheduled for Milestone 14.
+- **Automated tests**: **924 passing** as of M14 Corrective Batch C. 100% green suite.
+- **Manual GUI QA / Human Visual Gate**: the user has completed Human QA Round 1 (Phase 12-A), the retroactive M12.1-A baseline, the 3-material Loop End Grace calibration retest, and the **Milestone 13 Product Owner Human Visual Gate (PASS)**. Human QA Round 2's full-questionnaire pass against the final post-M13/post-M14-corrective-batches UI is **next/pending** — the questionnaire (`manual-qa/manual_review_questionnaire.html`, version `2026-08-26.1`) has been reconciled against the current product but the pass itself has not yet been executed or scored by the Product Owner.
 - **Packaged preflight**: Phase C1 complete (development machine only) — see `ROADMAP.md`.
 - **Migration**: schema version 12, every migration 1→12 covered by an automated upgrade test with real data present.
 - **Privacy/secret scan**: performed and clean on every documentation/code change to date.
@@ -97,7 +104,7 @@ Functional feature completion was reached after Milestone 10: every planned loca
 
 ## Next Engineering Objective
 
-Complete Milestone 14 hardening and Human QA Round 2 full manual regression, proceed to Phase C2 (Clean-Machine Acceptance), and prepare Phase D (v1.0 Release Candidate).
+Run and pass Human QA Round 2's full manual regression against the finalized, corrective-batch-complete product; then proceed to Phase C2 (Clean-Machine Acceptance) and prepare Phase D (v1.0 Release Candidate).
 
 ## Repository State
 

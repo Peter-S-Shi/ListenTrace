@@ -454,15 +454,17 @@ Final product hardening and full manual acceptance against the reconstructed Not
 
 ## Status
 
-**Current Milestone (In Progress).**
+**Current Milestone (In Progress — Human QA Round 2 next/pending).**
 
 - **Phase 0 — Baseline Reconciliation & Immediate Correctives (Complete)**:
   - Macro documentation reconciled to canonical lifecycle: `M12 (Completed) -> M13 (Completed) -> M14 (Current) -> Phase C2 -> Phase D`.
   - Interface-sound system explicitly excluded from product/design specs (decorative audio removed; learning audio fully intact).
   - Material Study Dossier in `MainWindow` aligned to approved wireframe (structured 7-row ruled metadata panel with blue ink labels, spiral dots, and action suite).
   - Global Settings consolidated under Library sidebar `Settings...` with categorized `Playback` and `Label Colors` tabs; redundant Player entry point removed.
-  - Cue selection clearing via right-click context menu implemented; selection box border clipping normalized; automated test suite expanded to 899 passing tests.
-- **Human QA Round 2**: Full manual regression pass against the finalized UI using `manual-qa/manual_review_questionnaire.html`.
+  - Cue selection clearing via right-click context menu implemented; selection box border clipping normalized; automated test suite expanded to 900 passing tests.
+- **Phase 1 — Whole-Product Hardening Audit (Complete, Product Owner Accepted)**: a read-only, risk-based audit across all in-scope product areas (`M14_PHASE1_WHOLE_PRODUCT_HARDENING_AUDIT.md`) — 6 confirmed defects, 2 governance/documentation drift items, and a proposed corrective batch plan.
+- **Corrective Batches A, B, C (All Complete)**: every confirmed defect from the accepted Phase 1 audit resolved (0 open) — cross-window state consistency (rename/selection/label-color/recording-availability), local-time display correctness, "No Notable Difficulty" availability truthfulness, a permanent remove-while-open-window safety regression test, the two governance drift items closed, and the orphaned Player-local Label Colors compatibility path removed. Automated test suite: 924 passing.
+- **Human QA Round 2 (Next / Pending)**: full manual regression pass against the finalized, corrective-batch-complete product using `manual-qa/manual_review_questionnaire.html` (reconciled to version `2026-08-26.1` — stale M13-era wording corrected, new M14 behavior covered, and items strongly protected by the new automated regression consolidated so the Product Owner isn't asked to repeatedly re-verify what automation already proves). Milestone 14 remains open until this runs and passes.
 - **Pre-Release Non-Visual Hardening**: Final sweep of error boundaries, missing file handlers, and edge cases.
 
 ---

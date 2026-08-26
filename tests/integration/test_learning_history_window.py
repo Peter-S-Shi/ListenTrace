@@ -91,6 +91,30 @@ def _seed_rich_material(conn, tmp_path):
     return material_id, cues, session_id, attempt_id, recording_id
 
 
+def test_all_seven_workspace_sections_are_scroll_wrapped(qapp, tmp_path):
+    """M14 Corrective Batch C (C3): structural-level regression for the M14
+    Phase 0 `_wrap_scrollable` change -- every one of the 7 workspace tabs
+    (Overview, Activity, Sessions, Diagnoses, Quizzes, Shadowing &
+    Recordings, Quick Practice) must actually be a resizable QScrollArea
+    hosting real content, not just some of them. This checks the structural
+    fact (right type, right count, a real inner widget, resizable) rather
+    than live resize/scrollbar rendering behavior, which belongs to Human QA
+    (real window sizes, real wheel-capture feel) rather than automation."""
+    from PySide6.QtWidgets import QScrollArea
+
+    connection = open_connection(tmp_path / "empty.db")
+    migrate(connection)
+    window = LearningHistoryWindow(connection, tmp_path / "recordings")
+
+    assert window._section_stack.count() == 7
+    for i in range(window._section_stack.count()):
+        page = window._section_stack.widget(i)
+        assert isinstance(page, QScrollArea), f"section {i} must be wrapped in a QScrollArea"
+        assert page.widgetResizable() is True
+        assert page.widget() is not None, f"section {i}'s scroll area must host real content"
+    window.close()
+
+
 def test_window_opens_with_no_data(qapp, tmp_path):
     connection = open_connection(tmp_path / "empty.db")
     migrate(connection)

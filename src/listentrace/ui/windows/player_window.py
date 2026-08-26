@@ -67,7 +67,6 @@ from listentrace.ui.widgets.label_color_change_bus import label_color_change_bus
 from listentrace.ui.widgets.loop_grace_change_bus import loop_grace_change_bus
 from listentrace.ui.widgets.material_metadata_bus import material_metadata_bus
 from listentrace.ui.widgets.notebook_paper import GrainedDeskWidget, RuledPaperFrame, RuledTextEdit
-from listentrace.ui.windows.label_color_dialog import LabelColorDialog
 from listentrace.ui.windows.material_loop_settings_dialog import MaterialLoopSettingsDialog
 
 _SEEK_STEP_MS = 5000
@@ -406,10 +405,10 @@ class PlayerWindow(QMainWindow):
         apply_role(self._loop_settings_button, "quiet")
         utility_layout.addWidget(self._loop_settings_button)
 
-        # Global label colors preference lives in Library Settings; kept as
-        # attribute for programmatic/test backward compatibility without UI duplication.
-        self._label_colors_button = QPushButton("Label Colors...")
-        self._label_colors_button.clicked.connect(self._on_open_label_colors)
+        # Global label colors preference lives in Library Settings ->
+        # Label Colors (settings_dialog.py) -- the sole reachable entry
+        # point; live-refreshed here via label_color_change_bus (see
+        # _on_label_colors_changed) rather than a second Player-local path.
 
         self._transcript_button = QPushButton("Hide Transcript")
         self._transcript_button.clicked.connect(self._on_toggle_transcript)
@@ -605,7 +604,6 @@ class PlayerWindow(QMainWindow):
             apply_role(button, "secondary")
         for button in (
             self._mute_button,
-            self._label_colors_button,
             self._loop_settings_button,
             self._return_to_playing_button,
         ):
@@ -1074,11 +1072,6 @@ class PlayerWindow(QMainWindow):
         self._apply_player_tick(tick)
         if tick.restart_at_ms is None:
             self._play_pause_button.setText("Play")
-
-    def _on_open_label_colors(self) -> None:
-        dialog = LabelColorDialog(self._connection, self)
-        dialog.exec()
-        self._refresh_annotation_presentation()
 
     def _on_open_loop_settings(self) -> None:
         if self._loop_settings_dialog is None:
