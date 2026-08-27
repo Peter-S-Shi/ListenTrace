@@ -1,0 +1,124 @@
+name: Release Candidate Build
+
+# Windows release-candidate pipeline (Milestone 15.1). Produces the three
+# canonical candidate artifacts (portable ZIP, Inno Setup installer, and
+# their checksums/provenance) from an exact commit, so future candidate
+# builds no longer require the Product Owner to build by hand.
+#
+# This workflow does not publish anything -- it only builds, validates, and
+# uploads workflow artifacts for review. No GitHub Release or tag is
+# created here (that remains a Milestone 15.3 decision).
+
+on:
+  workflow_dispatch: {}
+  push:
+    branches:
+      - "milestone/15-*"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout exact commit
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install project (dev + packaging extras)
+        run: pip install -e ".[dev,packaging]"
+
+      - name: Run automated test suite
+        shell: pwsh
+        run: |
+          python -m pytest -q 2>&1 | Tee-Object -FilePath pytest_output.txt
+          if ($LASTEXITCODE -ne 0) { throw "pytest reported failures" }
+
+      - name: Resolve test count for provenance
+        id: tests
+        shell: pwsh
+        run: |
+          $line = Select-String -Path pytest_output.txt -Pattern '(\d+) passed' | Select-Object -Last 1
+          if (-not $line) { throw "could not find a '<N> passed' summary line in pytest output" }
+          $passed = $line.Matches[0].Groups[1].Value
+          echo "passed=$passed" >> $env:GITHUB_OUTPUT
+
+      - name: Validate release/version consistency
+        run: python scripts/release_version.py --check
+
+      - name: Resolve product version
+        id: version
+        shell: pwsh
+        run: |
+          $version = python -c "import sys; sys.path.insert(0, 'scripts'); from release_version import read_product_version; print(read_product_version())"
+          echo "value=$version" >> $env:GITHUB_OUTPUT
+
+      - name: Build PyInstaller onedir candidate
+        run: pyinstaller packaging/listentrace.spec --distpath packaging/dist --workpath packaging/build --noconfirm
+
+      - name: Validate packaged payload
+        run: python scripts/validate_build_payload.py
+
+      - name: Smoke test the portable build
+        run: python scripts/packaging_smoke.py portable --exe packaging/dist/ListenTrace/ListenTrace.exe
+
+      - name: Build portable ZIP
+        shell: pwsh
+        run: |
+          $zipName = "ListenTrace-${{ steps.version.outputs.value }}-win64-portable.zip"
+          Compress-Archive -Path packaging/dist/ListenTrace/* -DestinationPath "packaging/dist/$zipName" -Force
+          echo "name=$zipName" >> $env:GITHUB_OUTPUT
+        id: zip
+
+      - name: Locate or install Inno Setup 6
+        id: inno
+        shell: pwsh
+        run: |
+          $candidates = @(
+            "${Env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe",
+            "${Env:ProgramFiles}\Inno Setup 6\ISCC.exe"
+          )
+          $iscc = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+          if (-not $iscc) {
+            choco install innosetup -y --no-progress
+            $iscc = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+          }
+          if (-not $iscc) { throw "ISCC.exe not found even after attempting to install Inno Setup" }
+          echo "path=$iscc" >> $env:GITHUB_OUTPUT
+
+      - name: Build Inno Setup installer
+        shell: pwsh
+        run: |
+          & "${{ steps.inno.outputs.path }}" packaging\installer.iss
+
+      - name: Smoke test silent install / launch / uninstall
+        run: python scripts/packaging_smoke.py installed --installer "packaging/dist/ListenTrace-Setup-${{ steps.version.outputs.value }}.exe"
+
+      - name: Generate checksums and provenance
+        shell: pwsh
+        run: |
+          python scripts/generate_provenance.py `
+            --version "${{ steps.version.outputs.value }}" `
+            --commit "${{ github.sha }}" `
+            --run-id "${{ github.run_id }}" `
+            --run-url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" `
+            --tests-passed "${{ steps.tests.outputs.passed }}" `
+            --output-dir packaging/dist `
+            "packaging/dist/${{ steps.zip.outputs.name }}" `
+            "packaging/dist/ListenTrace-Setup-${{ steps.version.outputs.value }}.exe"
+
+      - name: Upload canonical candidate artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ListenTrace-${{ steps.version.outputs.value }}-candidate-${{ github.sha }}
+          path: |
+            packaging/dist/${{ steps.zip.outputs.name }}
+            packaging/dist/ListenTrace-Setup-${{ steps.version.outputs.value }}.exe
+            packaging/dist/SHA256SUMS.txt
+            packaging/dist/provenance.json
+          if-no-files-found: error

@@ -1,4 +1,4 @@
-# Packaging (Post-M10 Phase A — Packaging Spike, plus a Phase B addition)
+# Packaging (Post-M10 Phase A/B, plus Milestone 15.1 CI refresh)
 
 This directory holds the build recipe validated during Phase A of
 `ROADMAP.md`'s "v1.0 Release Engineering" sequence (previously named
@@ -13,12 +13,71 @@ complete. Milestone 11 (UI/UX Presentation Refresh), Milestone 12
 are all complete and merged. Milestone 14 (Final Product Hardening &
 Full Manual Regression) is likewise **complete, accepted, and merged**
 (Human QA Round 2 PASS; the pre-merge repository-hygiene/privacy/
-Windows-app-identity corrective is Product Owner ACCEPTED). Milestone 15 —
-Release Candidate & Delivery (15.1 Candidate Build/Packaging Refresh, 15.2
-Clean-Machine Acceptance, 15.3 Release Candidate Closure & Delivery — the
-former separate "Phase C2"/"Phase D" release-engineering labels, now
-consolidated into one numbered milestone) is the current lifecycle
-milestone, ready to start — see `ROADMAP.md`'s "Canonical v1.0 Sequence".
+Windows-app-identity corrective is Product Owner ACCEPTED). **Milestone
+15.1 — Candidate Build/Packaging Refresh** builds on this directory's Phase
+A/B recipe: it promotes the product version to `1.0.0`, adds a
+single-source-of-truth version-sync mechanism, and adds the GitHub Actions
+release-candidate pipeline described below, against this same final merged
+M14 code. **Milestone 15.1 is Product Owner ACCEPTED. Milestone 15.2
+(Clean-Machine Acceptance) is PASS / Product Owner Accepted, and Milestone
+15.3 (Release Candidate Closure & Delivery) is complete** — Milestone 15 as
+a whole is complete, accepted, and merged into `main` via PR #4. The
+canonical validated v1.0.0 release payload remains the exact candidate from
+source SHA `661bca47ce93f1a12a6a17c66f1ed6065d816e43` — see `ROADMAP.md`'s
+"Validated Release Payload Policy" and "Canonical v1.0 Sequence".
+
+## Version consistency (Milestone 15.1)
+
+`pyproject.toml`'s `[project].version` is the single authoritative product
+version. `packaging/version_info.txt` and `packaging/installer.iss`'s
+`MyAppVersion` define are both *generated* from it by
+`scripts/release_version.py` — nobody hand-edits three version literals in
+sync:
+
+```bash
+python scripts/release_version.py --write   # after bumping pyproject.toml's version
+python scripts/release_version.py --check   # CI gate: fails if any derived file drifted
+```
+
+## GitHub Actions release-candidate pipeline (Milestone 15.1)
+
+`.github/workflows/release-candidate.yml` runs on a GitHub-hosted Windows
+runner (`workflow_dispatch`, and on push to a `milestone/15-*` branch) and
+performs, against an exact commit:
+
+```text
+checkout exact SHA
+→ install project (dev + packaging extras)
+→ run the full automated test suite
+→ validate release/version consistency (release_version.py --check)
+→ build the PyInstaller onedir candidate
+→ validate the packaged payload (validate_build_payload.py)
+→ smoke-test the portable build (packaging_smoke.py portable)
+→ build the portable ZIP from that same onedir output
+→ build the Inno Setup installer from that same onedir output
+→ smoke-test silent install / launch / silent uninstall (packaging_smoke.py installed)
+→ generate SHA-256 checksums + provenance.json (generate_provenance.py)
+→ upload the four canonical artifacts as one workflow-run artifact bundle
+```
+
+The uploaded bundle is: the portable ZIP, the Inno Setup installer,
+`SHA256SUMS.txt`, and `provenance.json` (product version, exact commit SHA,
+workflow run id/URL, automated-test pass count, and each artifact's SHA-256
+— everything needed to answer "what is this candidate and did it pass its
+gates" without re-deriving it by hand). This is what Milestone 15.2's
+clean-machine acceptance is expected to consume.
+
+The two smoke checks are deliberately narrow given a headless Windows
+runner and this app having no CLI flags: they launch the real frozen
+build/installed exe with `%APPDATA%` redirected to a throwaway directory
+and `QT_QPA_PLATFORM=offscreen`, and confirm it reaches the same
+observable milestone a real first run reaches — creating
+`listentrace.db` — plus (installed-build only) that a silent uninstall
+removes the program files while a canary file placed in the redirected
+app-data directory survives untouched. They do not attempt real
+audio/video playback, real microphone capture, or real Windows shell/
+taskbar verification — those remain Milestone 15.2's genuinely
+human/clean-environment-dependent checks (see `ROADMAP.md`).
 
 ## Decisions made in Phase A
 
@@ -110,10 +169,16 @@ Post-M10 Phase B" section for the full investigation.
 
 ## Building it yourself
 
+The GitHub Actions pipeline above is now the canonical way to produce a
+candidate build; the manual recipe below is the same steps by hand (e.g.
+for local iteration on the packaging recipe itself):
+
 ```bash
 pip install -e ".[packaging]"
 python packaging/assets/generate_icon.py   # only if the icon needs regenerating
+python scripts/release_version.py --write  # after bumping pyproject.toml's version
 pyinstaller packaging/listentrace.spec --distpath packaging/dist --workpath packaging/build
+python scripts/validate_build_payload.py
 ```
 
 This produces `packaging/dist/ListenTrace/` (the onedir build). From there:
@@ -126,34 +191,38 @@ This produces `packaging/dist/ListenTrace/` (the onedir build). From there:
 `packaging/build/` and `packaging/dist/` are both gitignored (matching the
 repository's existing `build/`/`dist/` rules) — only the recipe files
 (`listentrace.spec`, `version_info.txt`, `installer.iss`, `app.manifest`,
-`assets/`) are committed.
+`assets/`) are committed. `version_info.txt` is committed but generated —
+see "Version consistency" above, don't hand-edit its version fields.
 
 ## Explicitly out of scope for this directory
 
-Phase A and Phase B are both complete (`ROADMAP.md`) — the items below are
-not unfinished Phase B work, they are things this packaging directory itself
-was never meant to cover, either because they belong to a later phase or
-because the fix lives in application code rather than here:
+Phase A and Phase B are both complete (`ROADMAP.md`); Milestone 15.1 has
+added version-sync tooling and the CI pipeline described above. The items
+below remain out of scope for this directory, either because they belong to
+a later milestone or because the fix lives in application code rather than
+here:
 
-- Code signing (the exe and installer are unsigned; Windows SmartScreen will
-  warn on first run — a Milestone 15.3 concern).
+- Code signing (unsigned v1.0 is Product Owner approved, not a release
+  blocker; the exe and installer are unsigned, and Windows SmartScreen
+  **may** warn on first run depending on download source/reputation/
+  Mark-of-the-Web context — the Milestone 15.2 clean-machine install did
+  not itself encounter a SmartScreen block).
 - Auto-update.
 - macOS/Linux packaging.
-- CI-driven builds (there is still no continuous-integration configuration
-  anywhere in this project).
 - A final, designed application icon (the current one is a placeholder).
 - Full Windows long-path support (see the Phase B addition above — the
   manifest opt-in is necessary but not sufficient on its own; this is a
   documented, accepted limitation, not an open task).
 - Clean-machine verification of anything in this file — every validation
-  here (build, launch, install, uninstall, the long-path reproduction) ran
-  on this development machine, which already has Python and other developer
-  tooling installed (Phase C1 — Development-Machine Release Preflight,
-  completed). Genuinely clean-machine testing (no preinstalled Python,
-  fresh user account, non-English paths) is Milestone 15.2's job, follows
-  the now-completed Milestone 14 merge, and remains pending/not started so
-  it tests the final hardened, final-UI release candidate rather than an
-  earlier presentation layer or unaudited product.
+  in this directory (build, launch, install, uninstall, the long-path
+  reproduction) ran on this development machine, which already has Python
+  and other developer tooling installed (Phase C1 — Development-Machine
+  Release Preflight, completed). Genuinely clean-machine testing (no
+  preinstalled Python, fresh user account) was a separate job, Milestone
+  15.2, which has since **completed with PASS / Product Owner Accepted**
+  on a clean Windows 11 VM — see `PROJECT_STATUS.md` and `ROADMAP.md` for
+  that evidence. Phase A/C1 in this directory remain development-machine
+  evidence; Milestone 15.2 is the genuinely clean-machine acceptance.
 - Everything else Phase B fixed lives in application code, not this
   directory (migration atomicity, startup-crash ordering, crash logging,
   large-history indexes) — see `ARCHITECTURE.md`'s "Resolved in Post-M10
