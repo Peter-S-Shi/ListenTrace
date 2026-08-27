@@ -1,6 +1,6 @@
 # ListenTrace Project Status
 
-Last updated: 2026-08-26 (Milestones 12, 13, 14, and 15 are all **COMPLETE / ACCEPTED / MERGED** into `main`. **Milestone 15 — Release Candidate & Delivery**: 15.1 (Candidate Build/Packaging Refresh) Product Owner ACCEPTED — version `1.0.0` single-source-of-truth mechanism, GitHub Actions Windows release-candidate pipeline green end-to-end; 15.2 (Clean-Machine Acceptance) PASS / PRODUCT OWNER ACCEPTED — a genuinely clean Windows 11 VM (VMware, VMware Tools, clean baseline snapshot, no Python/Git/IDE/developer environment) validated `ListenTrace-Setup-1.0.0.exe`: per-user install, first launch, real MP4/H.264 import and playback, real audio output, SRT/material import, a representative Intensive Practice completion, full close/reopen with session persistence, and Windows taskbar/app identity all PASS, no release-blocking abnormal behavior; 15.3 (Release Candidate Closure & Delivery) complete. **Canonical validated v1.0.0 release payload (locked): source SHA `661bca47ce93f1a12a6a17c66f1ed6065d816e43`, artifact bundle `ListenTrace-1.0.0-candidate-661bca47ce93f1a12a6a17c66f1ed6065d816e43`** — this exact candidate, not any later docs-only commit's own CI artifact, is what ships as v1.0.0. Automated test suite: 972 passing. Schema remains version 12. Unsigned v1.0 is a locked Product Owner decision; Update Awareness is deferred to the first v1.0.x maintenance update. **The `v1.0.0` tag and GitHub Release are now published and verified, using the locked M15.2 human-validated release payload. v1.0 — Current Version Complete is declared. The project now enters Maintenance / v1.0.x, with Portfolio Packaging as the immediate presentation/portfolio workstream.**)
+Last updated: 2026-08-26 (Milestones 12, 13, 14, and 15 are all **COMPLETE / ACCEPTED / MERGED** into `main`. **Milestone 15 — Release Candidate & Delivery**: 15.1 (Candidate Build/Packaging Refresh) Product Owner ACCEPTED — version `1.0.0` single-source-of-truth mechanism, GitHub Actions Windows release-candidate pipeline green end-to-end; 15.2 (Clean-Machine Acceptance) PASS / PRODUCT OWNER ACCEPTED — a genuinely clean Windows 11 VM (VMware, VMware Tools, clean baseline snapshot, no Python/Git/IDE/developer environment) validated `ListenTrace-Setup-1.0.0.exe`: per-user install, first launch, real MP4/H.264 import and playback, real audio output, SRT/material import, a representative Intensive Practice completion, full close/reopen with session persistence, and Windows taskbar/app identity all PASS, no release-blocking abnormal behavior; 15.3 (Release Candidate Closure & Delivery) complete. **Canonical validated v1.0.0 release payload (locked): source SHA `661bca47ce93f1a12a6a17c66f1ed6065d816e43`, artifact bundle `ListenTrace-1.0.0-candidate-661bca47ce93f1a12a6a17c66f1ed6065d816e43`** — this exact candidate, not any later docs-only commit's own CI artifact, is what ships as v1.0.0. Automated test suite: 972 passing. Schema remains version 12. Unsigned v1.0 is a locked Product Owner decision; Update Awareness is deferred to the first v1.0.x maintenance update. **The `v1.0.0` tag and GitHub Release are now published and verified, using the locked M15.2 human-validated release payload. v1.0 — Current Version Complete is declared. The project is in Maintenance / v1.0.x. Portfolio Packaging is complete, and the next step is the Public Readiness Gate before any repository-visibility change.**)
 
 ## Project Purpose
 
@@ -32,7 +32,7 @@ Status: **Milestone 12, Milestone 13, Milestone 14, and Milestone 15 are all com
 
 ## Current Milestone
 
-**None — v1.0 is released and Current Version Complete.** All numbered engineering milestones through Milestone 15 are complete. The product is now in **Maintenance / v1.0.x**; **Portfolio Packaging** is the immediate non-product-development workstream. The next numbered milestone, **Milestone 16 — Library Organization & Collections**, remains only a recorded v1.1 candidate requirement and has not started.
+**None — v1.0 is released and Current Version Complete.** All numbered engineering milestones through Milestone 15 are complete. The product is now in **Maintenance / v1.0.x**; **Portfolio Packaging is complete**. The immediate next project step is the **Public Readiness Gate** before any repository-visibility change. The next numbered milestone, **Milestone 16 — Library Organization & Collections**, remains only a recorded v1.1 candidate requirement and has not started.
 
 Milestone 14 — Final Product Hardening & Full Manual Regression is **complete, accepted, and merged into `main`**: Phase 0, Phase 1 audit, Corrective Batches A/B/C, Human QA Round 2, and the pre-merge repository-hygiene/privacy/Windows-app-identity corrective are all complete/PASS/accepted. Milestone 12 and Milestone 13 are likewise completed, accepted, and merged into `main`.
 
@@ -56,7 +56,7 @@ ListenTrace v1.0.0 has completed its full engineering, acceptance, and publicati
 - Installer, portable ZIP, `SHA256SUMS.txt`, and `provenance.json` are published as Release assets.
 - No open v1.0 engineering or release blocker remains.
 
-The product now enters **Maintenance / v1.0.x**. Portfolio Packaging is the immediate next workstream and does not reopen v1.0 feature development.
+The product is in **Maintenance / v1.0.x**. **Portfolio Packaging is complete.** The immediate next step is the **Public Readiness Gate** before any repository-visibility change; this does not reopen v1.0 feature development.
 
 Milestone 11 — UI/UX Presentation Refresh is completed and accepted (see the Completed section below and `ROADMAP.md`'s Closeout Summary); the Presentation Complete Gate has passed. Milestone 12.1-A (retroactive manual QA baseline) is complete (`manual-qa/`, commit `1285fcf`). The autonomous overnight pass — M12.1-B Batches 1-5 plus a dedicated M12.4 Performance Decision Gate — is complete.
 
@@ -134,7 +134,7 @@ Functional feature completion was reached after Milestone 10: every planned loca
 
 ## Next Engineering Objective
 
-None outstanding for v1.0 — Milestone 15 (and with it, all v1.0 engineering scope) is complete, and v1.0 is released. The product is now in Maintenance / v1.0.x. The next objective is whatever the Product Owner authorizes: Portfolio Packaging (the immediate non-product-development workstream), a v1.0.x maintenance fix (using the dormant, reusable Milestone 15.1 release-candidate pipeline), or Milestone 16 (Library Organization & Collections) planning — none of which have begun.
+None outstanding for v1.0 — Milestone 15 (and with it, all v1.0 engineering scope) is complete, v1.0 is released, and Portfolio Packaging is complete. The product is in Maintenance / v1.0.x. The immediate project objective is the Public Readiness Gate before any repository-visibility change. No v1.0.x maintenance fix or Milestone 16 (Library Organization & Collections) planning has begun.
 
 ## Repository State
 
