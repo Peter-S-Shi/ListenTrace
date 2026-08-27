@@ -589,7 +589,7 @@ The canonical v1.0.0 release payload is, and remains, the exact Milestone 15.2 h
 
 This state means: the approved v1.0 scope is implemented; Functional Feature Freeze was respected; M11 presentation refresh and M13 UI reconstruction are complete; M14 product hardening and manual regression passed; Milestone 15.2 clean-machine acceptance passed; Milestone 15.3 release-candidate checks passed; the release artifact, documentation, known limitations, and repository state are finalized. This does **not** describe the project as permanently complete — see Maintenance and Next-Version Planning, below.
 
-**Status: declared.** Every engineering/acceptance gate above (M11–M14, Milestone 15.1/15.2/15.3) is complete, PR #4 is merged into `main` at `4e50b6b195c9c214b3875a9ae33d0ca0ac35f8bb`, the `v1.0.0` tag exists at that commit, and GitHub Release `ListenTrace v1.0.0` is published carrying the validated `661bca47...` payload (installer, portable ZIP, `SHA256SUMS.txt`, `provenance.json`). The project is now in **Maintenance / v1.0.x**, with Portfolio Packaging as the immediate non-product-development workstream.
+**Status: declared.** Every engineering/acceptance gate above (M11–M14, Milestone 15.1/15.2/15.3) is complete, PR #4 is merged into `main` at `4e50b6b195c9c214b3875a9ae33d0ca0ac35f8bb`, the `v1.0.0` tag exists at that commit, and GitHub Release `ListenTrace v1.0.0` is published carrying the validated `661bca47...` payload (installer, portable ZIP, `SHA256SUMS.txt`, `provenance.json`). The project is now in **Maintenance / v1.0.x**. **Portfolio Packaging is complete**, and the immediate next project step is the **Public Readiness Gate** before any repository-visibility change.
 
 # Maintenance / v1.0.x
 

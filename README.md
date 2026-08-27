@@ -1,6 +1,17 @@
 # ListenTrace
 
-ListenTrace is a local-first desktop application for foreign-language listening practice. It helps learners move beyond simply replaying media by recording what they understood, comparing it with a transcript, classifying listening failures, practicing difficult segments, and tracking improvement over time.
+ListenTrace is a local-first Windows desktop application for foreign-language listening practice. It helps learners turn "I know this word but couldn't hear it" into a trainable, tracked skill: record what you understood, compare it against the transcript, classify exactly why you missed it, practice the gap, and see the evidence accumulate over time — all on your own machine, nothing uploaded anywhere.
+
+**Status: v1.0.0 released.** See [Release Notes](RELEASE_NOTES.md) for the full changelog and validated release payload, or [Setup, Run, and Test](#setup-run-and-test) below to build it from source.
+
+## Screenshots
+
+|                                                                        |                                                                       |
+| ---------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| **Material Library** — one library entry per media + subtitle pair, with every practice mode one click away | **Player + Annotation Workspace** — synchronized cue playback next to a transcript where a text selection becomes a classified listening-error tag |
+| ![Material Library](assets/readme/library.png) | ![Player and transcript annotation workspace](assets/readme/player.png) |
+| **Guided Diagnosis (Stage 3 of 5)** — the five-stage Guided Intensive Listening session, mid-diagnosis | **Learning History** — a read-only evidence center: sessions, diagnoses, quizzes, and shadowing/recording activity, never a fabricated composite score |
+| ![Guided Intensive Listening, Stage 3 diagnosis](assets/readme/diagnosis.png) | ![Learning History evidence center](assets/readme/history.png) |
 
 ## Problem
 
@@ -24,21 +35,24 @@ The intended intensive-listening flow is:
 4. Practice sentence-by-sentence shadowing or repetition.
 5. Hide the transcript and summarize the material in the target language.
 
-## Planned Capabilities
+## Core Capabilities
 
-- Local media and subtitle import
-- Subtitle synchronization and sentence-level playback
-- Transcript annotation with listening-error categories
-- Keyword and chunk capture
-- Guided multi-pass intensive listening
-- Shadowing and optional local recording
-- Material-based quizzes
-- Learning history and progress summaries
-- Structured export for external evaluation
+- **Synchronized playback + transcript annotation** — select text in the transcript and tag it with one of five listening-error categories (keyword, known-but-not-heard, connected/reduced speech, misheard, unknown word/chunk), keep a free-form note per cue, and save reusable vocabulary items.
+- **Guided Intensive Listening** — a resumable five-stage session (global gist → keyword capture → transcript diagnosis → sentence-level shadowing → transcript-free recall), with Skip Stage support so it never becomes a rigid exam.
+- **Quick Practice** — a short, low-friction listen → recall → diagnose → shadow loop for one cue or a handful of cues, with deterministic, evidence-based recommendations for which cues to revisit.
+- **Deterministic quizzes** — cue dictation, keyword recognition, and audio-to-transcript multiple choice, generated locally with no AI/fuzzy grading; review quizzes are built from a learner's own past mishearing/diagnosis history.
+- **Learning History & export** — a read-only evidence center across sessions, diagnoses, quizzes, and shadowing/recordings, with a privacy-controlled local Markdown/JSON export. No effective study time, pronunciation score, or combined ability/difficulty score is ever fabricated — only real stored evidence is shown.
 
-## Initial Technical Direction
+## Engineering Evidence
 
-The implementation target verified in Milestone 1:
+- **Local-first, no account or cloud dependency** — on Windows, ListenTrace stores its database, logs, and managed recordings under `%APPDATA%\ListenTrace`. Imported media and subtitle files remain at their original local paths and are referenced locally. No account, telemetry, or mandatory network service is required. See [Privacy](#privacy).
+- **Domain logic kept pure** — session, quiz, recommendation, and text-range rules live in `domain/services` and `application/services` with no Qt import, so they're unit-testable independent of the UI (see [Repository Structure](#repository-structure)).
+- **No fabricated metrics** — Learning History and quiz review never synthesize a score, difficulty rating, or "ability" number from data that wasn't actually recorded; see the same design principle noted in [Core Capabilities](#core-capabilities).
+- **Data-integrity discipline** — atomic exports, duplicate-safe imports, one recording-in-progress at a time with crash-safe cleanup on restart, and a covered migration path through schema 12.
+- **A validated, provenance-tracked release pipeline** — single-source-of-truth versioning, an automated Windows build/package/checksum pipeline, and human acceptance testing on a genuinely clean VM (no developer tooling) before locking the tested build as the shipped release payload. See [Release Notes](RELEASE_NOTES.md).
+- **972 automated tests passed at v1.0 release closure** (unit + integration), with the full suite executed by the release-candidate pipeline before packaging; see `tests/`.
+
+## Technical Stack
 
 - Python (3.10+, verified on 3.14)
 - PySide6 desktop interface
@@ -75,9 +89,9 @@ Run the automated tests:
 .venv/Scripts/python -m pytest
 ```
 
-## Development Status
+## Feature Detail
 
-Milestones 1–10 are implemented and verified. Users can import a local media file plus an SRT/WebVTT subtitle into a library, view details, rename, archive/restore, and remove records, then open a synchronized player: play/pause/seek, active-cue tracking, previous/next-cue navigation, replay-once, single-cue and continuous-range looping, transcript show/hide, volume/mute, and keyboard shortcuts. The player includes an integrated transcript workspace: select an editing cue (independent of whatever cue is currently playing), select a text range, and save one or more semantic labels (keyword, known-but-not-heard, connected/reduced speech, misheard, unknown word/chunk) as annotations; keep a free-form note per cue; and save reusable word/phrase/chunk/sentence-pattern language items with source context.
+This section expands each capability above with the exact behavior it implements. Users can import a local media file plus an SRT/WebVTT subtitle into a library, view details, rename, archive/restore, and remove records, then open a synchronized player: play/pause/seek, active-cue tracking, previous/next-cue navigation, replay-once, single-cue and continuous-range looping, transcript show/hide, volume/mute, and keyboard shortcuts. The player includes an integrated transcript workspace: select an editing cue (independent of whatever cue is currently playing), select a text range, and save one or more semantic labels (keyword, known-but-not-heard, connected/reduced speech, misheard, unknown word/chunk) as annotations; keep a free-form note per cue; and save reusable word/phrase/chunk/sentence-pattern language items with source context.
 
 The library also offers a guided, resumable intensive-listening session (Start/Resume Intensive Practice, plus a Session History view) alongside the standalone player: five sequential stages — global comprehension, keyword/fragment capture, transcript comparison and error diagnosis, sentence-level shadowing, and a transcript-free final summary — each with its own persisted status (not started/in progress/completed/skipped) and explicit Skip Stage support so the workflow never becomes a rigid exam. At most one intensive session is active per material at a time; completed or abandoned sessions remain as read-only history. Revealing the transcript for Stage 3 locks Stages 1 and 2 as read-only evidence for that session. Stage 3 diagnosis reuses the exact same semantic-label/highlighting/Unicode-offset logic as the standalone workspace, recording a repeatable per-session snapshot that optionally links to (without ever overwriting) a shared material-level annotation. Duplicate handling, atomic writes, and no modification of source files apply throughout.
 
@@ -91,7 +105,7 @@ From Learning History, **Export Learning Evidence** builds a local, user-control
 
 The library also offers **Quick Practice** — a short, low-friction, cue-based practice mode, a companion to Guided Intensive Listening rather than a replacement for it. Start it from the Material Library / Learning History (**Quick Practice**, choosing Recommended Practice — 3, 5, or 10 cues, default 5, from a deterministic, reason-based recommendation list built from existing diagnosis/quiz/shadowing evidence, with a safe fallback when too little evidence exists — or Selected Cues, in whatever order picked) or from the Player (**Quick Practice This Cue** / **Quick Practice Selected Cues**, starting immediately from the current cue or range). Each cue runs one compact, forward-only cycle: Listen (transcript hidden) -> Recall (Understood/Partly Understood/Missed, required, plus an optional guessed fragment) -> Reveal & Diagnose (the same semantic labels and validation as the standalone workspace, always optional) -> Replay & Shadow (optional explicit shadowing mark, optional recording through the same shared recording widget). There is no exact-step resume: closing after at least one completed cue preserves that evidence as a read-only abandoned run; closing before any cue is completed discards the run entirely rather than leaving misleading history. A concise completion summary (cues completed, recall-result counts, diagnoses created, explicit shadowing actions, cues worth revisiting) never computes an effective-time, pronunciation, ability, difficulty, or improvement score. Quick Practice evidence is always counted separately from Intensive Practice and Quiz evidence in Learning History (a `Quick Practices Completed` overview count, its own Activity entries, and a dedicated history tab), can trigger its own transparent Needs Attention reason (`Missed repeatedly in Quick Practice`, requiring at least two Missed results), and has its own independent, privacy-controlled export category.
 
-Milestone 10 reached the **Functional Feature Complete Gate**: it was the final planned *functional*-feature milestone for the first release, and the project is now in Functional Feature Freeze (which constrains learning workflow/domain/analytics/AI-cloud scope, not UI redesign). Feature Complete is explicitly not the same as Release Ready — but Release Ready is also now reached: presentation convergence (Milestone 11), UI reconstruction (Milestone 13), product-wide hardening (Milestones 12 and 14), and release-candidate/clean-machine/delivery work (Milestone 15) are all complete. The optional assisted features once numbered "Milestone 11" (speech recognition, pronunciation feedback, translation, and similar) are deferred beyond v1.0 and no longer carry a milestone number — see `ROADMAP.md`'s "Deferred Beyond v1.0" section. **Milestone 11 — UI/UX Presentation Refresh is complete and accepted**: a presentation-only pass over the existing Qt Widgets UI (centralized theme, all 14 windows migrated); the Presentation Complete Gate has passed. v1.0 Release Engineering's Phase A — Packaging Spike, Phase B — targeted technical Release Hardening, and Phase C1 — development-machine Release Preflight are all complete: a Windows PyInstaller build, an Inno Setup installer, and a portable zip have all been built and validated end-to-end (see `packaging/README.md`), a corrective-work pass fixed a migration-atomicity bug, a startup-crash-before-`QApplication` gap, added crash logging and large-history database indexes, and added a partial Windows long-path mitigation (see `ARCHITECTURE.md`), and a development-machine preflight covered install/upgrade/uninstall, a legacy database upgrade, real audio/microphone checks, and a full feature-area walkthrough. **Milestone 12 — Pre-UI Product Hardening is complete and merged** (a system-wide audit and defect-repair pass, not a new-feature milestone — see `PROJECT_STATUS.md` and `docs/HARDENING_BACKLOG.md`), including the Loop Cue audible-endpoint defect chain, closed with a human-calibrated fix (**HUMAN ACCEPTED / CLOSED**). **Milestone 13 — Advanced UI/UX Reconstruction is complete, accepted, and merged into `main`** (a whole-product Notebook Study Desk reconstruction across all 16 production surfaces, Axes 1–8 closed, Product Owner Human Visual Gate **PASS**, short-screen accessibility and aspect-ratio-aware video geometry verified). **Milestone 14 — Final Product Hardening & Full Manual Regression is complete, accepted, and merged into `main`** (Phase 0 immediate correctives, a Whole-Product Hardening Audit and its corrective batches, the user's full Human QA Round 2 pass against the final UI, and a pre-merge repository-hygiene/privacy/Windows-app-identity corrective — all complete/PASS/accepted). It is followed by **Milestone 15 — Release Candidate & Delivery**, likewise **complete, accepted, and merged into `main`**: **15.1 (Candidate Build/Packaging Refresh) and 15.2 (Clean-Machine Acceptance) are both Product Owner accepted/PASS** (product version `1.0.0`, a genuinely clean Windows 11 VM validated install, launch, real MP4/H.264 playback, and Windows taskbar/app identity), and **15.3 (Release Candidate Closure & Delivery) is complete** — see `ROADMAP.md` and `RELEASE_NOTES.md`. The canonical validated v1.0.0 release payload is locked to candidate source SHA `661bca47ce93f1a12a6a17c66f1ed6065d816e43`. **v1.0 is formally released**: the `v1.0.0` tag and GitHub Release are published, carrying that validated payload, and `v1.0 — Current Version Complete` is declared.
+**Release status:** v1.0.0 is released — feature-complete, hardened, and validated on a clean machine before the release payload was locked (source SHA `661bca47ce93f1a12a6a17c66f1ed6065d816e43`). The optional assisted features once considered for v1.0 (speech recognition, pronunciation feedback, translation, and similar) are deferred beyond v1.0. Full milestone-by-milestone history lives in `ROADMAP.md` and `PROJECT_STATUS.md`, not here.
 
 See:
 
