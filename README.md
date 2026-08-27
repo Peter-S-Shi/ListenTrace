@@ -45,12 +45,12 @@ The intended intensive-listening flow is:
 
 ## Engineering Evidence
 
-- **Local-first, no network dependency** — all data lives under `%APPDATA%\ListenTrace`; no account, no telemetry, no request is ever made from the export flow. See [Privacy](#privacy).
+- **Local-first, no account or cloud dependency** — on Windows, ListenTrace stores its database, logs, and managed recordings under `%APPDATA%\ListenTrace`. Imported media and subtitle files remain at their original local paths and are referenced locally. No account, telemetry, or mandatory network service is required. See [Privacy](#privacy).
 - **Domain logic kept pure** — session, quiz, recommendation, and text-range rules live in `domain/services` and `application/services` with no Qt import, so they're unit-testable independent of the UI (see [Repository Structure](#repository-structure)).
 - **No fabricated metrics** — Learning History and quiz review never synthesize a score, difficulty rating, or "ability" number from data that wasn't actually recorded; see the same design principle noted in [Core Capabilities](#core-capabilities).
-- **Data-integrity discipline** — atomic exports, duplicate-safe imports, one recording-in-progress at a time with crash-safe cleanup on restart, and a covered migration path (schema 1→12) exercised against real data.
+- **Data-integrity discipline** — atomic exports, duplicate-safe imports, one recording-in-progress at a time with crash-safe cleanup on restart, and a covered migration path through schema 12.
 - **A validated, provenance-tracked release pipeline** — single-source-of-truth versioning, an automated Windows build/package/checksum pipeline, and human acceptance testing on a genuinely clean VM (no developer tooling) before locking the tested build as the shipped release payload. See [Release Notes](RELEASE_NOTES.md).
-- **972 passing automated tests** (unit + integration) exercised on every release build; see `tests/`.
+- **972 automated tests passed at v1.0 release closure** (unit + integration), with the full suite executed by the release-candidate pipeline before packaging; see `tests/`.
 
 ## Technical Stack
 
