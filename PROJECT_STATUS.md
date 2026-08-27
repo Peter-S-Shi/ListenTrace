@@ -89,7 +89,7 @@ The frozen v1.0 functional scope is Milestones 1-10 (material import, synchroniz
 
 ## Functional Feature Complete Status
 
-Functional feature completion was reached after Milestone 10: every planned local-first learning workflow for v1.0 (Milestones 1-10) is implemented and accepted. Feature Complete is explicitly not the same as Release Ready — but Release Ready is now also reached: Milestone 15's release-candidate/delivery work (candidate build refresh, clean-machine acceptance, release candidate closure) is complete. What remains is only the Product Owner's own release-publication sequence (see "v1.0 Release Status", above).
+Functional feature completion was reached after Milestone 10: every planned local-first learning workflow for v1.0 (Milestones 1-10) is implemented and accepted. Feature Complete is explicitly not the same as Release Ready — but Release Ready was reached once Milestone 15's release-candidate/delivery work (candidate build refresh, clean-machine acceptance, release candidate closure) completed, and `v1.0 — Current Version Complete` is now declared (see "v1.0 Release Status", above).
 
 ## Functional Feature Freeze Status
 
@@ -97,9 +97,9 @@ Functional feature completion was reached after Milestone 10: every planned loca
 
 ## Open Release Blockers
 
-**None.** Every engineering/acceptance gate for v1.0 is complete (Milestones 1–15). What remains is exclusively the Product Owner's own release-publication sequence — see "v1.0 Release Status", above — not an engineering blocker:
+**None.** Every engineering/acceptance gate for v1.0 is complete (Milestones 1–15), and v1.0 is released — see "v1.0 Release Status", above. The remaining items below are documented known limitations, not engineering blockers:
 
-- **`v1.0.0` tag / GitHub Release**: intentionally not created by any tooling in this repository; a Product Owner action.
+- **`v1.0.0` tag / GitHub Release**: published — see "v1.0 Release Status", above.
 - **Code signing**: **unsigned v1.0 is Product Owner approved** — not a v1.0 blocker, no signing infrastructure built. Windows SmartScreen **may** show an "unrecognized app" warning on first run depending on download source/reputation/Mark-of-the-Web context — the Milestone 15.2 clean-machine install did not itself encounter a SmartScreen block. Documented known limitation (see `packaging/README.md`, `RELEASE_NOTES.md`).
 - **Update Awareness**: explicitly out of v1.0 scope by Product Owner decision — deferred to the first v1.0.x maintenance update, not designed or implemented here.
 - Two narrower gaps from Milestone 11 Closeout, deferred rather than blocking: a 125%/150% Windows display-scale pass was exercised informally during the M15.2 clean-machine session but was not expanded into a hard acceptance gate and remains formally unverified; the installed-application (Inno Setup) runtime-icon context was reasoned by code equivalence during M11 rather than freshly rebuilt and re-observed at the time — Milestone 15.2's real installer install/launch on a clean VM has since directly observed the installed-app icon and taskbar identity, superseding that earlier code-equivalence argument for the *installer* path specifically.
@@ -134,7 +134,7 @@ Functional feature completion was reached after Milestone 10: every planned loca
 
 ## Next Engineering Objective
 
-None outstanding for v1.0 — Milestone 15 (and with it, all v1.0 engineering scope) is complete. The next engineering objective is whatever the Product Owner authorizes after the release-publication sequence completes: Milestone 15.1 (Candidate Build/Packaging Refresh — dormant, reusable for a future v1.0.x patch), Portfolio Packaging, or Milestone 16 (Library Organization & Collections) planning, none of which have begun.
+None outstanding for v1.0 — Milestone 15 (and with it, all v1.0 engineering scope) is complete, and v1.0 is released. The product is now in Maintenance / v1.0.x. The next objective is whatever the Product Owner authorizes: Portfolio Packaging (the immediate non-product-development workstream), a v1.0.x maintenance fix (using the dormant, reusable Milestone 15.1 release-candidate pipeline), or Milestone 16 (Library Organization & Collections) planning — none of which have begun.
 
 ## Repository State
 
