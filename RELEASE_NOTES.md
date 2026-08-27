@@ -1,9 +1,8 @@
-# ListenTrace v1.0.0 — Release Notes (Draft, Milestone 15.3)
+# ListenTrace v1.0.0 — Release Notes
 
-**Status: draft, prepared during Milestone 15.3 (Release Candidate Closure & Delivery), which is now
-complete.** No `v1.0.0` tag or GitHub Release has been created yet — that remains a Product Owner
-publication decision after Milestone 15 closure. This document is written for the Product Owner
-and, eventually, real users; it is not itself a release announcement.
+**Status: released.** The `v1.0.0` tag and GitHub Release `ListenTrace v1.0.0` are published, carrying
+the locked M15.2 human-validated release payload described below. This document accompanies that
+release.
 
 ## Validated release payload (locked)
 
@@ -14,14 +13,14 @@ bundle `ListenTrace-1.0.0-candidate-661bca47ce93f1a12a6a17c66f1ed6065d816e43` (`
 15.1 GitHub Actions release-candidate pipeline and installed/exercised end-to-end on a genuinely clean
 Windows 11 VM during Milestone 15.2.
 
-**Test what we ship; ship what we tested.** Later docs-only commits on this branch (including this M15.3
-closure work) intentionally advance the branch HEAD past `661bca47...` for governance/documentation
-purposes, and each such commit's own CI run produces its own workflow artifact bundle under a different
-commit SHA. Those later, automatically generated bundles are **not** a substitute release payload — no
-product/application code changed after `661bca47...`, so rebuilding merely to match SHAs would trade a
-human-validated binary for an unvalidated one for no real benefit. When the Product Owner is ready to
-tag and publish `v1.0.0`, the release payload attached to that tag/Release must be the `661bca47...`
-artifact bundle specifically, not whatever the merge commit's own CI run happens to produce.
+**Test what we ship; ship what we tested.** Later docs-only commits on the release-candidate branch
+(including M15.3 closure work) intentionally advanced the branch HEAD past `661bca47...` for
+governance/documentation purposes, and each such commit's own CI run produced its own workflow artifact
+bundle under a different commit SHA. Those later, automatically generated bundles were **not** a
+substitute release payload — no product/application code changed after `661bca47...`, so rebuilding
+merely to match SHAs would have traded a human-validated binary for an unvalidated one for no real
+benefit. The published `v1.0.0` tag and GitHub Release carry the `661bca47...` artifact bundle
+specifically, not any later commit's own CI artifact.
 
 Checksums (downloaded and independently re-verified with `sha256sum` against the GitHub Actions
 artifact for workflow run `33005303492`, which built commit `661bca47...`):

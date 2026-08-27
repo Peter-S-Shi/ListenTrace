@@ -1,6 +1,6 @@
 # ListenTrace Project Status
 
-Last updated: 2026-08-26 (Milestones 12, 13, 14, and 15 are all **COMPLETE / ACCEPTED / MERGED** into `main`. **Milestone 15 — Release Candidate & Delivery**: 15.1 (Candidate Build/Packaging Refresh) Product Owner ACCEPTED — version `1.0.0` single-source-of-truth mechanism, GitHub Actions Windows release-candidate pipeline green end-to-end; 15.2 (Clean-Machine Acceptance) PASS / PRODUCT OWNER ACCEPTED — a genuinely clean Windows 11 VM (VMware, VMware Tools, clean baseline snapshot, no Python/Git/IDE/developer environment) validated `ListenTrace-Setup-1.0.0.exe`: per-user install, first launch, real MP4/H.264 import and playback, real audio output, SRT/material import, a representative Intensive Practice completion, full close/reopen with session persistence, and Windows taskbar/app identity all PASS, no release-blocking abnormal behavior; 15.3 (Release Candidate Closure & Delivery) complete. **Canonical validated v1.0.0 release payload (locked): source SHA `661bca47ce93f1a12a6a17c66f1ed6065d816e43`, artifact bundle `ListenTrace-1.0.0-candidate-661bca47ce93f1a12a6a17c66f1ed6065d816e43`** — this exact candidate, not any later docs-only commit's own CI artifact, is what ships as v1.0.0. Automated test suite: 972 passing. Schema remains version 12. Unsigned v1.0 is a locked Product Owner decision; Update Awareness is deferred to the first v1.0.x maintenance update. **No `v1.0.0` tag or GitHub Release exists yet, and Portfolio Packaging has not begun — those, and the `v1.0 — Current Version Complete` declaration, are the Product Owner's own subsequent actions.**)
+Last updated: 2026-08-26 (Milestones 12, 13, 14, and 15 are all **COMPLETE / ACCEPTED / MERGED** into `main`. **Milestone 15 — Release Candidate & Delivery**: 15.1 (Candidate Build/Packaging Refresh) Product Owner ACCEPTED — version `1.0.0` single-source-of-truth mechanism, GitHub Actions Windows release-candidate pipeline green end-to-end; 15.2 (Clean-Machine Acceptance) PASS / PRODUCT OWNER ACCEPTED — a genuinely clean Windows 11 VM (VMware, VMware Tools, clean baseline snapshot, no Python/Git/IDE/developer environment) validated `ListenTrace-Setup-1.0.0.exe`: per-user install, first launch, real MP4/H.264 import and playback, real audio output, SRT/material import, a representative Intensive Practice completion, full close/reopen with session persistence, and Windows taskbar/app identity all PASS, no release-blocking abnormal behavior; 15.3 (Release Candidate Closure & Delivery) complete. **Canonical validated v1.0.0 release payload (locked): source SHA `661bca47ce93f1a12a6a17c66f1ed6065d816e43`, artifact bundle `ListenTrace-1.0.0-candidate-661bca47ce93f1a12a6a17c66f1ed6065d816e43`** — this exact candidate, not any later docs-only commit's own CI artifact, is what ships as v1.0.0. Automated test suite: 972 passing. Schema remains version 12. Unsigned v1.0 is a locked Product Owner decision; Update Awareness is deferred to the first v1.0.x maintenance update. **The `v1.0.0` tag and GitHub Release are now published and verified, using the locked M15.2 human-validated release payload. v1.0 — Current Version Complete is declared. The project now enters Maintenance / v1.0.x, with Portfolio Packaging as the immediate presentation/portfolio workstream.**)
 
 ## Project Purpose
 
@@ -26,13 +26,13 @@ The remote repository exists, is private, and uses `main` as its default branch.
 
 ## Current Lifecycle Phase
 
-**Milestone 12 (Completed) ➔ Milestone 13 (Completed) ➔ Milestone 14 (Completed, Accepted, Merged) ➔ Milestone 15 — Release Candidate & Delivery (Completed, Accepted, Merged)**
+**Milestone 12 (Completed) ➔ Milestone 13 (Completed) ➔ Milestone 14 (Completed, Accepted, Merged) ➔ Milestone 15 — Release Candidate & Delivery (Completed, Accepted, Merged) ➔ v1.0 — Current Version Complete**
 
-Status: **Milestone 12, Milestone 13, Milestone 14, and Milestone 15 are all completed, accepted, and merged into `main`.** Milestone 14 — Final Product Hardening & Full Manual Regression included: Phase 0 immediate correctives, Phase 1 Whole-Product Hardening Audit (Product Owner accepted), Corrective Batches A/B/C, the full Human QA Round 2 questionnaire pass against the finalized UI (**PASS** — 0 open Human QA defects), and the pre-merge repository-hygiene/privacy/Windows-app-identity corrective (**Product Owner ACCEPTED**). **Milestone 15 — Release Candidate & Delivery** (sub-stages 15.1 Candidate Build/Packaging Refresh, 15.2 Clean-Machine Acceptance, 15.3 Release Candidate Closure & Delivery) is likewise complete: **15.1 Product Owner ACCEPTED**, **15.2 PASS / Product Owner Accepted** (validated on a genuinely clean Windows 11 VM against the exact CI-built candidate, source SHA `661bca47ce93f1a12a6a17c66f1ed6065d816e43`), and **15.3 complete**. Accepted M15 product baseline: the final commit on `milestone/15-release-candidate-delivery` merged into `main` via PR #4. The `v1.0.0` tag and GitHub Release do not yet exist and are not created by this milestone's engineering work — see "v1.0 Release Status" below.
+Status: **Milestone 12, Milestone 13, Milestone 14, and Milestone 15 are all completed, accepted, and merged into `main`.** Milestone 14 — Final Product Hardening & Full Manual Regression included: Phase 0 immediate correctives, Phase 1 Whole-Product Hardening Audit (Product Owner accepted), Corrective Batches A/B/C, the full Human QA Round 2 questionnaire pass against the finalized UI (**PASS** — 0 open Human QA defects), and the pre-merge repository-hygiene/privacy/Windows-app-identity corrective (**Product Owner ACCEPTED**). **Milestone 15 — Release Candidate & Delivery** (sub-stages 15.1 Candidate Build/Packaging Refresh, 15.2 Clean-Machine Acceptance, 15.3 Release Candidate Closure & Delivery) is likewise complete: **15.1 Product Owner ACCEPTED**, **15.2 PASS / Product Owner Accepted** (validated on a genuinely clean Windows 11 VM against the exact CI-built candidate, source SHA `661bca47ce93f1a12a6a17c66f1ed6065d816e43`), and **15.3 complete**. Accepted M15 product baseline: the final commit on `milestone/15-release-candidate-delivery` merged into `main` via PR #4. The `v1.0.0` tag and GitHub Release are published and verified, and `v1.0 — Current Version Complete` is declared — see "v1.0 Release Status" below.
 
 ## Current Milestone
 
-**None — all numbered engineering milestones through Milestone 15 are complete.** The next numbered milestone, **Milestone 16 — Library Organization & Collections**, is only a recorded v1.1 candidate requirement and has not started (see `ROADMAP.md`'s "Next-Version Planning / v1.1+"). What remains is the Product Owner's own release-publication sequence — see "v1.0 Release Status", below.
+**None — v1.0 is released and Current Version Complete.** All numbered engineering milestones through Milestone 15 are complete. The product is now in **Maintenance / v1.0.x**; **Portfolio Packaging** is the immediate non-product-development workstream. The next numbered milestone, **Milestone 16 — Library Organization & Collections**, remains only a recorded v1.1 candidate requirement and has not started.
 
 Milestone 14 — Final Product Hardening & Full Manual Regression is **complete, accepted, and merged into `main`**: Phase 0, Phase 1 audit, Corrective Batches A/B/C, Human QA Round 2, and the pre-merge repository-hygiene/privacy/Windows-app-identity corrective are all complete/PASS/accepted. Milestone 12 and Milestone 13 are likewise completed, accepted, and merged into `main`.
 
@@ -44,15 +44,19 @@ Milestone 14 — Final Product Hardening & Full Manual Regression is **complete,
 
 ## v1.0 Release Status
 
-**Not yet Current Version Complete.** Every engineering/acceptance gate is done — Milestones 1–15 are all complete, accepted, and merged (or, for 1–10, implemented and accepted as the frozen functional scope). What remains is the Product Owner's own publication sequence, none of which this session performs:
+**CURRENT VERSION COMPLETE.**
 
-1. Verify the merged `main` HEAD.
-2. Authorize/create the `v1.0.0` tag.
-3. Authorize/publish the GitHub Release, attaching the **validated `661bca47...` payload** (`ListenTrace-Setup-1.0.0.exe`, `ListenTrace-1.0.0-win64-portable.zip`, `SHA256SUMS.txt`, `provenance.json`) — not whatever a later merge commit's own CI run produces.
-4. Declare `v1.0 — Current Version Complete` only once steps 1–3 are actually true.
-5. Then, and only then, begin Portfolio Packaging.
+ListenTrace v1.0.0 has completed its full engineering, acceptance, and publication lifecycle.
 
-No `v1.0.0` tag or GitHub Release exists yet. Portfolio Packaging has not begun.
+- Milestones 1–15 are complete and accepted.
+- PR #4 is merged into `main`.
+- Tag `v1.0.0` exists and points to the accepted merged v1.0 repository state.
+- GitHub Release `ListenTrace v1.0.0` is published as a production release.
+- The Release uses the locked M15.2 human-validated payload from source SHA `661bca47ce93f1a12a6a17c66f1ed6065d816e43`.
+- Installer, portable ZIP, `SHA256SUMS.txt`, and `provenance.json` are published as Release assets.
+- No open v1.0 engineering or release blocker remains.
+
+The product now enters **Maintenance / v1.0.x**. Portfolio Packaging is the immediate next workstream and does not reopen v1.0 feature development.
 
 Milestone 11 — UI/UX Presentation Refresh is completed and accepted (see the Completed section below and `ROADMAP.md`'s Closeout Summary); the Presentation Complete Gate has passed. Milestone 12.1-A (retroactive manual QA baseline) is complete (`manual-qa/`, commit `1285fcf`). The autonomous overnight pass — M12.1-B Batches 1-5 plus a dedicated M12.4 Performance Decision Gate — is complete.
 
@@ -85,17 +89,17 @@ The frozen v1.0 functional scope is Milestones 1-10 (material import, synchroniz
 
 ## Functional Feature Complete Status
 
-Functional feature completion was reached after Milestone 10: every planned local-first learning workflow for v1.0 (Milestones 1-10) is implemented and accepted. Feature Complete is explicitly not the same as Release Ready — but Release Ready is now also reached: Milestone 15's release-candidate/delivery work (candidate build refresh, clean-machine acceptance, release candidate closure) is complete. What remains is only the Product Owner's own release-publication sequence (see "v1.0 Release Status", above).
+Functional feature completion was reached after Milestone 10: every planned local-first learning workflow for v1.0 (Milestones 1-10) is implemented and accepted. Feature Complete is explicitly not the same as Release Ready — but Release Ready was reached once Milestone 15's release-candidate/delivery work (candidate build refresh, clean-machine acceptance, release candidate closure) completed, and `v1.0 — Current Version Complete` is now declared (see "v1.0 Release Status", above).
 
 ## Functional Feature Freeze Status
 
-**Active.** Permitted during freeze: fixing critical defects; fixing data-integrity/privacy/security/core-workflow defects (required, not optional); fixing severe UX defects that prevent reliable use (required); presentation redesign was closed out in Milestone 13, product-wide hardening was closed out in Milestone 14, and release engineering was closed out in Milestone 15 — no further UI redesign, hardening sweep, or release-engineering work is expected before v1.0 ships. Not permitted without an explicit decision and roadmap update: any new learning workflow, domain capability, analytics concept, user-data semantics, or AI/cloud feature — including the recorded Milestone 16 (Library Organization & Collections) candidate, which is explicitly deferred to v1.1 and not in scope now.
+**Active.** Permitted during freeze: fixing critical defects; fixing data-integrity/privacy/security/core-workflow defects (required, not optional); fixing severe UX defects that prevent reliable use (required); presentation redesign was closed out in Milestone 13, product-wide hardening was closed out in Milestone 14, and release engineering was closed out in Milestone 15 — those scopes are closed for v1.0 and are not reopened by the post-release maintenance phase. Not permitted without an explicit decision and roadmap update: any new learning workflow, domain capability, analytics concept, user-data semantics, or AI/cloud feature — including the recorded Milestone 16 (Library Organization & Collections) candidate, which is explicitly deferred to v1.1 and not in scope now.
 
 ## Open Release Blockers
 
-**None.** Every engineering/acceptance gate for v1.0 is complete (Milestones 1–15). What remains is exclusively the Product Owner's own release-publication sequence — see "v1.0 Release Status", above — not an engineering blocker:
+**None.** Every engineering/acceptance gate for v1.0 is complete (Milestones 1–15), and v1.0 is released — see "v1.0 Release Status", above. The remaining items below are documented known limitations, not engineering blockers:
 
-- **`v1.0.0` tag / GitHub Release**: intentionally not created by any tooling in this repository; a Product Owner action.
+- **`v1.0.0` tag / GitHub Release**: published — see "v1.0 Release Status", above.
 - **Code signing**: **unsigned v1.0 is Product Owner approved** — not a v1.0 blocker, no signing infrastructure built. Windows SmartScreen **may** show an "unrecognized app" warning on first run depending on download source/reputation/Mark-of-the-Web context — the Milestone 15.2 clean-machine install did not itself encounter a SmartScreen block. Documented known limitation (see `packaging/README.md`, `RELEASE_NOTES.md`).
 - **Update Awareness**: explicitly out of v1.0 scope by Product Owner decision — deferred to the first v1.0.x maintenance update, not designed or implemented here.
 - Two narrower gaps from Milestone 11 Closeout, deferred rather than blocking: a 125%/150% Windows display-scale pass was exercised informally during the M15.2 clean-machine session but was not expanded into a hard acceptance gate and remains formally unverified; the installed-application (Inno Setup) runtime-icon context was reasoned by code equivalence during M11 rather than freshly rebuilt and re-observed at the time — Milestone 15.2's real installer install/launch on a clean VM has since directly observed the installed-app icon and taskbar identity, superseding that earlier code-equivalence argument for the *installer* path specifically.
@@ -130,7 +134,7 @@ Functional feature completion was reached after Milestone 10: every planned loca
 
 ## Next Engineering Objective
 
-None outstanding for v1.0 — Milestone 15 (and with it, all v1.0 engineering scope) is complete. The next engineering objective is whatever the Product Owner authorizes after the release-publication sequence completes: Milestone 15.1 (Candidate Build/Packaging Refresh — dormant, reusable for a future v1.0.x patch), Portfolio Packaging, or Milestone 16 (Library Organization & Collections) planning, none of which have begun.
+None outstanding for v1.0 — Milestone 15 (and with it, all v1.0 engineering scope) is complete, and v1.0 is released. The product is now in Maintenance / v1.0.x. The next objective is whatever the Product Owner authorizes: Portfolio Packaging (the immediate non-product-development workstream), a v1.0.x maintenance fix (using the dormant, reusable Milestone 15.1 release-candidate pipeline), or Milestone 16 (Library Organization & Collections) planning — none of which have begun.
 
 ## Repository State
 
